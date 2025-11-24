@@ -424,7 +424,7 @@ def display_step_content():
         display_step1()
     
     elif current_step == 2:
-        # STEP 2: 安全在庫算出ロジックの体感（代表機種）
+        # STEP 2: 安全在庫算出ロジック体感（選定機種）
         # ページ最上部にスクロールするための処理
         if st.session_state.get('scroll_to_top', False):
             st.markdown("""
@@ -435,7 +435,7 @@ def display_step_content():
             st.session_state.scroll_to_top = False
         st.markdown("""
         <div class="step-header-box">
-            <div class="step-header-title">STEP 2：安全在庫算出ロジックの体感（選定機種）</div>
+            <div class="step-header-title">STEP 2：安全在庫算出ロジック体感（選定機種）</div>
             <div class="step-header-description">ABC 区分ごとに任意の機種を選び、3種類の安全在庫モデルを使って、【需要変動（計画誤差）の把握】→【安全在庫の算出】→【異常値処理】→【上限カット】までの一連のプロセスを実際に操作しながら体感します。手を動かしながら、「安全在庫算定」「異常値処理」「上限カット」がどう機能するのかを直感的に理解できます。</div>
         </div>
         """, unsafe_allow_html=True)
@@ -445,7 +445,7 @@ def display_step_content():
         display_step2()
     
     elif current_step == 3:
-        # STEP 3: 安全在庫算出と登録データ作成（全機種） - STEP3とSTEP4を統合
+        # STEP 3: 安全在庫算出と登録値作成（全機種） - STEP3とSTEP4を統合
         # ページ最上部にスクロールするための処理
         if st.session_state.get('scroll_to_top', False):
             st.markdown("""
@@ -456,7 +456,7 @@ def display_step_content():
             st.session_state.scroll_to_top = False
         st.markdown("""
         <div class="step-header-box">
-            <div class="step-header-title">STEP 3：安全在庫算出と登録データ作成（全機種）</div>
+            <div class="step-header-title">STEP 3：安全在庫算出と登録値作成（全機種）</div>
             <div class="step-header-description">全機種を対象に、STEP2 で理解したロジックを適用して安全在庫を算出します。まず現行設定と比較し、サマリーで全体傾向を把握します。次に、全機種へ異常値処理を適用し、ABC 区分に応じた上限日数を設定して最終安全在庫を確定します。確定した安全在庫は SCP 登録用データとして出力できます。</div>
         </div>
         """, unsafe_allow_html=True)
