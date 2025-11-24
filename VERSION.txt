@@ -1,0 +1,14 @@
+SafetyStock-SimOptimizer_ver1.0.0
+Build Date: 2024-12-19
+Python Version: 3.13.x
+Streamlit Version: 1.50.0
+PyInstaller Version: 6.1.0
+
+Features:
+- 3つの安全在庫モデル実装
+- Streamlit UI実装
+- EXE配布対応
+- トライアル対象3機種での動作確認
+- 欠品許容率の動的調整
+- リードタイムの柔軟な設定
+- PNG/CSV出力機能

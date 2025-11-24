@@ -1,0 +1,298 @@
+"""
+データ入出力ユーティリティ
+CSV読み込み・書き出し処理を提供
+"""
+
+import pandas as pd
+import streamlit as st
+import os
+import re
+from datetime import datetime
+from modules.data_loader import DataLoader
+from modules.utils import get_base_path
+
+
+def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, abc_classification_file=None):
+    """アップロードされたファイルを処理してDataLoaderに読み込む"""
+    try:
+        # 判定ロジック：
+        # - アップロードエリア：ファイル名を無視し、存在のみで判定
+        # - dataフォルダ：ファイル名で厳格に判定
+        base_path = get_base_path()
+        has_monthly_plan = (
+            monthly_plan_file is not None or
+            os.path.exists(os.path.join(base_path, "data/月次計画データ.csv"))
+        )
+        has_actual = (
+            actual_file is not None or
+            os.path.exists(os.path.join(base_path, "data/日次実績データ.csv"))
+        )
+        has_safety_stock = (
+            safety_stock_file is not None or
+            os.path.exists(os.path.join(base_path, "data/安全在庫データ.csv"))
+        )
+        
+        # ケースA：①・②のどちらか、または両方が欠けている場合
+        if not has_monthly_plan or not has_actual:
+            # セッション状態から③のエラーをクリア（①・②が揃っていない場合は表示しない）
+            if 'missing_safety_stock_error' in st.session_state:
+                del st.session_state.missing_safety_stock_error
+            
+            # 個別のエラーメッセージを表示
+            if not has_monthly_plan:
+                st.markdown("""
+                <div class="annotation-warning-box">
+                    <span class="icon">❌</span>
+                    <div class="text">必須データエラー：① 月次計画データがアップロードされていません。</div>
+                </div>
+                """, unsafe_allow_html=True)
+            if not has_actual:
+                st.markdown("""
+                <div class="annotation-warning-box">
+                    <span class="icon">❌</span>
+                    <div class="text">必須データエラー：② 日次実績データがアップロードされていません。</div>
+                </div>
+                """, unsafe_allow_html=True)
+            return
+        
+        # ケースB：③だけが欠けている場合
+        if not has_safety_stock:
+            # セッション状態に保存して表示し続ける（自動で消さない）
+            st.session_state.missing_safety_stock_error = True
+            st.markdown("""
+            <div class="annotation-warning-box">
+                <span class="icon">❌</span>
+                <div class="text">必須データエラー：③ 安全在庫データがアップロードされていないため、現行設定との比較ができません（安全在庫の算出は可能です）。</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # ③がアップロードされた場合のみエラーをクリア
+            if 'missing_safety_stock_error' in st.session_state:
+                del st.session_state.missing_safety_stock_error
+        
+        # DataLoaderを初期化（ダミーファイルを渡す）
+        data_loader = DataLoader("data/日次計画データ.csv", "data/日次実績データ.csv")
+        
+        # 月次計画データの処理
+        if monthly_plan_file is not None:
+            try:
+                # CSVを読み込み（エンコーディングを自動判定）
+                # まずutf-8-sigで試行、失敗した場合はshift_jisで試行
+                try:
+                    monthly_plan_df = pd.read_csv(monthly_plan_file, index_col=0, encoding='utf-8-sig')
+                except UnicodeDecodeError:
+                    monthly_plan_file.seek(0)  # ファイルポインタをリセット
+                    monthly_plan_df = pd.read_csv(monthly_plan_file, index_col=0, encoding='shift_jis')
+                
+                # カラム名がYYYYMM形式か確認
+                # 最初のカラム名をチェック
+                first_col = str(monthly_plan_df.columns[0])
+                if len(first_col) == 6 and first_col.isdigit():
+                    # 月次計画データとして処理し、日次計画に変換
+                    data_loader.load_monthly_plan_from_dataframe(monthly_plan_df)
+                    daily_plan_df = data_loader.convert_monthly_to_daily_plan(monthly_plan_df)
+                    st.success(f"✅ 月次計画データを日次計画データに変換しました: {monthly_plan_file.name}")
+                else:
+                    st.error(f"❌ 月次計画データの形式が不正です。列名はYYYYMM形式（例: 202406）である必要があります。")
+                    return
+            except ValueError as e:
+                st.error(f"❌ 月次計画データの処理エラー: {str(e)}")
+                return
+            except Exception as e:
+                st.error(f"❌ 月次計画データの読み込みエラー: {str(e)}")
+                return
+        
+        # 日次実績データの処理
+        if actual_file is not None:
+            try:
+                # CSVを読み込み（エンコーディングを自動判定）
+                # まずutf-8-sigで試行、失敗した場合はshift_jisで試行
+                try:
+                    actual_df = pd.read_csv(actual_file, index_col=0, encoding='utf-8-sig')
+                except UnicodeDecodeError:
+                    actual_file.seek(0)  # ファイルポインタをリセット
+                    actual_df = pd.read_csv(actual_file, index_col=0, encoding='shift_jis')
+                
+                data_loader.load_actual_from_dataframe(actual_df)
+                st.success(f"✅ 日次実績データを読み込みました: {actual_file.name}")
+            except Exception as e:
+                st.error(f"❌ 日次実績データの読み込みエラー: {str(e)}")
+                return
+        
+        # 安全在庫月数データの処理
+        if safety_stock_file is not None:
+            try:
+                # CSVを読み込み（エンコーディングを自動判定）
+                # まずutf-8-sigで試行、失敗した場合はshift_jisで試行
+                try:
+                    safety_stock_df = pd.read_csv(safety_stock_file, encoding='utf-8-sig')
+                except UnicodeDecodeError:
+                    safety_stock_file.seek(0)  # ファイルポインタをリセット
+                    safety_stock_df = pd.read_csv(safety_stock_file, encoding='shift_jis')
+                
+                data_loader.load_safety_stock_from_dataframe(safety_stock_df)
+                st.success(f"✅ 安全在庫月数データを読み込みました: {safety_stock_file.name}")
+                # ③が読み込まれた場合、エラーをクリア
+                if 'missing_safety_stock_error' in st.session_state:
+                    del st.session_state.missing_safety_stock_error
+            except Exception as e:
+                st.error(f"❌ 安全在庫月数データの読み込みエラー: {str(e)}")
+                return
+        
+        # 月次計画データがアップロードされていない場合、日次計画データが必要
+        if monthly_plan_file is None:
+            # 既存の日次計画データを読み込む
+            # ただし、日次実績データがアップロードされている場合は、load_data()を呼ばずに個別に処理
+            if actual_file is not None:
+                # 日次実績データは既にアップロードされているので、計画データのみ読み込む
+                plan_path = os.path.join(base_path, "data/日次計画データ.csv")
+                monthly_plan_path = os.path.join(base_path, "data/月次計画データ.csv")
+                
+                if os.path.exists(plan_path):
+                    # 日次計画データを読み込む
+                    try:
+                        try:
+                            plan_df = pd.read_csv(plan_path, index_col=0, encoding='utf-8-sig')
+                        except UnicodeDecodeError:
+                            plan_df = pd.read_csv(plan_path, index_col=0, encoding='shift_jis')
+                        # カラム名を日付型に変換
+                        plan_df.columns = pd.to_datetime(plan_df.columns, format='%Y%m%d')
+                        data_loader.plan_df = plan_df
+                        data_loader.working_dates = plan_df.columns
+                    except Exception as e:
+                        st.error(f"❌ 日次計画データの読み込みエラー: {str(e)}")
+                        return
+                elif os.path.exists(monthly_plan_path):
+                    # 月次計画データを読み込む
+                    try:
+                        try:
+                            monthly_plan_df = pd.read_csv(monthly_plan_path, index_col=0, encoding='utf-8-sig')
+                        except UnicodeDecodeError:
+                            monthly_plan_df = pd.read_csv(monthly_plan_path, index_col=0, encoding='shift_jis')
+                        data_loader.load_monthly_plan_from_dataframe(monthly_plan_df)
+                        data_loader.convert_monthly_to_daily_plan(monthly_plan_df)
+                    except Exception as e:
+                        st.error(f"❌ 月次計画データの読み込みエラー: {str(e)}")
+                        return
+                else:
+                    st.error(f"❌ 日次計画データの読み込みエラー: 計画データファイルが見つかりません")
+                    return
+            else:
+                # 日次実績データもアップロードされていない場合は、load_data()を呼ぶ
+                # この場合、両方のファイルがdataフォルダに存在する必要がある
+                try:
+                    data_loader.load_data()
+                except Exception as e:
+                    st.error(f"❌ 日次計画データの読み込みエラー: {str(e)}")
+                    return
+        
+        # 日次実績データがアップロードされていない場合、既存データを使用
+        if actual_file is None:
+            try:
+                actual_path = os.path.join(base_path, "data/日次実績データ.csv")
+                if os.path.exists(actual_path):
+                    # エンコーディングを自動判定
+                    try:
+                        actual_df = pd.read_csv(actual_path, index_col=0, encoding='utf-8-sig')
+                    except UnicodeDecodeError:
+                        actual_df = pd.read_csv(actual_path, index_col=0, encoding='shift_jis')
+                    data_loader.load_actual_from_dataframe(actual_df)
+            except Exception as e:
+                st.warning(f"⚠️ 既存の日次実績データの読み込みに失敗しました: {str(e)}")
+        
+        # 安全在庫データがアップロードされていない場合、既存データを読み込む
+        if safety_stock_file is None:
+            # dataフォルダにファイルが存在する場合のみ読み込む
+            safety_stock_path = os.path.join(base_path, "data/安全在庫データ.csv")
+            if os.path.exists(safety_stock_path):
+                try:
+                    data_loader.load_safety_stock_monthly()
+                    # 既存データの読み込みが成功した場合、エラーをクリア
+                    if 'missing_safety_stock_error' in st.session_state:
+                        del st.session_state.missing_safety_stock_error
+                except Exception:
+                    pass
+
+        # 現行ABC区分データ（任意）の処理
+        if abc_classification_file is not None:
+            try:
+                abc_classification_file.seek(0)
+                try:
+                    abc_df = pd.read_csv(abc_classification_file, encoding='utf-8-sig')
+                except UnicodeDecodeError:
+                    abc_classification_file.seek(0)
+                    abc_df = pd.read_csv(abc_classification_file, encoding='shift_jis')
+
+                if abc_df.shape[1] < 2:
+                    st.error("❌ 現行ABC区分データには、商品コードとABC区分の2列が必要です。")
+                    return
+
+                normalized_df = abc_df.iloc[:, :2].copy()
+                normalized_df.columns = ['商品コード', 'ABC区分']
+                normalized_df['商品コード'] = normalized_df['商品コード'].astype(str).str.strip()
+                normalized_df['ABC区分'] = normalized_df['ABC区分'].astype(str).str.upper().str.strip()
+                normalized_df = normalized_df.dropna(subset=['商品コード', 'ABC区分'])
+                normalized_df = normalized_df[normalized_df['商品コード'] != ""]
+
+                alpha_pattern = re.compile(r'^[A-Z]+$')
+                invalid_mask = ~normalized_df['ABC区分'].str.match(alpha_pattern)
+                if invalid_mask.any():
+                    invalid_values = ", ".join(sorted(normalized_df.loc[invalid_mask, 'ABC区分'].unique()))
+                    st.error(f"❌ ABC区分はアルファベットで指定してください。不正値: {invalid_values}")
+                    return
+
+                normalized_df = normalized_df.drop_duplicates(subset='商品コード', keep='last')
+                if normalized_df.empty:
+                    st.error("❌ 現行ABC区分データに有効な行がありません。")
+                    return
+
+                st.session_state.existing_abc_df = normalized_df.rename(
+                    columns={'商品コード': 'product_code', 'ABC区分': 'abc_category'}
+                )
+                st.success(f"✅ 現行ABC区分データを読み込みました: {abc_classification_file.name}")
+            except Exception as e:
+                st.error(f"❌ 現行ABC区分データの読み込みエラー: {str(e)}")
+                return
+        
+        # セッション状態に保存
+        st.session_state.uploaded_data_loader = data_loader
+        
+        st.success("✅ 全てのデータを適用しました。画面が更新されます。")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ データ処理エラー: {str(e)}")
+
+
+def dataframe_to_csv_bytes(df: pd.DataFrame, encoding: str = 'utf-8-sig') -> bytes:
+    """
+    DataFrameをCSV形式のバイト列に変換
+    
+    Args:
+        df: 変換するDataFrame
+        encoding: エンコーディング（デフォルト: utf-8-sig）
+    
+    Returns:
+        bytes: CSV形式のバイト列
+    """
+    csv_data = df.to_csv(index=False, encoding=encoding)
+    return csv_data.encode(encoding)
+
+
+def create_csv_download_filename(prefix: str, suffix: str = "") -> str:
+    """
+    CSVダウンロード用のファイル名を生成
+    
+    Args:
+        prefix: ファイル名のプレフィックス
+        suffix: ファイル名のサフィックス（オプション）
+    
+    Returns:
+        str: ファイル名
+    """
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    if suffix:
+        return f"{prefix}_{suffix}_{timestamp}.csv"
+    else:
+        return f"{prefix}_{timestamp}.csv"
+
