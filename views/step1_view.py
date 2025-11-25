@@ -134,8 +134,8 @@ def display_safety_stock_definitions():
     <table class="safety-stock-table">
         <thead>
             <tr>
-                <th style="width: 22%;">モデル</th>
-                <th style="width: 40%;">計算式</th>
+                <th style="width: 23%;">モデル</th>
+                <th style="width: 39%;">計算式</th>
                 <th style="width: 38%;">説明</th>
             </tr>
         </thead>
