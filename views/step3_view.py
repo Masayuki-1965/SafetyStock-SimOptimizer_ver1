@@ -275,7 +275,7 @@ def display_step3():
                 type_descriptions = {
                     "current": "<strong>現行設定</strong>：現行設定している安全在庫",
                     "ss1": "<strong>安全在庫①</strong>：理論値【理論モデル】",
-                    "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績の変動に基づくモデル】",
+                    "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績のバラつきを反映したモデル】",
                     "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差を考慮した推奨モデル】"
                 }
                 st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_before]}</div>', unsafe_allow_html=True)
@@ -703,7 +703,7 @@ def display_step3():
                     type_descriptions = {
                         "current": "<strong>現行設定</strong>：現行設定している安全在庫",
                         "ss1": "<strong>安全在庫①</strong>：理論値【理論モデル】",
-                        "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績の変動に基づくモデル】",
+                        "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績のバラつきを反映したモデル】",
                         "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差を考慮した推奨モデル】"
                     }
                     st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_after]}</div>', unsafe_allow_html=True)
