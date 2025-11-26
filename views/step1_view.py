@@ -166,7 +166,9 @@ def display_safety_stock_definitions():
         <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>欠品許容率 p</strong>：欠品を 1％（デフォルト値）まで許容する場合、需要変動の 99％ をカバーできるように安全在庫を設定します。</p>
         <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>安全係数 Z</strong>：欠品許容率 p に対応する標準正規分布の値。p＝1％の場合、Z＝2.326（片側 1％）で、片側基準を用います。※ 全モデルで片側（右側）基準を採用します。</p>
         <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>リードタイム LT</strong>：稼働日数またはカレンダー日数を任意に指定できます。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>標準偏差 σ</strong>：母分散（推奨）により算出します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>標準偏差 σ</strong>：日次実績データにもとづき、√［Σ（値 − 平均値）² ÷ データ数］で算出し、安全在庫①（理論値）のみに適用します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>計画データ</strong>：月次計画を稼働日マスタに基づき日割りして作成しています。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>実績データ</strong>：稼働日ベースに統一し、非稼働日に発生した実績は「翌稼働日」に合算して集計しています。</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)

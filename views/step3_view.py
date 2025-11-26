@@ -124,9 +124,6 @@ def display_step3():
         format="%.1f"
     )
     
-    # 標準偏差の計算式
-    st.markdown('<div class="step-sub-section">標準偏差の計算式</div>', unsafe_allow_html=True)
-    st.caption("💡 標準偏差は、日次実績データをもとに　√Σ（値 − 平均値）² ÷ データ数 で算出します。安全在庫①（理論値）のみに適用されます。")
     std_method = STD_METHOD_FIXED
     st.session_state.shared_std_method = STD_METHOD_FIXED
     

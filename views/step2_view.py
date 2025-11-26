@@ -187,9 +187,6 @@ def display_step2():
         format="%.1f"
     )
     
-    # 標準偏差の計算式
-    st.markdown('<div class="step-sub-section">標準偏差の計算式</div>', unsafe_allow_html=True)
-    st.caption("💡 標準偏差は、日次実績データをもとに　√Σ（値 − 平均値）² ÷ データ数 で算出します。安全在庫①（理論値）のみに適用されます。")
     std_method = STD_METHOD_FIXED
     st.session_state.shared_std_method = STD_METHOD_FIXED
     
@@ -259,9 +256,9 @@ def display_step2():
             common_idx = actual_sums.index.intersection(plan_sums.index)
             delta3 = actual_sums.loc[common_idx] - plan_sums.loc[common_idx]
             
-            # リードタイム区間の総件数を計算
-            # 全期間の日数 = LT間差分計算に使用している日次データの有効期間
-            total_days = len(actual_data)
+            # リードタイム区間の総件数を計算（稼働日ベース）
+            # 全期間の日数 = LT間差分計算に使用している日次データの有効期間（稼働日のみ）
+            total_days = len(actual_data)  # actual_dataは既に稼働日ベースに再サンプリング済み
             total_count = total_days - lead_time_days + 1
             
             # セッション状態に保存
@@ -1017,7 +1014,7 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     
     # LT間差分（実績−平均）の統計情報（6項目に統一）
     model2_stats = {
-        '項目': 'リードタイム間差分（実績 − 平均）',
+        '項目': 'リードタイム間差分（実績 − 平均）※実績バラつき',
         '件数': len(delta2),
         '平均': np.mean(delta2),
         '標準偏差': np.std(delta2),
@@ -1028,7 +1025,7 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     
     # LT間差分（実績−計画）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）',
+        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
         '件数': len(delta3),
         '平均': np.mean(delta3),
         '標準偏差': np.std(delta3),
@@ -1059,7 +1056,7 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
     
     # LT間差分（実績−平均）の統計情報（6項目に統一）
     model2_stats = {
-        '項目': 'リードタイム間差分（実績 − 平均）',
+        '項目': 'リードタイム間差分（実績 − 平均）※実績バラつき',
         '件数': len(hist_data['model2_delta']),
         '平均': np.mean(hist_data['model2_delta']),
         '標準偏差': np.std(hist_data['model2_delta']),
@@ -1070,7 +1067,7 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
     
     # LT間差分（実績−計画）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）',
+        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
         '件数': len(hist_data['model3_delta']),
         '平均': np.mean(hist_data['model3_delta']),
         '標準偏差': np.std(hist_data['model3_delta']),

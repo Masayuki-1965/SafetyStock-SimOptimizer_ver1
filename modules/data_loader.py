@@ -24,6 +24,7 @@ class DataLoader:
         self.actual_file = actual_file
         self.plan_df = None
         self.actual_df = None
+        self.actual_df_resampled = None  # 稼働日ベースに再サンプリング済みの実績データ
         self.merged_df = None
         self.working_dates = None
         self.safety_stock_monthly_df = None
@@ -90,7 +91,79 @@ class DataLoader:
         # 稼働日のインデックスを保存
         self.working_dates = self.plan_df.columns
         
+        # 実績データを稼働日ベースに再サンプリング
+        self._resample_actual_to_working_days()
+        
         return self.plan_df, self.actual_df
+    
+    def _resample_actual_to_working_days(self):
+        """
+        実績データを稼働日ベースに再サンプリング
+        
+        非稼働日に発生した実績は、同一商品コードごとに「翌稼働日」に合算する
+        """
+        if self.actual_df is None or self.plan_df is None:
+            return
+        
+        # 計画データのインデックス（稼働日）を取得
+        working_dates_index = self.plan_df.columns
+        
+        # 稼働日マスタを読み込む（存在する場合）
+        if self.working_days_master_df is None:
+            self.load_working_days_master()
+        
+        # 稼働日マスタから稼働日のセットを作成
+        if not self.working_days_master_df.empty:
+            working_days_set = set(
+                self.working_days_master_df[
+                    self.working_days_master_df['稼働日区分'] == 1
+                ]['日時'].dt.normalize()
+            )
+        else:
+            # 稼働日マスタがない場合は、計画データのインデックスを稼働日として使用
+            working_days_set = set(working_dates_index.normalize())
+        
+        # 再サンプリング済みの実績データを作成
+        resampled_dict = {}
+        
+        for product_code in self.actual_df.index:
+            # 商品コードごとの実績データを取得
+            actual_series = self.actual_df.loc[product_code]
+            
+            # 稼働日ベースの実績データを作成（初期値は0）
+            resampled_series = pd.Series(0.0, index=working_dates_index)
+            
+            # 実績データの各日付について処理
+            for date, value in actual_series.items():
+                if pd.isna(value) or value == 0:
+                    continue
+                
+                date_normalized = date.normalize() if hasattr(date, 'normalize') else pd.Timestamp(date).normalize()
+                
+                # 稼働日かどうかを確認
+                if date_normalized in working_days_set:
+                    # 稼働日の場合はそのまま加算
+                    if date_normalized in resampled_series.index:
+                        resampled_series.loc[date_normalized] += value
+                else:
+                    # 非稼働日の場合は、翌稼働日に合算
+                    # 翌稼働日を探す（計画データのインデックスから）
+                    next_working_date = None
+                    for wd in working_dates_index:
+                        if wd.normalize() > date_normalized:
+                            next_working_date = wd.normalize()
+                            break
+                    
+                    if next_working_date is not None and next_working_date in resampled_series.index:
+                        resampled_series.loc[next_working_date] += value
+            
+            resampled_dict[product_code] = resampled_series
+        
+        # DataFrameに変換
+        self.actual_df_resampled = pd.DataFrame(resampled_dict).T
+        
+        # 列名を日付型に変換（念のため）
+        self.actual_df_resampled.columns = pd.to_datetime(self.actual_df_resampled.columns)
     
     def merge_data(self) -> pd.DataFrame:
         """
@@ -183,18 +256,23 @@ class DataLoader:
     
     def get_daily_actual(self, product_code: str) -> pd.Series:
         """
-        特定商品の日次実績データを取得
+        特定商品の日次実績データを取得（稼働日ベースに再サンプリング済み）
         
         Args:
             product_code: 商品コード
         
         Returns:
-            pd.Series: 日次実績データ（インデックス=日付）
+            pd.Series: 日次実績データ（インデックス=稼働日）
         """
         if self.actual_df is None:
             self.load_data()
         
-        return self.actual_df.loc[product_code]
+        # 再サンプリング済みの実績データを使用
+        if self.actual_df_resampled is not None:
+            return self.actual_df_resampled.loc[product_code]
+        else:
+            # 再サンプリングが実行されていない場合は元のデータを返す
+            return self.actual_df.loc[product_code]
     
     def get_daily_plan(self, product_code: str) -> pd.Series:
         """
@@ -538,6 +616,10 @@ class DataLoader:
         else:
             # 既に日付型の場合
             self.actual_df.columns = pd.to_datetime(self.actual_df.columns)
+        
+        # 計画データが読み込まれている場合は、実績データを稼働日ベースに再サンプリング
+        if self.plan_df is not None:
+            self._resample_actual_to_working_days()
         
         return self.actual_df
     
