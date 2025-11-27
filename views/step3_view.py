@@ -1145,18 +1145,46 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     # マトリクスを表示（Styler使用）
     styled_matrix = matrix_df.style.applymap(style_matrix, subset=pd.IndexSlice[:, :])
     
-    # 区分ごとの色付け（奇数番目の区分列ブロックに背景色を付与）
+    # 行・列ヘッダのデザイン統一（背景色#F5F5F5、罫線#DDDDDD）
+    table_styles = [
+        {
+            'selector': 'thead th',
+            'props': [
+                ('background-color', '#F5F5F5'),
+                ('border', '1px solid #DDDDDD'),
+                ('border-collapse', 'collapse')
+            ]
+        },
+        {
+            'selector': 'tbody th',
+            'props': [
+                ('background-color', '#F5F5F5'),
+                ('border', '1px solid #DDDDDD'),
+                ('border-collapse', 'collapse')
+            ]
+        },
+        {
+            'selector': 'td',
+            'props': [
+                ('border', '1px solid #DDDDDD'),
+                ('border-collapse', 'collapse')
+            ]
+        }
+    ]
+    styled_matrix = styled_matrix.set_table_styles(table_styles)
+    
+    # 区分ごとの色付け（合計、B区分、D区分、F区分...に#F5F5F5、A区分、C区分、E区分...は白）
     def highlight_cols_by_category(col):
-        """区分ごとの列色分け（奇数区分に色付け）"""
+        """区分ごとの列色分け（合計と偶数番目の区分に色付け）"""
         # MultiIndexの列名から区分名を取得
         if isinstance(col.name, tuple) and len(col.name) >= 1:
             category_name = col.name[0]  # 1行目の区分名
         else:
             category_name = str(col.name)
         
-        # 合計列は常に白背景
+        # 合計列は#F5F5F5背景
         if category_name == '合計':
-            return ['background-color: #FFFFFF'] * len(col)
+            return ['background-color: #F5F5F5'] * len(col)
         
         # 区分名から文字部分を抽出（例：「A区分」→「A」）
         category_char = category_name.replace('区分', '')
@@ -1169,18 +1197,17 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
             # 区分が見つからない場合は白背景
             return ['background-color: #FFFFFF'] * len(col)
         
-        # 奇数番目（インデックスが0から始まるため、インデックス%2==0が1番目、3番目...）
-        # A区分=0（偶数）=1番目（奇数番目）、B区分=1（奇数）=2番目（偶数番目）、C区分=2（偶数）=3番目（奇数番目）
-        if category_index % 2 == 0:  # 奇数番目の区分（A区分、C区分など）
-            return ['background-color: #E0E0E0'] * len(col)  # グレー背景
-        else:  # 偶数番目の区分（B区分、D区分など）
+        # 偶数番目の区分（B区分、D区分など）に#F5F5F5、奇数番目の区分（A区分、C区分など）は白
+        if category_index % 2 == 1:  # 偶数番目の区分（B区分、D区分など）
+            return ['background-color: #F5F5F5'] * len(col)  # 薄いグレー背景
+        else:  # 奇数番目の区分（A区分、C区分など）
             return ['background-color: #FFFFFF'] * len(col)  # 白背景
     
     styled_matrix = styled_matrix.apply(highlight_cols_by_category, axis=0)
     
-    # 重要行（安全在庫_数量、安全在庫_日数）の強調（青系背景色）
+    # KPI行（合計件数、安全在庫_数量、安全在庫_日数）の強調
     def highlight_important_rows(row):
-        """重要行の強調（青系背景色＋太字）"""
+        """KPI行の強調"""
         # 行名を取得（MultiIndexの場合は最初の要素）
         if hasattr(row, 'name'):
             row_name = row.name
@@ -1191,31 +1218,52 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
         else:
             row_name = ''
         
-        # 重要行の判定（青系背景色 #f0f8ff を使用）
-        if row_name == '安全在庫_数量' or row_name == '安全在庫_日数':
-            return ['background-color: #f0f8ff; font-weight: bold'] * len(row)
+        # KPI行の判定
+        if row_name == '合計件数':
+            return ['background-color: #F0F6FF; font-weight: bold'] * len(row)
+        elif row_name == '安全在庫_数量':
+            return ['background-color: #F0F6FF; font-weight: bold'] * len(row)
+        elif row_name == '安全在庫_日数':
+            return ['background-color: #E0EDFF; font-weight: bold; font-size: 1.1em'] * len(row)
         return [''] * len(row)
     
     styled_matrix = styled_matrix.apply(highlight_important_rows, axis=1)
     
-    # インデックス列（項目名）の背景色を青系に統一するCSS
+    # KPI行のインデックス列も強調するためのCSS
     st.markdown("""
     <style>
-    /* マトリクスのインデックス列（項目名）の背景色を青系に統一 */
+    /* マトリクスのインデックス列（項目名）の背景色を統一 */
     div[data-testid="stDataFrame"] table thead th:first-child,
     div[data-testid="stDataFrame"] table tbody tr th {
-        background-color: #f0f8ff !important;
+        background-color: #F5F5F5 !important;
+        border: 1px solid #DDDDDD !important;
     }
-    /* 「安全在庫_数量」「安全在庫_日数」行のインデックス列も青系背景色 */
-    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #f0f8ff"]) th {
-        background-color: #f0f8ff !important;
+    /* 「合計件数」「安全在庫_数量」行のインデックス列 */
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #F0F6FF"]) th {
+        background-color: #F0F6FF !important;
         font-weight: bold !important;
+        border: 1px solid #DDDDDD !important;
+    }
+    /* 「安全在庫_日数」行のインデックス列 */
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #E0EDFF"]) th {
+        background-color: #E0EDFF !important;
+        font-weight: bold !important;
+        font-size: 1.1em !important;
+        border: 1px solid #DDDDDD !important;
     }
     </style>
     """, unsafe_allow_html=True)
     
     # Streamlitで表示
     st.dataframe(styled_matrix, use_container_width=True, height=500)
+    
+    # マトリクスの直下に注意文を追加
+    st.markdown("""
+    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
+    ※表内の数値は該当する商品コードの件数です。<br>
+    ※安全在庫_日数は加重平均です。
+    </div>
+    """, unsafe_allow_html=True)
     
     # CSV出力ボタン
     # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
