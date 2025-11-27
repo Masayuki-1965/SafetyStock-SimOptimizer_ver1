@@ -1178,9 +1178,9 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     
     styled_matrix = styled_matrix.apply(highlight_cols_by_category, axis=0)
     
-    # 重要行（安全在庫_数量、安全在庫_日数）の強調
+    # 重要行（安全在庫_数量、安全在庫_日数）の強調（青系背景色）
     def highlight_important_rows(row):
-        """重要行の強調（背景色＋太字＋縁取り）"""
+        """重要行の強調（青系背景色＋太字）"""
         # 行名を取得（MultiIndexの場合は最初の要素）
         if hasattr(row, 'name'):
             row_name = row.name
@@ -1191,12 +1191,28 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
         else:
             row_name = ''
         
-        # 重要行の判定
+        # 重要行の判定（青系背景色 #f0f8ff を使用）
         if row_name == '安全在庫_数量' or row_name == '安全在庫_日数':
-            return ['background-color: #FFF9C4; font-weight: bold; border: 2px solid #F57F17'] * len(row)
+            return ['background-color: #f0f8ff; font-weight: bold'] * len(row)
         return [''] * len(row)
     
     styled_matrix = styled_matrix.apply(highlight_important_rows, axis=1)
+    
+    # インデックス列（項目名）の背景色を青系に統一するCSS
+    st.markdown("""
+    <style>
+    /* マトリクスのインデックス列（項目名）の背景色を青系に統一 */
+    div[data-testid="stDataFrame"] table thead th:first-child,
+    div[data-testid="stDataFrame"] table tbody tr th {
+        background-color: #f0f8ff !important;
+    }
+    /* 「安全在庫_数量」「安全在庫_日数」行のインデックス列も青系背景色 */
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #f0f8ff"]) th {
+        background-color: #f0f8ff !important;
+        font-weight: bold !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Streamlitで表示
     st.dataframe(styled_matrix, use_container_width=True, height=500)
@@ -1204,16 +1220,15 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     # CSV出力ボタン
     # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
     
-    # 注記を表示
+    # 注記を展開式で表示（初期状態は閉じた状態）
     st.markdown("---")
-    st.markdown("""
-    **※注記：**
-    - 表内の数値は該当する機種数（SKU件数）です。
-    - 現行設定_数量が0、または安全在庫①/②/③_数量が計算できない機種は、「0日（設定なし）」に分類します。
-    - 安全在庫_数量は、各機種の［安全在庫_日数 × 日当たり実績］（※四捨五入して整数表示）を算出し、全件集計した値です。
-    - 安全在庫_日数（加重平均）は、全件集計［安全在庫_数量］ ÷ 全件集計［日当たり実績］で算出します。
-    - 安全在庫_日数は「稼働日ベース」です（非稼働日は日当たり実績に含みません）。
-    - 日当たり実績が0または欠損、または安全在庫_日数を算出できない機種は、安全在庫_日数（加重平均）の対象外です。
-    - 在庫日数の区分は、各範囲の上限値を含みます（例：5.0日は「0〜5日」、50.0日は「40〜50日」に分類）。
-    """)
+    with st.expander("ABC区分別_安全在庫比較マトリクスの見方", expanded=False):
+        st.markdown("""
+        - 表内の数値は該当する商品コードの件数です。
+        - 現行設定_数量が0、または安全在庫①/②/③_数量が計算できない商品コードは、「0日（設定なし）」に分類します。
+        - 安全在庫_数量は、各商品コードの［安全在庫_日数 × 日当たり実績］を算出し、全件集計した値です。
+        - 安全在庫_日数は、全件集計した［安全在庫_数量］を全件集計した［日当たり実績］で割って求める加重平均です。
+        - 安全在庫_日数は「稼働日ベース」です（非稼働日は日当たり実績に含みません）。
+        - 在庫日数の区分は、各範囲の上限値を含みます（例：5.0日は「0〜5日」、50.0日は「40〜50日」に分類）。
+        """)
 

@@ -135,8 +135,8 @@ def display_safety_stock_definitions():
         <thead>
             <tr>
                 <th style="width: 23%;">モデル</th>
-                <th style="width: 39%;">計算式</th>
-                <th style="width: 38%;">説明</th>
+                <th style="width: 38%;">計算式</th>
+                <th style="width: 39%;">説明</th>
             </tr>
         </thead>
         <tbody>
@@ -153,7 +153,7 @@ def display_safety_stock_definitions():
             <tr>
                 <td class="model-cell">安全在庫③：実測値（実績 − 計画）<br><span class="subtitle">【計画誤差を考慮した推奨モデル】</span></td>
                 <td class="formula-cell"><strong>リードタイム間差分（実績−計画）※計画誤差<br> ＝ リードタイム期間の実績合計 − リードタイム期間の計画合計</strong><br>→ 欠品許容率 p（例：1%）をカバーする水準を採用<br>※ 総件数 ＝ 全期間の日数 − リードタイム LT ＋ 1</td>
-                <td class="description-cell">リードタイム期間の実績合計と計画合計を 1 日ずつスライドして比較し、実績が計画を上回った“プラス差分”<strong>（＝計画誤差による欠品リスク）</strong>を実測します。ヒストグラム（件数 × 差分）の総件数に対し、左側（1−p）の件数をカバーする位置を安全在庫水準として設定します。<strong>計画誤差を直接反映できるため、最も実用的なモデルです。</strong></td>
+                <td class="description-cell">リードタイム期間の実績合計と計画合計を 1 日ずつスライドして比較し、実績が計画を上回った“プラス差分”<strong>（＝計画誤差による欠品リスク）</strong>を実測します。ヒストグラム（件数 × 差分）の総件数に対し、左側（1−p）の件数をカバーする位置を安全在庫水準として設定します。<strong>実績のバラつきだけでなく、計画誤差も直接反映できるため、最も実用的なモデルです。</strong></td>
             </tr>
         </tbody>
     </table>
