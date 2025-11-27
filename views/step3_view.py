@@ -1171,6 +1171,47 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
             ]
         }
     ]
+    
+    # ① 上位ヘッダ（区分ラベル）の視認性強調：上段MultiIndexヘッダの下側に太線を追加
+    table_styles.append({
+        'selector': 'thead th.level0',
+        'props': [
+            ('border-bottom', '3px solid #BBBBBB')
+        ]
+    })
+    
+    # ② 区分境界線をわずかに強調：各区分ブロック先頭列の左側縦線を2px #BBBBBBに
+    # 列構造：インデックス列(1) + 合計ブロック(4列) + 各区分ブロック(各4列)
+    # 合計ブロックの先頭列は2列目（インデックス列を除く）
+    # A区分ブロックの先頭列は6列目（合計4列 + インデックス列1列）
+    # B区分ブロックの先頭列は10列目（合計4列 + A区分4列 + インデックス列1列）
+    ss_types_count = len(ss_types)  # 4列（現行設定、安全在庫①、安全在庫②、安全在庫③）
+    
+    # 合計ブロックの先頭列（2列目）
+    table_styles.append({
+        'selector': 'thead th.level0:nth-child(2), thead th.level1:nth-child(2), td:nth-child(2)',
+        'props': [
+            ('border-left', '2px solid #BBBBBB')
+        ]
+    })
+    
+    # 各区分ブロックの先頭列を計算
+    # 合計ブロック: 列2-5（インデックス列を除く）
+    # A区分ブロック: 列6-9
+    # B区分ブロック: 列10-13
+    # C区分ブロック: 列14-17
+    # 先頭列は 2, 6, 10, 14, ... = 2 + 4*n (n=0,1,2,...)
+    # n=0: 合計ブロック（既に追加済み）
+    # n=1,2,3,...: 各区分ブロック
+    for i in range(len(all_categories)):
+        col_position = 2 + (i + 1) * ss_types_count  # インデックス列(1) + 合計ブロック(4) + 区分ブロック数*4
+        table_styles.append({
+            'selector': f'thead th.level0:nth-child({col_position}), thead th.level1:nth-child({col_position}), td:nth-child({col_position})',
+            'props': [
+                ('border-left', '2px solid #BBBBBB')
+            ]
+        })
+    
     styled_matrix = styled_matrix.set_table_styles(table_styles)
     
     # 区分ごとの色付け（合計、B区分、D区分、F区分...に#F5F5F5、A区分、C区分、E区分...は白）
@@ -1261,7 +1302,7 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     st.markdown("""
     <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
     ※表内の数値は該当する商品コードの件数です。<br>
-    ※安全在庫_日数は加重平均です。
+    ※安全在庫_日数は加重平均です。<br><br>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1269,7 +1310,7 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
     
     # 注記を展開式で表示（初期状態は閉じた状態）
-    st.markdown("---")
+    # マトリクス直下の罫線は削除（滑らかに繋げるため）
     with st.expander("ABC区分別_安全在庫比較マトリクスの見方", expanded=False):
         st.markdown("""
         - 表内の数値は該当する商品コードの件数です。
