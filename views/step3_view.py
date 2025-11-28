@@ -244,10 +244,10 @@ def display_step3():
             st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス</div>', unsafe_allow_html=True)
             display_abc_matrix_comparison(results_df, key_prefix="abc_matrix_before")
             
-            # 受注量別 安全在庫比較グラフ（異常値処理前）を追加
+            # 受注量の多い商品順 安全在庫比較グラフ（異常値処理前）を追加
             st.markdown("""
             <div class="step-middle-section">
-                <p>受注量別 安全在庫 比較グラフ（異常値処理前）</p>
+                <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理前）</p>
             </div>
             """, unsafe_allow_html=True)
             st.caption("安全在庫モデルを『現行設定』『安全在庫①』『安全在庫②』『安全在庫③』から選択してください。")
@@ -373,47 +373,29 @@ def display_step3():
         col1, col2 = st.columns(2)
         with col1:
             sigma_k = st.number_input(
-                "σ係数（グローバル異常基準）",
+                "異常基準：mean + σ × (係数)",
                 min_value=1.0,
                 max_value=10.0,
                 value=6.0,
                 step=0.5,
-                help="6σを超えるような極端なスパイクだけを「異常値」として扱います。",
+                help="※ 平均からどれだけ離れた値を異常とみなすか？",
                 key="step3_sigma_k"
             )
         
         with col2:
-            top_limit_mode = st.radio(
-                "上位制限方式",
-                options=['percent', 'count'],
-                format_func=lambda x: "割合（％）" if x == 'percent' else "件数（N）",
-                index=0,
-                key="step3_top_limit_mode",
-                horizontal=True
-            )
-        
-        if top_limit_mode == 'count':
-            top_limit_n = st.number_input(
-                "上位カット件数（N）",
-                min_value=1,
-                max_value=100,
-                value=2,
-                step=1,
-                help="上位N件を異常値として補正します。",
-                key="step3_top_limit_n"
-            )
-            top_limit_p = None
-        else:
             top_limit_p = st.number_input(
                 "上位カット割合（％）",
                 min_value=1.0,
                 max_value=5.0,
                 value=2.0,
                 step=0.1,
-                help="全期間のうち上位p%のスパイクだけを補正対象とします。",
+                help="※ 上位何％を補正対象とするか？",
                 key="step3_top_limit_p"
             )
-            top_limit_n = None
+        
+        # 割合（％）のみで制御する仕様に統一
+        top_limit_mode = 'percent'
+        top_limit_n = None
         
         # ABC区分ごとの上限日数設定
         st.markdown('<div class="step-sub-section">ABC区分ごとの上限日数設定</div>', unsafe_allow_html=True)
@@ -512,9 +494,9 @@ def display_step3():
                         actual_data=actual_data,
                         working_dates=working_dates,
                         sigma_k=sigma_k,
-                        top_limit_mode=top_limit_mode,
-                        top_limit_n=top_limit_n if top_limit_mode == 'count' else 2,
-                        top_limit_p=top_limit_p if top_limit_mode == 'percent' else 2.0,
+                        top_limit_mode='percent',
+                        top_limit_n=2,
+                        top_limit_p=top_limit_p,
                         abc_category=abc_category
                     )
                     
@@ -671,11 +653,11 @@ def display_step3():
                 st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス</div>', unsafe_allow_html=True)
                 display_abc_matrix_comparison(display_df, key_prefix="abc_matrix_after")
                 
-                # 受注量別 安全在庫比較グラフ（異常値処理後）を追加
+                # 受注量の多い商品順 安全在庫比較グラフ（異常値処理後）を追加
                 # Before/Afterを1つのグラフに統合して表示
                 st.markdown("""
                 <div class="step-middle-section">
-                    <p>受注量別 安全在庫 比較グラフ（異常値処理後）</p>
+                    <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理後）</p>
                 </div>
                 """, unsafe_allow_html=True)
                 st.caption("安全在庫モデルを『現行設定』『安全在庫①』『安全在庫②』『安全在庫③』から選択してください。")

@@ -61,7 +61,7 @@ def create_time_series_chart(product_code: str, calculator: SafetyStockCalculato
     
     # レイアウト設定
     fig.update_layout(
-        title=f"{product_code} - 計画と実績の時系列推移",
+        title=f"{product_code} - 日次計画と日次実績の時系列推移",
         xaxis=dict(
             title="日付",
             type="date",
@@ -604,7 +604,7 @@ def create_order_volume_comparison_chart_before(results_df: pd.DataFrame, safety
     if len(chart_df) == 0:
         # 空のグラフを返す
         fig = go.Figure()
-        fig.update_layout(title=f'受注量別 {type_name} 比較グラフ（異常値処理前）')
+        fig.update_layout(title=f'受注量順 「{type_name}」 比較グラフ（異常値処理前）')
         return fig
     
     # 受注量（日当たり実績）で降順ソート
@@ -736,7 +736,7 @@ def create_order_volume_comparison_chart_before(results_df: pd.DataFrame, safety
     
     # レイアウト設定
     fig.update_layout(
-        title=f'受注量別 {type_name} 比較グラフ（異常値処理前）',
+        title=f'受注量順 「{type_name}」 比較グラフ（異常値処理前）',
         xaxis_title='商品コード（数量・降順）',
         yaxis_title='数量',
         yaxis2_title='日数',
@@ -825,7 +825,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
     if len(after_chart_df) == 0:
         # 空のグラフを返す
         fig = go.Figure()
-        fig.update_layout(title=f'受注量別 {type_name} 比較グラフ（異常値処理後）')
+        fig.update_layout(title=f'受注量順 「{type_name}」 比較グラフ（異常値処理後）')
         return fig
     
     # 受注量（日当たり実績）で降順ソート
@@ -1033,7 +1033,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
     
     # レイアウト設定
     fig.update_layout(
-        title=f'受注量別 {type_name} 比較グラフ（異常値処理後）',
+        title=f'受注量順 「{type_name}」 比較グラフ（異常値処理後）',
         xaxis_title='商品コード（受注数・降順）',
         yaxis_title='数量',
         yaxis2_title='日数',
@@ -1131,7 +1131,7 @@ def create_outlier_processing_results_chart(product_code: str,
         )
     
     fig.update_layout(
-        title=f"{product_code} - 異常値処理結果（Before/After）",
+        title=f"{product_code} - 異常値処理結果：実績データ（Before/After）",
         xaxis=dict(title="日付", type="date", tickformat="%Y-%m"),
         yaxis=dict(title="数量"),
         hovermode='x unified',
@@ -1402,7 +1402,7 @@ def create_outlier_lt_delta_comparison_chart(product_code: str,
     fig.update_layout(
         height=800,
         showlegend=True,
-        title_text=f"{product_code} - リードタイム間差分の分布（Before/After 比較）",
+        title_text=f"{product_code} - リードタイム間差分の分布（Before/After）",
         margin=dict(t=170, b=100, r=80),  # 右側の余白を追加して「安全在庫③」の切れを防止
         legend=dict(
             orientation="h",
@@ -1471,7 +1471,7 @@ def create_after_processing_comparison_chart(product_code: str,
     )
     
     fig.update_layout(
-        title=f"{product_code} - 安全在庫 Before/After 比較",
+        title=f"{product_code} - 安全在庫（Before/After）",
         xaxis=dict(title="モデル"),
         yaxis=dict(title="安全在庫日数"),
         barmode='group',

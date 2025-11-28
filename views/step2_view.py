@@ -296,8 +296,7 @@ def display_step2():
         st.markdown('<div class="step-sub-section">日次計画と日次実績の時系列推移</div>', unsafe_allow_html=True)
         fig = create_time_series_chart(product_code, calculator)
         st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}")
-        
-        # 日次計画と日次実績の統計情報
+        # 日次計画と日次実績の統計情報（グラフとの間隔を最小化するため、空行を削除）
         st.markdown('<div class="step-sub-section">日次計画と日次実績の統計情報</div>', unsafe_allow_html=True)
         display_plan_actual_statistics(product_code, calculator)
         
@@ -461,65 +460,34 @@ def display_step2():
         # 異常値処理パラメータ設定
         st.markdown('<div class="step-sub-section">異常値処理パラメータ</div>', unsafe_allow_html=True)
         
-        # 上位制限方式を先に取得（デフォルトは'percent'）
-        top_limit_mode = st.session_state.get('step2_top_limit_mode', 'percent')
-        
-        # グローバル異常基準と上位カット件数/割合を横並びレイアウト
+        # グローバル異常基準と上位カット割合を横並びレイアウト
         col1, col2 = st.columns(2)
         
         with col1:
             sigma_k = st.number_input(
-                "グローバル異常基準（σ係数）",
+                "異常基準：mean + σ × (係数)",
                 min_value=2.0,
                 max_value=10.0,
                 value=6.0,
                 step=0.5,
-                help="6σを超えるような極端なスパイクだけを'異常値'として扱い、それ以外のばらつきはすべて実需として安全在庫に反映します。",
+                help="※ 平均からどれだけ離れた値を異常とみなすか？",
                 key="step2_sigma_k"
             )
         
         with col2:
-            if top_limit_mode == 'count':
-                top_limit_n = st.number_input(
-                    "上位カット件数（N）",
-                    min_value=1,
-                    max_value=100,
-                    value=2,
-                    step=1,
-                    help="上位2件は「単発イベントや記録ミスを丸める最小限の調整」。過度にデータを削らず説明が容易（「一番大きい2点だけ整えました」）。",
-                    key="step2_top_limit_n"
-                )
-                top_limit_p = None
-            else:
-                top_limit_p = st.number_input(
-                    "上位カット割合（％）",
-                    min_value=1.0,
-                    max_value=5.0,
-                    value=2.0,
-                    step=0.1,
-                    help="全期間のうち上位p%のスパイクだけを補正対象とします。ゼロ出荷日も母数に含めることで、真の異常値だけに絞り込みます。",
-                    key="step2_top_limit_p"
-                )
-                top_limit_n = None
+            top_limit_p = st.number_input(
+                "上位カット割合（％）",
+                min_value=1.0,
+                max_value=5.0,
+                value=2.0,
+                step=0.1,
+                help="※ 上位何％を補正対象とするか？",
+                key="step2_top_limit_p"
+            )
         
-        # 上位制限方式のラジオボタンを上位カット件数のすぐ下に配置
-        # 現在の選択値を取得してindexを決定
-        current_mode = st.session_state.get('step2_top_limit_mode', 'percent')
-        top_limit_mode = st.radio(
-            "上位制限方式",
-            options=['percent', 'count'],  # 順番を変更：1番目が割合（％）、2番目が件数（N）
-            format_func=lambda x: "割合（％）" if x == 'percent' else "件数（N）",
-            index=0 if current_mode == 'percent' else 1,  # デフォルトは割合（％）
-            key="step2_top_limit_mode"
-        )
-        
-        # 上位制限方式が変更された場合、対応する値を再取得
-        if top_limit_mode == 'count':
-            top_limit_n = st.session_state.get('step2_top_limit_n', 2)
-            top_limit_p = None
-        else:
-            top_limit_p = st.session_state.get('step2_top_limit_p', 2.0)
-            top_limit_n = None
+        # 割合（％）のみで制御する仕様に統一
+        top_limit_mode = 'percent'
+        top_limit_n = None
         
         # セッション状態の初期化
         if 'step2_outlier_processed' not in st.session_state:
@@ -544,9 +512,9 @@ def display_step2():
                     actual_data=actual_data,
                     working_dates=working_dates,
                     sigma_k=sigma_k,
-                    top_limit_mode=top_limit_mode,
-                    top_limit_n=top_limit_n if top_limit_mode == 'count' else 2,
-                    top_limit_p=top_limit_p if top_limit_mode == 'percent' else 2.0,
+                    top_limit_mode='percent',
+                    top_limit_n=2,
+                    top_limit_p=top_limit_p,
                     abc_category=abc_category
                 )
                 
@@ -595,7 +563,7 @@ def display_step2():
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown('<div class="step-sub-section">異常値処理結果（Before/After）</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">異常値処理結果：実績データ Before/After 比較</div>', unsafe_allow_html=True)
             
             # 詳細情報を表示（異常値が検出された場合のみ）
             # display_outlier_processing_results内でグラフも表示されるため、ここでは直接表示しない
@@ -696,7 +664,7 @@ def display_step2():
         
         # 再算出結果の表示（Before/After比較）
         if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
-            st.markdown('<div class="step-sub-section">異常値処理前後：安全在庫①②③ Before / After 比較</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">異常値処理結果：安全在庫①②③ Before / After 比較</div>', unsafe_allow_html=True)
             
             product_code = st.session_state.get('step2_product_code')
             before_results = st.session_state.get('step2_results')
@@ -714,7 +682,7 @@ def display_step2():
             )
             
             # LT間差分の分布（Before/After）
-            st.markdown('<div class="step-sub-section">リードタイム間差分の分布（ヒストグラム）Before/After 比較</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">異常値処理結果：リードタイム間差分の分布（ヒストグラム）Before/After 比較</div>', unsafe_allow_html=True)
             lead_time_days = int(np.ceil(before_results['common_params']['lead_time_days']))
             stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
             before_data = st.session_state.get('step2_actual_data')
@@ -1148,45 +1116,45 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     comparison_df = pd.DataFrame(comparison_data)
     st.dataframe(comparison_df, use_container_width=True, hide_index=True)
     
-    # 算出条件テーブルを追加
-    st.markdown('<div class="step-sub-section">算出条件</div>', unsafe_allow_html=True)
-    
-    # 必要な値を取得
-    lead_time_working_days = results['common_params']['lead_time_working_days']
-    current_safety_stock_info = results['current_safety_stock']
-    monthly_stock = current_safety_stock_info.get('monthly_stock', 0.0)
-    avg_working_days_per_month = current_safety_stock_info.get('avg_working_days_per_month', 0.0)
-    
-    # 算出条件データを作成
-    calculation_conditions_data = {
-        '項目名': [
-            '日当たり実績',
-            'リードタイム（稼働日）',
-            '欠品許容率 p',
-            'z（片側）＝Φ⁻¹(1−p)【安全在庫①のみ適用】',
-            '月平均稼働日数（稼働日マスタに基づく）',
-            '現行の安全在庫登録値（月数）'
-        ],
-        '値': [
-            f"{daily_actual_mean:.2f}",
-            f"{lead_time_working_days:.1f}日",
-            f"{stockout_tolerance_pct:.1f}%",
-            f"{safety_factor:.3f}" if safety_factor is not None else "計算不可（p=0→Z=∞）",
-            f"{avg_working_days_per_month:.1f}日",
-            f"{monthly_stock:.2f}ヶ月"
-        ],
-        '備考': [
-            '実データから算出（動的）',
-            'ユーザー設定値',
-            'ユーザー設定値',
-            'p に基づき自動算出',
-            '分析対象期間の平均稼働日',
-            'STEP1で取り込んだ現行安全在庫データ'
-        ]
-    }
-    
-    calculation_conditions_df = pd.DataFrame(calculation_conditions_data)
-    st.dataframe(calculation_conditions_df, use_container_width=True, hide_index=True)
+    # 算出条件テーブルを追加（折りたたみ式、初期状態は閉じる）
+    # このブロックと上部のテーブルを一体的に見せたいので、間に余計なスペースは入れない
+    with st.expander("安全在庫算出条件", expanded=False):
+        # 必要な値を取得
+        lead_time_working_days = results['common_params']['lead_time_working_days']
+        current_safety_stock_info = results['current_safety_stock']
+        monthly_stock = current_safety_stock_info.get('monthly_stock', 0.0)
+        avg_working_days_per_month = current_safety_stock_info.get('avg_working_days_per_month', 0.0)
+        
+        # 算出条件データを作成
+        calculation_conditions_data = {
+            '項目名': [
+                '日当たり実績',
+                'リードタイム（稼働日）',
+                '欠品許容率 p',
+                'z（片側）＝Φ⁻¹(1−p)【安全在庫①のみ適用】',
+                '月平均稼働日数（稼働日マスタに基づく）',
+                '現行の安全在庫登録値（月数）'
+            ],
+            '値': [
+                f"{daily_actual_mean:.2f}",
+                f"{lead_time_working_days:.1f}日",
+                f"{stockout_tolerance_pct:.1f}%",
+                f"{safety_factor:.3f}" if safety_factor is not None else "計算不可（p=0→Z=∞）",
+                f"{avg_working_days_per_month:.1f}日",
+                f"{monthly_stock:.2f}ヶ月"
+            ],
+            '備考': [
+                '実データから算出（動的）',
+                'ユーザー設定値',
+                'ユーザー設定値',
+                'p に基づき自動算出',
+                '分析対象期間の平均稼働日',
+                'STEP1で取り込んだ現行安全在庫データ'
+            ]
+        }
+        
+        calculation_conditions_df = pd.DataFrame(calculation_conditions_data)
+        st.dataframe(calculation_conditions_df, use_container_width=True, hide_index=True)
     
     # 区分別上限適用情報を表示（実際に上限カットが適用された場合のみ表示）
     if calculator.abc_category:
@@ -1230,9 +1198,7 @@ def display_outlier_processing_results(product_code: str,
                                         show_details: bool = True):
     """異常値処理結果を表示（Before/After比較）"""
     
-    # Before/After実績線グラフ（重ね描き）を先に表示
-    st.markdown('<div class="step-sub-section">実績データ Before/After 比較</div>', unsafe_allow_html=True)
-    
+    # Before/After実績線グラフ（重ね描き）を先に表示（小項目は呼び出し側で設定済み）
     # 異常値のインデックスを取得
     outlier_indices = outlier_handler.outlier_final_indices if hasattr(outlier_handler, 'outlier_final_indices') else []
     
@@ -1247,132 +1213,107 @@ def display_outlier_processing_results(product_code: str,
     
     processing_info = outlier_handler.processing_info
     if processing_info and not processing_info.get('skipped', False):
-        st.markdown('<div class="step-sub-section">異常値処理詳細情報</div>', unsafe_allow_html=True)
-        
-        # ユーザー指定パラメータを取得（セッション状態から）
-        sigma_coef = st.session_state.get('step2_sigma_k', processing_info.get('sigma_k', 6.0))
-        top_limit_mode = processing_info.get('top_limit_mode', 'percent')
-        if top_limit_mode == 'count':
-            top_cut_ratio = None
-            top_limit_value = processing_info.get('top_limit_value', 2)
-        else:
+        # 異常値処理の詳細情報を折りたたみ式で表示（初期状態は閉じる）
+        # このブロックと上部のグラフを一体的に見せたいので、間に余計なスペースは入れない
+        with st.expander("異常値処理結果の見方（詳細情報）", expanded=False):
+            # ユーザー指定パラメータを取得（セッション状態から）
+            sigma_coef = st.session_state.get('step2_sigma_k', processing_info.get('sigma_k', 6.0))
             top_cut_ratio = st.session_state.get('step2_top_limit_p', processing_info.get('top_limit_p', 2.0))
             top_limit_value = top_cut_ratio
-        
-        info_data = []
-        candidate_count = processing_info.get('candidate_count', 0)
-        if candidate_count > 0:
-            final_count = processing_info.get('final_count', 0)
-            threshold_global = processing_info.get('threshold_global')
-            threshold_final = processing_info.get('threshold_final')
             
-            # 異常値の見つけ方
-            info_data.append([
-                '異常値の見つけ方',
-                f'mean + σ × {sigma_coef:.2f}',
-                f'ユーザー指定のσ係数（例：{sigma_coef:.2f}）に基づき、平均から許容範囲を外れる上振れ値を異常候補として抽出'
-            ])
-            
-            # 怪しい値（候補）
-            info_data.append([
-                '怪しい値（候補）',
-                f'{candidate_count}件',
-                f'基準値(mean + {sigma_coef:.0f}σ)を超過した件数'
-            ])
-            
-            # 最終的に直した件数
-            if top_limit_mode == 'count':
+            info_data = []
+            candidate_count = processing_info.get('candidate_count', 0)
+            if candidate_count > 0:
+                final_count = processing_info.get('final_count', 0)
+                threshold_global = processing_info.get('threshold_global')
+                threshold_final = processing_info.get('threshold_final')
+                
+                # 異常値の見つけ方
                 info_data.append([
-                    '最終的に直した件数',
-                    f'{final_count}件',
-                    f'上位カット件数（例：{top_limit_value}件）の範囲へ収まるように補正対象を確定した件数'
+                    '異常値の見つけ方',
+                    f'mean + σ × {sigma_coef:.2f}',
+                    f'ユーザー指定のσ係数（例：{sigma_coef:.2f}）に基づき、平均から許容範囲を外れる上振れ値を異常候補として抽出'
                 ])
-            else:
+                
+                # 怪しい値（候補）
+                info_data.append([
+                    '怪しい値（候補）',
+                    f'{candidate_count}件',
+                    f'基準値(mean + {sigma_coef:.0f}σ)を超過した件数'
+                ])
+                
+                # 最終的に直した件数
                 info_data.append([
                     '最終的に直した件数',
                     f'{final_count}件',
                     f'上位カット割合（例：{top_cut_ratio:.2f}%）の範囲へ収まるように補正対象を確定した件数'
                 ])
-            
-            # 異常とみなす基準（初期）
-            info_data.append([
-                '異常とみなす基準（初期）',
-                f'{threshold_global:.2f}' if threshold_global else '—',
-                f'σ係数({sigma_coef:.2f})を反映した初期しきい値 (threshold_global)'
-            ])
-            
-            # 異常とみなす基準（最終）
-            if top_limit_mode == 'count':
+                
+                # 異常とみなす基準（初期）
                 info_data.append([
-                    '異常とみなす基準（最終）',
-                    f'{threshold_final:.2f}' if threshold_final else '—',
-                    f'上位カット件数({top_limit_value}件)を適用し、最終的に採用された補正しきい値(threshold_final)'
+                    '異常とみなす基準（初期）',
+                    f'{threshold_global:.2f}' if threshold_global else '—',
+                    f'σ係数({sigma_coef:.2f})を反映した初期しきい値 (threshold_global)'
                 ])
-            else:
+                
+                # 異常とみなす基準（最終）
                 info_data.append([
                     '異常とみなす基準（最終）',
                     f'{threshold_final:.2f}' if threshold_final else '—',
                     f'上位カット割合({top_cut_ratio:.2f}%)を適用し、最終的に採用された補正しきい値(threshold_final)'
                 ])
-            
-            # 補正する上限割合
-            if top_limit_mode == 'count':
-                info_data.append([
-                    '補正する上限割合',
-                    f'件数（N）={top_limit_value}件',
-                    f'上位{top_limit_value}件のみを補正対象とし、極端値による安全在庫の過大化を防止'
-                ])
-            else:
+                
+                # 補正する上限割合
                 info_data.append([
                     '補正する上限割合',
                     f'{top_cut_ratio:.2f}%',
                     f'上位{top_cut_ratio:.2f}%のみを補正対象とし、極端値による安全在庫の過大化を防止'
                 ])
-        
-        if info_data:
-            info_df = pd.DataFrame(info_data, columns=['項目', '値', '備考'])
             
-            # CSSで列幅を調整（st.dataframe用）
-            st.markdown("""
-            <style>
-            /* 異常値処理詳細情報テーブルの列幅調整 */
-            div[data-testid="stDataFrame"] table,
-            div[data-testid="stDataFrame"] .dataframe {
-                table-layout: fixed !important;
-                width: 100% !important;
-                border-collapse: collapse !important;
-            }
-            /* 項目列 */
-            div[data-testid="stDataFrame"] th:nth-child(1),
-            div[data-testid="stDataFrame"] td:nth-child(1) {
-                width: 20% !important;
-                min-width: 120px !important;
-                padding: 8px 12px !important;
-            }
-            /* 値列 */
-            div[data-testid="stDataFrame"] th:nth-child(2),
-            div[data-testid="stDataFrame"] td:nth-child(2) {
-                width: 15% !important;
-                min-width: 100px !important;
-                padding: 8px 12px !important;
-            }
-            /* 備考列 */
-            div[data-testid="stDataFrame"] th:nth-child(3),
-            div[data-testid="stDataFrame"] td:nth-child(3) {
-                width: 65% !important;
-                white-space: normal !important;
-                word-wrap: break-word !important;
-                overflow-wrap: break-word !important;
-                padding: 8px 12px !important;
-            }
-            /* テーブル全体のスタイル */
-            div[data-testid="stDataFrame"] {
-                overflow-x: auto !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            st.dataframe(info_df, use_container_width=True, hide_index=True)
+            if info_data:
+                info_df = pd.DataFrame(info_data, columns=['項目', '値', '備考'])
+                
+                # CSSで列幅を調整（st.dataframe用）
+                st.markdown("""
+                <style>
+                /* 異常値処理詳細情報テーブルの列幅調整 */
+                div[data-testid="stDataFrame"] table,
+                div[data-testid="stDataFrame"] .dataframe {
+                    table-layout: fixed !important;
+                    width: 100% !important;
+                    border-collapse: collapse !important;
+                }
+                /* 項目列 */
+                div[data-testid="stDataFrame"] th:nth-child(1),
+                div[data-testid="stDataFrame"] td:nth-child(1) {
+                    width: 20% !important;
+                    min-width: 120px !important;
+                    padding: 8px 12px !important;
+                }
+                /* 値列 */
+                div[data-testid="stDataFrame"] th:nth-child(2),
+                div[data-testid="stDataFrame"] td:nth-child(2) {
+                    width: 15% !important;
+                    min-width: 100px !important;
+                    padding: 8px 12px !important;
+                }
+                /* 備考列 */
+                div[data-testid="stDataFrame"] th:nth-child(3),
+                div[data-testid="stDataFrame"] td:nth-child(3) {
+                    width: 65% !important;
+                    white-space: normal !important;
+                    word-wrap: break-word !important;
+                    overflow-wrap: break-word !important;
+                    padding: 8px 12px !important;
+                }
+                /* テーブル全体のスタイル */
+                div[data-testid="stDataFrame"] {
+                    overflow-x: auto !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                st.dataframe(info_df, use_container_width=True, hide_index=True)
 
 
 def display_outlier_lt_delta_comparison(product_code: str,
