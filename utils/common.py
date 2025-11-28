@@ -309,3 +309,57 @@ def slider_with_number_input(
     # 最新値を返す（slider_value/number_valueはいずれも最新セッション値）
     return value_type(st.session_state[key_prefix])
 
+
+def calculate_plan_error_rate(actual_data: pd.Series, plan_data: pd.Series) -> Tuple[float | None, float, float]:
+    """
+    計画誤差率を計算
+    
+    計画誤差率 = (実績合計 - 計画合計) / 計画合計 × 100%
+    
+    Args:
+        actual_data: 日次実績データ（Series）
+        plan_data: 日次計画データ（Series）
+    
+    Returns:
+        Tuple[float | None, float, float]: (計画誤差率（%）、計画誤差（実績合計 - 計画合計）、計画合計)
+           計画合計が0の場合は計画誤差率はNoneを返す
+    """
+    actual_total = float(actual_data.sum())
+    plan_total = float(plan_data.sum())
+    plan_error = actual_total - plan_total
+    
+    if plan_total == 0:
+        return None, plan_error, plan_total
+    
+    plan_error_rate = (plan_error / plan_total) * 100.0
+    return plan_error_rate, plan_error, plan_total
+
+
+def is_plan_anomaly(
+    plan_error_rate: float | None,
+    plus_threshold: float,
+    minus_threshold: float
+) -> Tuple[bool, str]:
+    """
+    計画異常値処理の判定
+    
+    Args:
+        plan_error_rate: 計画誤差率（%）。Noneの場合は計算不可
+        plus_threshold: プラス誤差の閾値（%）
+        minus_threshold: マイナス誤差の閾値（%）。負の値で指定（例：-50.0）
+    
+    Returns:
+        Tuple[bool, str]: (異常判定結果、判定理由)
+           異常の場合True、正常の場合False
+    """
+    if plan_error_rate is None:
+        return False, "計画誤差率計算不可"
+    
+    if plan_error_rate >= plus_threshold:
+        return True, f"計画誤差率が+{plan_error_rate:.1f}%で、閾値（+{plus_threshold:.1f}%）を超過"
+    
+    if plan_error_rate <= minus_threshold:
+        return True, f"計画誤差率が{plan_error_rate:.1f}%で、閾値（{minus_threshold:.1f}%）を下回る"
+    
+    return False, f"計画誤差率は{plan_error_rate:.1f}%で許容範囲内"
+

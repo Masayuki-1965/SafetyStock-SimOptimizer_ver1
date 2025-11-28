@@ -12,7 +12,9 @@ from modules.outlier_handler import OutlierHandler
 from utils.common import (
     slider_with_number_input,
     get_representative_products_by_abc,
-    get_abc_analysis_with_fallback
+    get_abc_analysis_with_fallback,
+    calculate_plan_error_rate,
+    is_plan_anomaly
 )
 from views.step1_view import display_safety_stock_definitions
 from charts.safety_stock_charts import (
@@ -93,24 +95,6 @@ def display_step2():
         st.warning("⚠️ 機種を選定できませんでした。ABC分析結果を確認してください。")
         return
     
-    # ========== 安全在庫モデル定義セクション ==========
-    display_safety_stock_definitions()
-    st.divider()
-    
-    # ========== 手順①：算出条件を設定する ==========
-    st.markdown("""
-    <div class="step-middle-section">
-        <p>手順①：算出条件を設定する</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-    <div class="step-description">分析対象の機種を選定し、安全在庫算出に必要な条件（リードタイム、欠品許容率、標準偏差の計算方法）を設定します。<br>これらの設定値は、後続の手順で使用される安全在庫モデルの算出に影響します。</div>
-    """, unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 機種の選定（1つのみ選択）
-    st.markdown('<div class="step-sub-section">機種の選定</div>', unsafe_allow_html=True)
-    
     # 全ABC区分の商品を取得し、実績値（累計）の多い順にソート
     # ABC区分ラベル付きで商品コードを表示
     all_products_with_category = analysis_result[['product_code', 'abc_category', 'total_actual']].copy()
@@ -135,22 +119,130 @@ def display_step2():
     
     default_label = product_code_to_label.get(default_product, all_products_with_category.iloc[0]['display_label'])
     
-    # プルダウンリスト（ラベル表示）
-    display_labels = all_products_with_category['display_label'].tolist()
-    default_index = display_labels.index(default_label) if default_label in display_labels else 0
+    # ========== 安全在庫モデル定義セクション ==========
+    display_safety_stock_definitions()
+    st.divider()
     
-    selected_label = st.selectbox(
-        "機種",
-        options=display_labels,
-        index=default_index,
-        key="step2_representative_product",
-        help=f"自動選定: {default_label}（実績値累計: {all_products_with_category[all_products_with_category['product_code'] == default_product]['total_actual'].iloc[0]:,.0f}）"
+    # ========== 手順①：対象商品コードを選択する ==========
+    st.markdown("""
+    <div class="step-middle-section">
+        <p>手順①：対象商品コードを選択する</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("""
+    <div class="step-description">分析対象の商品コードを選択します。任意の商品コードから選択するか、計画誤差が大きい商品コードを確認したい場合は、計画誤差の閾値を設定してフィルタリングできます。</div>
+    """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 計画誤差率の閾値設定
+    st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        plan_plus_threshold = st.number_input(
+            "計画プラス誤差率の閾値（%）",
+            min_value=0.0,
+            max_value=500.0,
+            value=st.session_state.get("step2_plan_plus_threshold", 50.0),
+            step=5.0,
+            help="計画誤差率がこの値以上の場合、計画プラス誤差大として扱います。",
+            key="step2_plan_plus_threshold"
+        )
+    with col2:
+        plan_minus_threshold = st.number_input(
+            "計画マイナス誤差率の閾値（%）",
+            min_value=-500.0,
+            max_value=0.0,
+            value=st.session_state.get("step2_plan_minus_threshold", -50.0),
+            step=5.0,
+            help="計画誤差率がこの値以下の場合、計画マイナス誤差大として扱います。",
+            key="step2_plan_minus_threshold"
+        )
+    
+    # 商品コード選択モード
+    st.markdown('<div class="step-sub-section">商品コードの選択</div>', unsafe_allow_html=True)
+    selection_mode = st.radio(
+        "選択モード",
+        options=["任意の商品コード", "計画プラス誤差大", "計画マイナス誤差大"],
+        help="任意の商品コードから選択するか、計画誤差が大きい商品コードから選択できます。",
+        horizontal=True,
+        key="step2_selection_mode"
     )
     
-    # 選択されたラベルから商品コードを取得
-    selected_product = label_to_product_code.get(selected_label, default_product)
+    # 計画誤差率を計算して商品リストをフィルタリング
+    filtered_products = []
+    if selection_mode == "任意の商品コード":
+        filtered_products = all_products_with_category.copy()
+        st.caption("💡 任意の商品コードから選択できます。")
+    else:
+        # 計画誤差率を計算
+        plan_error_rates = {}
+        for product_code in product_list:
+            try:
+                plan_data = data_loader.get_daily_plan(product_code)
+                actual_data = data_loader.get_daily_actual(product_code)
+                plan_error_rate, _, _ = calculate_plan_error_rate(actual_data, plan_data)
+                plan_error_rates[product_code] = plan_error_rate
+            except Exception:
+                plan_error_rates[product_code] = None
+        
+        # フィルタリング
+        if selection_mode == "計画プラス誤差大":
+            filtered_products = all_products_with_category[
+                all_products_with_category['product_code'].apply(
+                    lambda x: plan_error_rates.get(x) is not None and plan_error_rates.get(x) >= plan_plus_threshold
+                )
+            ].copy()
+            st.caption(f"💡 計画誤差が大きい商品コードを確認したい場合は、こちらから選択できます。計画誤差率が+{plan_plus_threshold:.1f}%以上の商品コードが表示されます。")
+        elif selection_mode == "計画マイナス誤差大":
+            filtered_products = all_products_with_category[
+                all_products_with_category['product_code'].apply(
+                    lambda x: plan_error_rates.get(x) is not None and plan_error_rates.get(x) <= plan_minus_threshold
+                )
+            ].copy()
+            st.caption(f"💡 計画誤差が大きい商品コードを確認したい場合は、こちらから選択できます。計画誤差率が{plan_minus_threshold:.1f}%以下の商品コードが表示されます。")
+        
+        if filtered_products.empty:
+            st.warning(f"⚠️ {selection_mode}に該当する商品コードがありません。")
+            filtered_products = all_products_with_category.copy()
     
-    st.caption("💡 機種は実績値（累計）の多い順にソートされています。各商品にはABC区分ラベルが付いています。")
+    # 商品コード選択プルダウン
+    if not filtered_products.empty:
+        filtered_products = filtered_products.sort_values('total_actual', ascending=False).reset_index(drop=True)
+        filtered_labels = filtered_products['display_label'].tolist()
+        
+        # デフォルト値の設定
+        if selection_mode == "任意の商品コード":
+            default_label = default_label
+        else:
+            default_label = filtered_labels[0] if filtered_labels else default_label
+        
+        default_index = filtered_labels.index(default_label) if default_label in filtered_labels else 0
+        
+        selected_label = st.selectbox(
+            "商品コード",
+            options=filtered_labels,
+            index=default_index,
+            key="step2_selected_product_label",
+            help="分析対象の商品コードを選択してください。"
+        )
+        
+        selected_product = label_to_product_code.get(selected_label, default_product)
+    else:
+        selected_product = default_product
+        selected_label = default_label
+    
+    st.divider()
+    
+    # ========== 手順②：算出条件を設定する ==========
+    st.markdown("""
+    <div class="step-middle-section">
+        <p>手順②：算出条件を設定する</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("""
+    <div class="step-description">安全在庫算出に必要な条件（リードタイム、欠品許容率、標準偏差の計算方法）を設定します。<br>これらの設定値は、後続の手順で使用される安全在庫モデルの算出に影響します。</div>
+    """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     # リードタイム設定
     st.markdown('<div class="step-sub-section">リードタイムの設定</div>', unsafe_allow_html=True)
@@ -192,10 +284,10 @@ def display_step2():
     
     st.divider()
     
-    # ========== 手順②：リードタイム期間の需要変動と計画誤差を把握する ==========
+    # ========== 手順③：需要変動と計画誤差を把握する ==========
     st.markdown("""
     <div class="step-middle-section">
-        <p>手順②：リードタイム期間の需要変動と計画誤差を把握する</p>
+        <p>手順③：需要変動と計画誤差を把握する</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
@@ -326,11 +418,11 @@ def display_step2():
         
         st.divider()
     
-    # ========== 手順③：安全在庫を算出する ==========
+    # ========== 手順④：安全在庫を算出する ==========
     if st.session_state.get('step2_lt_delta_calculated', False):
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順③：安全在庫を算出する</p>
+            <p>手順④：安全在庫を算出する</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
@@ -446,19 +538,19 @@ def display_step2():
             
             st.divider()
     
-    # ========== 手順④：異常値処理を実施する ==========
+    # ========== 手順⑤：実績異常値処理を実施する ==========
     if st.session_state.get('step2_calculated', False):
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順④：異常値処理を実施する</p>
+            <p>手順⑤：実績異常値処理を実施する</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
         <div class="step-description">需要データに含まれる統計的な上振れ異常値を検出し、設定した上限値へ補正します。<br>スパイク（突発的に跳ね上がる異常な値）を抑えることで、安全在庫が過大に算定されるのを防ぎ、結果を安定させます。</div>
         """, unsafe_allow_html=True)
         
-        # 異常値処理パラメータ設定
-        st.markdown('<div class="step-sub-section">異常値処理パラメータ</div>', unsafe_allow_html=True)
+        # 実績異常値処理パラメータ設定
+        st.markdown('<div class="step-sub-section">実績異常値処理パラメータ</div>', unsafe_allow_html=True)
         
         # グローバル異常基準と上位カット割合を横並びレイアウト
         col1, col2 = st.columns(2)
@@ -497,8 +589,8 @@ def display_step2():
         if 'step2_imputed_data' not in st.session_state:
             st.session_state.step2_imputed_data = None
         
-        # ボタン2: 異常値処理を実施する
-        if st.button("異常値処理を実施する", type="primary", use_container_width=True, key="step2_outlier_button"):
+        # ボタン2: 実績異常値処理を実施する
+        if st.button("実績異常値処理を実施する", type="primary", use_container_width=True, key="step2_outlier_button"):
             try:
                 actual_data = st.session_state.get('step2_actual_data')
                 working_dates = st.session_state.get('step2_working_dates')
@@ -600,15 +692,15 @@ def display_step2():
             
             st.divider()
     
-    # ========== 手順⑤：異常値処理後の安全在庫を再算出し、Before/After を比較する ==========
+    # ========== 手順⑥：実績異常値処理後の安全在庫を再算出して比較する ==========
     if st.session_state.get('step2_outlier_processed', False):
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順⑤：異常値処理後の安全在庫を再算出し、Before/After を比較する</p>
+            <p>手順⑥：実績異常値処理後の安全在庫を再算出して比較する</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">異常値補正が安全在庫の算定結果にどの程度影響するかを確認します。</div>
+        <div class="step-description">実績異常値補正が安全在庫の算定結果にどの程度影響するかを確認します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -777,11 +869,11 @@ def display_step2():
             # ボタン押下前は軽いメッセージのみ表示
             st.info("💡 「安全在庫を再算出・比較する」ボタンを押すと、LT間差分の分布グラフが表示されます。")
     
-    # ========== 手順⑥：上限カットを適用する ==========
+    # ========== 手順⑦：上限カットを適用する ==========
     if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順⑥：上限カットを適用する</p>
+            <p>手順⑦：上限カットを適用する</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
@@ -928,6 +1020,169 @@ def display_step2():
                     final_calculator,
                     cap_applied=False  # 上限カットが適用されなかったことを示すフラグ
                 )
+            
+            st.divider()
+    
+    # ========== 手順⑧：計画異常値処理を行い、安全在庫を確定する ==========
+    if st.session_state.get('step2_final_results') is not None and st.session_state.get('step2_final_calculator') is not None:
+        st.markdown("""
+        <div class="step-middle-section">
+            <p>手順⑧：計画異常値処理を行い、安全在庫を確定する</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を最終決定します。<br>計画誤差が大きい場合は安全在庫②を、許容範囲内の場合は安全在庫③を採用します。</div>
+        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 計画誤差率の閾値設定（手順1の値を継承、必要に応じて変更可能）
+        st.markdown('<div class="step-sub-section">計画異常値処理の閾値設定</div>', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            plan_plus_threshold_final = st.number_input(
+                "計画プラス誤差率の閾値（%）",
+                min_value=0.0,
+                max_value=500.0,
+                value=st.session_state.get("step2_plan_plus_threshold", 50.0),
+                step=5.0,
+                help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
+                key="step2_plan_plus_threshold_final"
+            )
+        with col2:
+            plan_minus_threshold_final = st.number_input(
+                "計画マイナス誤差率の閾値（%）",
+                min_value=-500.0,
+                max_value=0.0,
+                value=st.session_state.get("step2_plan_minus_threshold", -50.0),
+                step=5.0,
+                help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
+                key="step2_plan_minus_threshold_final"
+            )
+        
+        # 計画誤差率を計算
+        product_code = st.session_state.get('step2_product_code')
+        plan_data = st.session_state.get('step2_plan_data')
+        actual_data = st.session_state.get('step2_actual_data')
+        
+        if plan_data is not None and actual_data is not None:
+            plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
+            is_anomaly, anomaly_reason = is_plan_anomaly(
+                plan_error_rate,
+                plan_plus_threshold_final,
+                plan_minus_threshold_final
+            )
+            
+            # 判定結果の表示
+            st.markdown('<div class="step-sub-section">計画異常値処理の判定結果</div>', unsafe_allow_html=True)
+            
+            final_results = st.session_state.get('step2_final_results')
+            final_calculator = st.session_state.get('step2_final_calculator')
+            
+            if plan_error_rate is None:
+                # 計画誤差率計算不可の場合
+                st.markdown("""
+                <div class="annotation-warning-box">
+                    <span class="icon">⚠</span>
+                    <div class="text"><strong>計画誤差率計算不可：</strong>計画合計が0のため、計画誤差率を計算できません。安全在庫②または③を手動で選択してください。</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 手動選択UI
+                selected_model = st.radio(
+                    "採用する安全在庫モデル",
+                    options=["安全在庫②", "安全在庫③"],
+                    help="計画誤差率が計算できないため、手動で選択してください。",
+                    key="step2_manual_model_selection"
+                )
+                
+                if selected_model == "安全在庫②":
+                    final_safety_stock = final_results['model2_empirical_actual']['safety_stock']
+                    final_model_name = "安全在庫②"
+                else:
+                    final_safety_stock = final_results['model3_empirical_plan']['safety_stock']
+                    final_model_name = "安全在庫③"
+            else:
+                # 計画誤差率が計算可能な場合
+                if is_anomaly:
+                    # 異常の場合
+                    st.markdown(f"""
+                    <div class="annotation-warning-box">
+                        <span class="icon">⚠</span>
+                        <div class="text"><strong>計画異常値処理：</strong>{anomaly_reason}。安全在庫②を採用して確定します。</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    final_safety_stock = final_results['model2_empirical_actual']['safety_stock']
+                    final_model_name = "安全在庫②"
+                else:
+                    # 正常の場合
+                    st.markdown(f"""
+                    <div class="annotation-success-box">
+                        <span class="icon">✅</span>
+                        <div class="text"><strong>計画異常値処理：</strong>{anomaly_reason}。安全在庫③を採用して確定しますか？</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    final_safety_stock = final_results['model3_empirical_plan']['safety_stock']
+                    final_model_name = "安全在庫③"
+            
+            # 計画誤差情報の表示
+            st.markdown('<div class="step-sub-section">計画誤差情報</div>', unsafe_allow_html=True)
+            plan_info_data = {
+                '項目': ['計画誤差率', '計画誤差（実績合計 - 計画合計）', '実績合計', '計画合計'],
+                '値': [
+                    f"{plan_error_rate:.2f}%" if plan_error_rate is not None else "計算不可",
+                    f"{plan_error:,.2f}",
+                    f"{actual_data.sum():,.2f}",
+                    f"{plan_total:,.2f}" if plan_total > 0 else "0.00"
+                ]
+            }
+            plan_info_df = pd.DataFrame(plan_info_data)
+            st.dataframe(plan_info_df, use_container_width=True, hide_index=True)
+            
+            # 最終安全在庫の表示
+            daily_actual_mean = final_calculator.actual_data.mean()
+            final_safety_stock_days = final_safety_stock / daily_actual_mean if daily_actual_mean > 0 else 0
+            
+            st.markdown('<div class="step-sub-section">確定する安全在庫</div>', unsafe_allow_html=True)
+            final_safety_stock_data = {
+                '項目': ['採用モデル', '安全在庫数量', '安全在庫日数'],
+                '値': [
+                    final_model_name,
+                    f"{final_safety_stock:.2f}",
+                    f"{final_safety_stock_days:.1f}日"
+                ]
+            }
+            final_safety_stock_df = pd.DataFrame(final_safety_stock_data)
+            st.dataframe(final_safety_stock_df, use_container_width=True, hide_index=True)
+            
+            # 確定ボタン
+            if st.button("安全在庫を確定する", type="primary", use_container_width=True, key="step2_finalize_safety_stock"):
+                st.session_state.step2_finalized_safety_stock = {
+                    'product_code': product_code,
+                    'model': final_model_name,
+                    'safety_stock': final_safety_stock,
+                    'safety_stock_days': final_safety_stock_days,
+                    'plan_error_rate': plan_error_rate,
+                    'plan_error': plan_error,
+                    'actual_total': actual_data.sum(),
+                    'plan_total': plan_total,
+                    'is_plan_anomaly': is_anomaly if plan_error_rate is not None else None
+                }
+                st.success(f"✅ 安全在庫を確定しました。採用モデル：{final_model_name}（{final_safety_stock:.2f}、{final_safety_stock_days:.1f}日）")
+                st.rerun()
+            
+            # 確定済みの場合の表示
+            if 'step2_finalized_safety_stock' in st.session_state:
+                finalized = st.session_state.step2_finalized_safety_stock
+                st.markdown("""
+                <div class="annotation-success-box">
+                    <span class="icon">✅</span>
+                    <div class="text"><strong>確定済み：</strong>安全在庫は確定済みです。採用モデル：{model}（{qty:.2f}、{days:.1f}日）</div>
+                </div>
+                """.format(
+                    model=finalized['model'],
+                    qty=finalized['safety_stock'],
+                    days=finalized['safety_stock_days']
+                ), unsafe_allow_html=True)
 
 
 # ========================================

@@ -12,7 +12,10 @@ from modules.outlier_handler import OutlierHandler
 from utils.common import (
     slider_with_number_input,
     classify_inventory_days_bin,
-    get_abc_analysis_with_fallback
+    get_abc_analysis_with_fallback,
+    calculate_plan_error_rate,
+    is_plan_anomaly,
+    format_abc_category_for_display
 )
 from charts.safety_stock_charts import (
     create_order_volume_comparison_chart_before,
@@ -355,20 +358,20 @@ def display_step3():
         # CSVエクスポート（列順を指定）
         # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
         
-        # ========== 手順③：異常値処理と上限カットを実施する ==========
+        # ========== 手順③：安全在庫を確定する（実績異常値処理・計画異常値処理・上限カット） ==========
         st.divider()
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順③：異常値処理と上限カットを実施する</p>
+            <p>手順③：安全在庫を確定する（実績異常値処理・計画異常値処理・上限カット）</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">全機種に異常値処理を適用し、ABC区分に応じた上限日数を設定して最終安全在庫を確定します。<br>需要データに含まれる統計的な上振れ異常値を検出・補正することで、安全在庫が過大に算定されるのを防ぎます。</div>
+        <div class="step-description">全機種に実績異常値処理と計画異常値処理を適用し、ABC区分に応じた上限日数を設定して最終安全在庫を確定します。<br>実績異常値処理では需要データに含まれる統計的な上振れ異常値を検出・補正し、計画異常値処理では計画誤差が大きい場合に安全在庫②を採用します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 異常値処理のパラメータ設定
-        st.markdown('<div class="step-sub-section">異常値処理のパラメータ設定</div>', unsafe_allow_html=True)
+        # 実績異常値処理のパラメータ設定
+        st.markdown('<div class="step-sub-section">実績異常値処理のパラメータ設定</div>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -397,10 +400,34 @@ def display_step3():
         top_limit_mode = 'percent'
         top_limit_n = None
         
+        # 計画異常値処理のパラメータ設定
+        st.markdown('<div class="step-sub-section">計画異常値処理のパラメータ設定</div>', unsafe_allow_html=True)
+        col3, col4 = st.columns(2)
+        with col3:
+            plan_plus_threshold = st.number_input(
+                "計画プラス誤差率の閾値（%）",
+                min_value=0.0,
+                max_value=500.0,
+                value=st.session_state.get("step3_plan_plus_threshold", 50.0),
+                step=5.0,
+                help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
+                key="step3_plan_plus_threshold"
+            )
+        with col4:
+            plan_minus_threshold = st.number_input(
+                "計画マイナス誤差率の閾値（%）",
+                min_value=-500.0,
+                max_value=0.0,
+                value=st.session_state.get("step3_plan_minus_threshold", -50.0),
+                step=5.0,
+                help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
+                key="step3_plan_minus_threshold"
+            )
+        
         # ABC区分ごとの上限日数設定
         st.markdown('<div class="step-sub-section">ABC区分ごとの上限日数設定</div>', unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">この上限日数は、異常値処理後に適用されます。</div>
+        <div class="step-description">この上限日数は、実績異常値処理後に適用されます。</div>
         """, unsafe_allow_html=True)
         
         # analysis_resultから実際に存在する全ての区分を取得（「未分類」も含む）
@@ -444,8 +471,8 @@ def display_step3():
         # セッション状態に保存
         st.session_state.category_cap_days = category_cap_days
         
-        # 異常値処理と最終安全在庫の確定ボタン
-        if st.button("異常値処理と上限カットを実施する", type="primary", use_container_width=True):
+        # 実績異常値処理・計画異常値処理・上限カットと最終安全在庫の確定ボタン
+        if st.button("実績異常値処理・計画異常値処理・上限カットを実施する", type="primary", use_container_width=True):
             # ②で算出した結果が存在するか確認
             if 'all_products_results' not in st.session_state or st.session_state.all_products_results is None:
                 st.error("❌ 先に「② 全機種_安全在庫を算出する」を実行してください。")
@@ -489,7 +516,7 @@ def display_step3():
                     abc_category = None
                     abc_category = get_product_category(product_code)
                     
-                    # 異常値処理を適用
+                    # 実績異常値処理を適用
                     outlier_handler = OutlierHandler(
                         actual_data=actual_data,
                         working_dates=working_dates,
@@ -502,8 +529,9 @@ def display_step3():
                     
                     processing_result = outlier_handler.detect_and_correct()
                     corrected_data = processing_result['corrected_data']
+                    is_outlier_processed = processing_result.get('processing_info', {}).get('final_count', 0) > 0
                     
-                    # 異常値処理後のデータで安全在庫を再算出
+                    # 実績異常値処理後のデータで安全在庫を再算出
                     calculator = SafetyStockCalculator(
                         plan_data=plan_data,
                         actual_data=corrected_data,
@@ -515,8 +543,8 @@ def display_step3():
                         data_loader=data_loader,
                         product_code=product_code,
                         abc_category=abc_category,
-                        category_cap_days={},  # ここでは上限カットは適用しない（後で適用）
-                        original_actual_data=actual_data  # 異常値処理前のデータを保存
+                        category_cap_days={},  # ここでは上限カットは適用しない（後で適用する）
+                        original_actual_data=actual_data  # 実績異常値処理前のデータを保存
                     )
                     
                     results = calculator.calculate_all_models()
@@ -553,7 +581,39 @@ def display_step3():
                     final_ss3_quantity = apply_cap_days(ss3_value, daily_actual_mean, abc_category)
                     final_ss3_days = final_ss3_quantity / daily_actual_mean if daily_actual_mean > 0 else 0
                     
-                    # ②の結果から現行設定と安全在庫①②③（異常値処理前）を取得
+                    # 計画異常値処理の判定
+                    plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
+                    is_plan_anomaly_flag, _ = is_plan_anomaly(
+                        plan_error_rate,
+                        plan_plus_threshold,
+                        plan_minus_threshold
+                    )
+                    
+                    # 上限カットが適用されたかチェック
+                    is_cap_applied = (
+                        (final_ss1_quantity is not None and final_ss1_quantity < ss1_value) or
+                        final_ss2_quantity < ss2_value or
+                        final_ss3_quantity < ss3_value
+                    )
+                    
+                    # 最終安全在庫の決定（計画異常値処理に基づく）
+                    if plan_error_rate is None:
+                        # 計画誤差率計算不可の場合は安全在庫③を採用
+                        final_safety_stock_quantity = final_ss3_quantity
+                        final_safety_stock_days = final_ss3_days
+                        final_model_name = "安全在庫③"
+                    elif is_plan_anomaly_flag:
+                        # 計画異常の場合は安全在庫②を採用
+                        final_safety_stock_quantity = final_ss2_quantity
+                        final_safety_stock_days = final_ss2_days
+                        final_model_name = "安全在庫②"
+                    else:
+                        # 正常の場合は安全在庫③を採用
+                        final_safety_stock_quantity = final_ss3_quantity
+                        final_safety_stock_days = final_ss3_days
+                        final_model_name = "安全在庫③"
+                    
+                    # 手順②の結果から現行設定と安全在庫①②③（実績異常値処理前）を取得
                     before_row = before_results_df[before_results_df['商品コード'] == product_code]
                     if len(before_row) > 0:
                         current_qty = before_row.iloc[0]['現行設定_数量']
@@ -590,20 +650,31 @@ def display_step3():
                         '月当たり実績': monthly_avg_actual,
                         '現行設定_数量': current_qty,
                         '現行設定_日数': current_days,
-                        '安全在庫①_数量': ss1_qty,  # 異常値処理前
-                        '安全在庫②_数量': ss2_qty,  # 異常値処理前
-                        '安全在庫③_数量': ss3_before_qty,  # 異常値処理前
-                        '最終安全在庫①_数量': final_ss1_quantity,  # 異常値処理＋上限カット後
-                        '最終安全在庫②_数量': final_ss2_quantity,  # 異常値処理＋上限カット後
-                        '最終安全在庫③_数量': final_ss3_quantity,  # 異常値処理＋上限カット後
-                        '安全在庫①_日数': ss1_days,  # 異常値処理前
-                        '安全在庫②_日数': ss2_days,  # 異常値処理前
-                        '安全在庫③_日数': ss3_before_days,  # 異常値処理前
-                        '最終安全在庫①_日数': final_ss1_days,  # 異常値処理＋上限カット後
-                        '最終安全在庫②_日数': final_ss2_days,  # 異常値処理＋上限カット後
-                        '最終安全在庫③_日数': final_ss3_days,  # 異常値処理＋上限カット後
+                        '安全在庫①_数量': ss1_qty,  # 実績異常値処理前
+                        '安全在庫②_数量': ss2_qty,  # 実績異常値処理前
+                        '安全在庫③_数量': ss3_before_qty,  # 実績異常値処理前
+                        '最終安全在庫①_数量': final_ss1_quantity,  # 実績異常値処理＋上限カット後
+                        '最終安全在庫②_数量': final_ss2_quantity,  # 実績異常値処理＋上限カット後
+                        '最終安全在庫③_数量': final_ss3_quantity,  # 実績異常値処理＋上限カット後
+                        '安全在庫①_日数': ss1_days,  # 実績異常値処理前
+                        '安全在庫②_日数': ss2_days,  # 実績異常値処理前
+                        '安全在庫③_日数': ss3_before_days,  # 実績異常値処理前
+                        '最終安全在庫①_日数': final_ss1_days,  # 実績異常値処理＋上限カット後
+                        '最終安全在庫②_日数': final_ss2_days,  # 実績異常値処理＋上限カット後
+                        '最終安全在庫③_日数': final_ss3_days,  # 実績異常値処理＋上限カット後
                         '日当たり実績': daily_actual_mean,
-                        '欠品許容率': stockout_tolerance
+                        '欠品許容率': stockout_tolerance,
+                        # 実績異常値処理・計画異常値処理・上限カットのフラグ
+                        '実績異常値処理': is_outlier_processed,
+                        '上限カット': is_cap_applied,
+                        '計画異常値処理': is_plan_anomaly_flag if plan_error_rate is not None else False,
+                        '計画誤差率': plan_error_rate,
+                        '計画誤差': plan_error,
+                        '実績合計': actual_data.sum(),
+                        '計画合計': plan_total,
+                        '最終安全在庫_数量': final_safety_stock_quantity,
+                        '最終安全在庫_日数': final_safety_stock_days,
+                        '採用モデル': final_model_name
                     }
                     final_results.append(result_row)
                     
@@ -622,7 +693,7 @@ def display_step3():
                 st.markdown(f"""
                 <div class="annotation-success-box">
                     <span class="icon">✅</span>
-                    <div class="text"><strong>異常値処理と上限カット完了：</strong>{len(final_results)}機種の異常値処理と上限カットが完了しました。</div>
+                    <div class="text"><strong>実績異常値処理・計画異常値処理・上限カット完了：</strong>{len(final_results)}機種の処理が完了しました。</div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -635,9 +706,77 @@ def display_step3():
             
             st.markdown("""
             <div class="step-middle-section">
-                <p>安全在庫算出結果（異常値処理後）サマリー</p>
+                <p>安全在庫算出結果（実績異常値処理・計画異常値処理・上限カット後）サマリー</p>
             </div>
             """, unsafe_allow_html=True)
+            
+            # 実績異常値処理・計画異常値処理・上限カット 処理結果サマリー
+            st.markdown('<div class="step-sub-section">実績異常値処理／計画異常値処理／上限カット 処理結果サマリー</div>', unsafe_allow_html=True)
+            
+            # ABC区分別のサマリーを作成
+            summary_rows = []
+            all_categories = sorted(final_results_df['ABC区分'].unique().tolist())
+            
+            for category in all_categories:
+                category_df = final_results_df[final_results_df['ABC区分'] == category]
+                outlier_count = category_df['実績異常値処理'].sum()
+                cap_count = category_df['上限カット'].sum()
+                plan_anomaly_count = category_df['計画異常値処理'].sum()
+                
+                summary_rows.append({
+                    'ABC区分': category,
+                    '実績異常値処理件数': int(outlier_count),
+                    '上限カット件数': int(cap_count),
+                    '計画異常値処理件数': int(plan_anomaly_count)
+                })
+            
+            # 合計行を追加
+            total_outlier = final_results_df['実績異常値処理'].sum()
+            total_cap = final_results_df['上限カット'].sum()
+            total_plan_anomaly = final_results_df['計画異常値処理'].sum()
+            summary_rows.append({
+                'ABC区分': '合計',
+                '実績異常値処理件数': int(total_outlier),
+                '上限カット件数': int(total_cap),
+                '計画異常値処理件数': int(total_plan_anomaly)
+            })
+            
+            summary_df = pd.DataFrame(summary_rows)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            
+            # 詳細データ
+            st.markdown('<div class="step-sub-section">詳細データ</div>', unsafe_allow_html=True)
+            # いずれかの処理が行われた商品のみを表示
+            processed_df = final_results_df[
+                (final_results_df['実績異常値処理']) |
+                (final_results_df['上限カット']) |
+                (final_results_df['計画異常値処理'])
+            ].copy()
+            
+            if not processed_df.empty:
+                # 表示用の列を選択
+                detail_columns = [
+                    '商品コード', 'ABC区分', '実績異常値処理', '上限カット', '計画異常値処理',
+                    '計画誤差率', '計画誤差', '実績合計', '計画合計'
+                ]
+                detail_df = processed_df[detail_columns].copy()
+                
+                # フラグ列を表示用に変換
+                detail_df['実績異常値処理'] = detail_df['実績異常値処理'].apply(lambda x: '実施' if x else '未実施')
+                detail_df['上限カット'] = detail_df['上限カット'].apply(lambda x: '実施' if x else '未実施')
+                detail_df['計画異常値処理'] = detail_df['計画異常値処理'].apply(lambda x: '実施' if x else '未実施')
+                detail_df['計画誤差率'] = detail_df['計画誤差率'].apply(lambda x: f"{x:.2f}%" if x is not None and not pd.isna(x) else "計算不可")
+                
+                # 数値列のフォーマット
+                detail_df['計画誤差'] = detail_df['計画誤差'].apply(lambda x: f"{x:,.2f}")
+                detail_df['実績合計'] = detail_df['実績合計'].apply(lambda x: f"{x:,.2f}")
+                detail_df['計画合計'] = detail_df['計画合計'].apply(lambda x: f"{x:,.2f}")
+                
+                st.dataframe(detail_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("実績異常値処理・計画異常値処理・上限カットが実施された商品はありません。")
+            
+            st.divider()
             
             # ABC区分別_安全在庫比較マトリクス（異常値処理後）を表示
             # 最終安全在庫の列を安全在庫①②③の列として扱うために、一時的に列名を変更
@@ -650,14 +789,14 @@ def display_step3():
             display_df['安全在庫③_日数'] = display_df['最終安全在庫③_日数']
             
             if 'ABC区分' in display_df.columns:
-                st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス</div>', unsafe_allow_html=True)
+                st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス（実績異常値処理・計画異常値処理・上限カット後）</div>', unsafe_allow_html=True)
                 display_abc_matrix_comparison(display_df, key_prefix="abc_matrix_after")
                 
-                # 受注量の多い商品順 安全在庫比較グラフ（異常値処理後）を追加
+                # 受注量の多い商品順 安全在庫比較グラフ（実績異常値処理・計画異常値処理・上限カット後）を追加
                 # Before/Afterを1つのグラフに統合して表示
                 st.markdown("""
                 <div class="step-middle-section">
-                    <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理後）</p>
+                    <p>受注量の多い商品順 安全在庫 比較グラフ（実績異常値処理・計画異常値処理・上限カット後）</p>
                 </div>
                 """, unsafe_allow_html=True)
                 st.caption("安全在庫モデルを『現行設定』『安全在庫①』『安全在庫②』『安全在庫③』から選択してください。")
@@ -815,20 +954,15 @@ def display_step3():
             st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("安全在庫登録データを作成する", type="primary", use_container_width=True):
-                # 登録用データを作成（現行設定_数量、現行設定_日数を追加）
+                # 登録用データを作成（最終安全在庫を使用）
                 registration_df = final_results_df[[
                     '商品コード', 'ABC区分', 
-                    '最終安全在庫①_数量', '最終安全在庫①_日数',
-                    '最終安全在庫②_数量', '最終安全在庫②_日数',
-                    '最終安全在庫③_数量', '最終安全在庫③_日数',
+                    '最終安全在庫_数量', '最終安全在庫_日数',
+                    '採用モデル',
                     '現行設定_数量', '現行設定_日数'
                 ]].copy()
                 
-                # 列名を変更
-                registration_df = registration_df.rename(columns={
-                    '現行設定_数量': '現行設定_数量',
-                    '現行設定_日数': '現行設定_日数'
-                })
+                # 列名は変更不要（そのまま使用）
                 
                 # セッション状態に保存
                 st.session_state.registration_data = registration_df
@@ -843,10 +977,10 @@ def display_step3():
             if 'registration_data' in st.session_state and st.session_state.registration_data is not None:
                 registration_df = st.session_state.registration_data.copy()
                 
-                # SCP登録用データを作成（商品コードと安全在庫③月数のみ）
+                # SCP登録用データを作成（商品コードと最終安全在庫月数）
                 scp_registration_df = pd.DataFrame({
                     '商品コード': registration_df['商品コード'],
-                    '安全在庫③月数': registration_df['最終安全在庫③_日数'] / 20
+                    '安全在庫月数': registration_df['最終安全在庫_日数'] / 20
                 })
                 
                 # CSV形式でダウンロード
@@ -862,7 +996,7 @@ def display_step3():
                 
                 # 補足説明を追加
                 st.markdown("""
-                <div class="step-description">『商品コード』と『安全在庫③月数』のみをダウンロードします。安全在庫③月数は『安全在庫③_日数』÷20 で算出しています。</div>
+                <div class="step-description">『商品コード』と『安全在庫月数』のみをダウンロードします。安全在庫月数は『最終安全在庫_日数』÷20 で算出しています。</div>
                 """, unsafe_allow_html=True)
                 
                 # 登録データのプレビュー（ダウンロード対象と同じ内容を表示）
