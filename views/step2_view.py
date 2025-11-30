@@ -130,7 +130,7 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">分析対象の商品コードを選択します。<br>「任意の商品コード」から選択するか、計画誤差率（％）の閾値を設定し、「計画誤差率（プラス）大」または「計画誤差率（マイナス）大」を選択してください。</div>
+    <div class="step-description">分析対象の商品コードを選択します。<br><strong>「任意の商品コード」</strong>から選択するか、計画誤差率（％）の閾値を設定し、<strong>「計画誤差率（プラス）大」</strong>または<strong>「計画誤差率（マイナス）大」</strong>を選択してください。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
