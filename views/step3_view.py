@@ -276,7 +276,7 @@ def display_step3():
                     "current": "<strong>現行設定</strong>：現行設定している安全在庫",
                     "ss1": "<strong>安全在庫①</strong>：理論値【理論モデル】",
                     "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績のバラつきを反映したモデル】",
-                    "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差を考慮した推奨モデル】"
+                    "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差率を考慮した推奨モデル】"
                 }
                 st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_before]}</div>', unsafe_allow_html=True)
             
@@ -366,7 +366,7 @@ def display_step3():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">全機種に実績異常値処理と計画異常値処理を適用し、ABC区分に応じた上限日数を設定して最終安全在庫を確定します。<br>実績異常値処理では需要データに含まれる統計的な上振れ異常値を検出・補正し、計画異常値処理では計画誤差が大きい場合に安全在庫②を採用します。</div>
+        <div class="step-description">全機種に実績異常値処理と計画異常値処理を適用し、ABC区分に応じた上限日数を設定して最終安全在庫を確定します。<br>実績異常値処理では需要データに含まれる統計的な上振れ異常値を検出・補正し、計画異常値処理では計画誤差率が大きい場合に安全在庫②を採用します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -405,7 +405,7 @@ def display_step3():
         col3, col4 = st.columns(2)
         with col3:
             plan_plus_threshold = st.number_input(
-                "計画プラス誤差率の閾値（%）",
+                "計画誤差率（プラス）の閾値（%）",
                 min_value=0.0,
                 max_value=500.0,
                 value=st.session_state.get("step3_plan_plus_threshold", 50.0),
@@ -415,7 +415,7 @@ def display_step3():
             )
         with col4:
             plan_minus_threshold = st.number_input(
-                "計画マイナス誤差率の閾値（%）",
+                "計画誤差率（マイナス）の閾値（%）",
                 min_value=-500.0,
                 max_value=0.0,
                 value=st.session_state.get("step3_plan_minus_threshold", -50.0),
@@ -669,7 +669,7 @@ def display_step3():
                         '上限カット': is_cap_applied,
                         '計画異常値処理': is_plan_anomaly_flag if plan_error_rate is not None else False,
                         '計画誤差率': plan_error_rate,
-                        '計画誤差': plan_error,
+                        '計画誤差率（実績合計 - 計画合計）': plan_error,
                         '実績合計': actual_data.sum(),
                         '計画合計': plan_total,
                         '最終安全在庫_数量': final_safety_stock_quantity,
@@ -757,7 +757,7 @@ def display_step3():
                 # 表示用の列を選択
                 detail_columns = [
                     '商品コード', 'ABC区分', '実績異常値処理', '上限カット', '計画異常値処理',
-                    '計画誤差率', '計画誤差', '実績合計', '計画合計'
+                    '計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計'
                 ]
                 detail_df = processed_df[detail_columns].copy()
                 
@@ -768,7 +768,7 @@ def display_step3():
                 detail_df['計画誤差率'] = detail_df['計画誤差率'].apply(lambda x: f"{x:.2f}%" if x is not None and not pd.isna(x) else "計算不可")
                 
                 # 数値列のフォーマット
-                detail_df['計画誤差'] = detail_df['計画誤差'].apply(lambda x: f"{x:,.2f}")
+                detail_df['計画誤差率（実績合計 - 計画合計）'] = detail_df['計画誤差率（実績合計 - 計画合計）'].apply(lambda x: f"{x:,.2f}")
                 detail_df['実績合計'] = detail_df['実績合計'].apply(lambda x: f"{x:,.2f}")
                 detail_df['計画合計'] = detail_df['計画合計'].apply(lambda x: f"{x:,.2f}")
                 
@@ -822,7 +822,7 @@ def display_step3():
                         "current": "<strong>現行設定</strong>：現行設定している安全在庫",
                         "ss1": "<strong>安全在庫①</strong>：理論値【理論モデル】",
                         "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績のバラつきを反映したモデル】",
-                        "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差を考慮した推奨モデル】"
+                        "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差率を考慮した推奨モデル】"
                     }
                     st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_after]}</div>', unsafe_allow_html=True)
                 

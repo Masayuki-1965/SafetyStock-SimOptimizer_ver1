@@ -130,7 +130,7 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">分析対象の商品コードを選択します。任意の商品コードから選択するか、計画誤差が大きい商品コードを確認したい場合は、計画誤差の閾値を設定してフィルタリングできます。</div>
+    <div class="step-description">分析対象の商品コードを選択します。<br>「任意の商品コード」から選択するか、計画誤差率（％）の閾値を設定し、「計画誤差率（プラス）大」または「計画誤差率（マイナス）大」を選択してください。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -139,22 +139,22 @@ def display_step2():
     col1, col2 = st.columns(2)
     with col1:
         plan_plus_threshold = st.number_input(
-            "計画プラス誤差率の閾値（%）",
+            "計画誤差率（プラス）の閾値（%）",
             min_value=0.0,
             max_value=500.0,
             value=st.session_state.get("step2_plan_plus_threshold", 50.0),
             step=5.0,
-            help="計画誤差率がこの値以上の場合、計画プラス誤差大として扱います。",
+            help="計画誤差率がこの値以上の場合、計画誤差率（プラス）大として扱います。",
             key="step2_plan_plus_threshold"
         )
     with col2:
         plan_minus_threshold = st.number_input(
-            "計画マイナス誤差率の閾値（%）",
+            "計画誤差率（マイナス）の閾値（%）",
             min_value=-500.0,
             max_value=0.0,
             value=st.session_state.get("step2_plan_minus_threshold", -50.0),
             step=5.0,
-            help="計画誤差率がこの値以下の場合、計画マイナス誤差大として扱います。",
+            help="計画誤差率がこの値以下の場合、計画誤差率（マイナス）大として扱います。",
             key="step2_plan_minus_threshold"
         )
     
@@ -162,8 +162,8 @@ def display_step2():
     st.markdown('<div class="step-sub-section">商品コードの選択</div>', unsafe_allow_html=True)
     selection_mode = st.radio(
         "選択モード",
-        options=["任意の商品コード", "計画プラス誤差大", "計画マイナス誤差大"],
-        help="任意の商品コードから選択するか、計画誤差が大きい商品コードから選択できます。",
+        options=["任意の商品コード", "計画誤差率（プラス）大", "計画誤差率（マイナス）大"],
+        help="任意の商品コードから選択するか、計画誤差率が大きい商品コードから選択できます。",
         horizontal=True,
         key="step2_selection_mode"
     )
@@ -172,7 +172,9 @@ def display_step2():
     filtered_products = []
     if selection_mode == "任意の商品コード":
         filtered_products = all_products_with_category.copy()
-        st.caption("💡 任意の商品コードから選択できます。")
+        st.markdown("""
+        <div class="annotation-info-box">💡 <strong>任意の商品コードから選択できます。</strong>まずはここから選んで問題ありません。</div>
+        """, unsafe_allow_html=True)
     else:
         # 計画誤差率を計算
         plan_error_rates = {}
@@ -186,20 +188,28 @@ def display_step2():
                 plan_error_rates[product_code] = None
         
         # フィルタリング
-        if selection_mode == "計画プラス誤差大":
+        if selection_mode == "計画誤差率（プラス）大":
             filtered_products = all_products_with_category[
                 all_products_with_category['product_code'].apply(
                     lambda x: plan_error_rates.get(x) is not None and plan_error_rates.get(x) >= plan_plus_threshold
                 )
             ].copy()
-            st.caption(f"💡 計画誤差が大きい商品コードを確認したい場合は、こちらから選択できます。計画誤差率が+{plan_plus_threshold:.1f}%以上の商品コードが表示されます。")
-        elif selection_mode == "計画マイナス誤差大":
+            st.markdown(f"""
+            <div class="annotation-info-box">
+                <strong>計画誤差率が大きい（+{plan_plus_threshold:.1f}%以上）商品コードを選択できます。</strong><br><strong>計画プラス誤差率</strong> ＝（実績合計 − 計画合計）÷ 計画合計 × 100%（<strong>※実績合計 ＞ 計画合計</strong>：実績がどれだけ計画を上回ったか）
+            </div>
+            """, unsafe_allow_html=True)
+        elif selection_mode == "計画誤差率（マイナス）大":
             filtered_products = all_products_with_category[
                 all_products_with_category['product_code'].apply(
                     lambda x: plan_error_rates.get(x) is not None and plan_error_rates.get(x) <= plan_minus_threshold
                 )
             ].copy()
-            st.caption(f"💡 計画誤差が大きい商品コードを確認したい場合は、こちらから選択できます。計画誤差率が{plan_minus_threshold:.1f}%以下の商品コードが表示されます。")
+            st.markdown(f"""
+            <div class="annotation-info-box">
+                <strong>計画誤差率が大きい（{plan_minus_threshold:.1f}%以下）商品コードを選択できます。</strong><br><strong>計画マイナス誤差率</strong> ＝（実績合計 − 計画合計）÷ 計画合計 × 100%（<strong>※実績合計 ＜ 計画合計</strong>：実績がどれだけ計画を下回ったか）
+            </div>
+            """, unsafe_allow_html=True)
         
         if filtered_products.empty:
             st.warning(f"⚠️ {selection_mode}に該当する商品コードがありません。")
@@ -284,14 +294,14 @@ def display_step2():
     
     st.divider()
     
-    # ========== 手順③：需要変動と計画誤差を把握する ==========
+    # ========== 手順③：需要変動と計画誤差率を把握する ==========
     st.markdown("""
     <div class="step-middle-section">
-        <p>手順③：需要変動と計画誤差を把握する</p>
+        <p>手順③：需要変動と計画誤差率を把握する</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、実績のバラつき（実績−平均）と計画誤差（実績−計画）を可視化します。<br>これらの差分を時系列グラフと統計情報で確認することで、安全在庫を設定する際の根拠となるデータの特性を把握できます。</div>
+    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、実績のバラつき（実績−平均）と計画誤差率（実績−計画）を可視化します。<br>これらの差分を時系列グラフと統計情報で確認することで、安全在庫を設定する際の根拠となるデータの特性を把握できます。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -1023,15 +1033,15 @@ def display_step2():
             
             st.divider()
     
-    # ========== 手順⑧：計画異常値処理を行い、安全在庫を確定する ==========
+    # ========== 手順⑧：計画異常値処理を実施し、安全在庫を確定する ==========
     if st.session_state.get('step2_final_results') is not None and st.session_state.get('step2_final_calculator') is not None:
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順⑧：計画異常値処理を行い、安全在庫を確定する</p>
+            <p>手順⑧：計画異常値処理を実施し、安全在庫を確定する</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を最終決定します。<br>計画誤差が大きい場合は安全在庫②を、許容範囲内の場合は安全在庫③を採用します。</div>
+        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を最終決定します。<br>計画誤差率が大きい場合は安全在庫②を、許容範囲内の場合は安全在庫③を採用します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -1040,7 +1050,7 @@ def display_step2():
         col1, col2 = st.columns(2)
         with col1:
             plan_plus_threshold_final = st.number_input(
-                "計画プラス誤差率の閾値（%）",
+                "計画誤差率（プラス）の閾値（%）",
                 min_value=0.0,
                 max_value=500.0,
                 value=st.session_state.get("step2_plan_plus_threshold", 50.0),
@@ -1050,7 +1060,7 @@ def display_step2():
             )
         with col2:
             plan_minus_threshold_final = st.number_input(
-                "計画マイナス誤差率の閾値（%）",
+                "計画誤差率（マイナス）の閾値（%）",
                 min_value=-500.0,
                 max_value=0.0,
                 value=st.session_state.get("step2_plan_minus_threshold", -50.0),
@@ -1124,10 +1134,10 @@ def display_step2():
                     final_safety_stock = final_results['model3_empirical_plan']['safety_stock']
                     final_model_name = "安全在庫③"
             
-            # 計画誤差情報の表示
-            st.markdown('<div class="step-sub-section">計画誤差情報</div>', unsafe_allow_html=True)
+            # 計画誤差率情報の表示
+            st.markdown('<div class="step-sub-section">計画誤差率情報</div>', unsafe_allow_html=True)
             plan_info_data = {
-                '項目': ['計画誤差率', '計画誤差（実績合計 - 計画合計）', '実績合計', '計画合計'],
+                '項目': ['計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計'],
                 '値': [
                     f"{plan_error_rate:.2f}%" if plan_error_rate is not None else "計算不可",
                     f"{plan_error:,.2f}",
@@ -1248,7 +1258,7 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     
     # LT間差分（実績−計画）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
+        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差率',
         '件数': len(delta3),
         '平均': np.mean(delta3),
         '標準偏差': np.std(delta3),
@@ -1290,7 +1300,7 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
     
     # LT間差分（実績−計画）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
+        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差率',
         '件数': len(hist_data['model3_delta']),
         '平均': np.mean(hist_data['model3_delta']),
         '標準偏差': np.std(hist_data['model3_delta']),
