@@ -23,7 +23,11 @@ from charts.safety_stock_charts import (
     create_histogram_with_unified_range,
     create_outlier_processing_results_chart,
     create_outlier_lt_delta_comparison_chart,
-    create_after_processing_comparison_chart
+    create_after_processing_comparison_chart,
+    create_safety_stock_comparison_bar_chart,
+    create_before_after_comparison_bar_chart,
+    create_adopted_model_comparison_charts,
+    create_cap_comparison_bar_chart
 )
 
 # 標準偏差の計算方法（固定）
@@ -542,7 +546,7 @@ def display_step2():
                 </div>
                 """, unsafe_allow_html=True)
             
-            # 安全在庫比較テーブル
+            # 安全在庫比較結果（棒グラフ＋表の一体化）
             st.markdown('<div class="step-sub-section">安全在庫比較結果</div>', unsafe_allow_html=True)
             display_safety_stock_comparison(product_code, results, calculator)
             
@@ -766,7 +770,7 @@ def display_step2():
         
         # 再算出結果の表示（Before/After比較）
         if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
-            st.markdown('<div class="step-sub-section">異常値処理結果：安全在庫①②③ Before / After 比較</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">実績異常値処理後：安全在庫 Before / After 比較結果</div>', unsafe_allow_html=True)
             
             product_code = st.session_state.get('step2_product_code')
             before_results = st.session_state.get('step2_results')
@@ -879,11 +883,239 @@ def display_step2():
             # ボタン押下前は軽いメッセージのみ表示
             st.info("💡 「安全在庫を再算出・比較する」ボタンを押すと、LT間差分の分布グラフが表示されます。")
     
-    # ========== 手順⑦：上限カットを適用する ==========
+    # ========== 手順⑦：計画異常値処理を実施し、安全在庫を確定する ==========
     if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順⑦：上限カットを適用する</p>
+            <p>手順⑦：計画異常値処理を実施し、安全在庫を確定する</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を最終決定します。<br>計画誤差率が大きい場合は安全在庫②を、許容範囲内の場合は安全在庫③を採用します。</div>
+        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 1. 計画異常値処理の閾値設定
+        st.markdown('<div class="step-sub-section">計画異常値処理の閾値設定</div>', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            plan_plus_threshold_final = st.number_input(
+                "計画誤差率（プラス）の閾値（%）",
+                min_value=0.0,
+                max_value=500.0,
+                value=st.session_state.get("step2_plan_plus_threshold", 50.0),
+                step=5.0,
+                help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
+                key="step2_plan_plus_threshold_final"
+            )
+        with col2:
+            plan_minus_threshold_final = st.number_input(
+                "計画誤差率（マイナス）の閾値（%）",
+                min_value=-500.0,
+                max_value=0.0,
+                value=st.session_state.get("step2_plan_minus_threshold", -50.0),
+                step=5.0,
+                help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
+                key="step2_plan_minus_threshold_final"
+            )
+        
+        # 計画誤差率を計算
+        product_code = st.session_state.get('step2_product_code')
+        plan_data = st.session_state.get('step2_plan_data')
+        actual_data = st.session_state.get('step2_actual_data')
+        
+        if plan_data is not None and actual_data is not None:
+            plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
+            is_anomaly, anomaly_reason = is_plan_anomaly(
+                plan_error_rate,
+                plan_plus_threshold_final,
+                plan_minus_threshold_final
+            )
+            
+            # セッション状態に保存（ウィジェットの値は自動的にセッション状態に保存されるため、明示的な設定は不要）
+            # ただし、他の場所で参照する場合は、step2_plan_plus_threshold_finalとstep2_plan_minus_threshold_finalを使用
+            
+            final_results = st.session_state.get('step2_after_results')
+            final_calculator = st.session_state.get('step2_after_calculator')
+            
+            # 2. 計画誤差率情報
+            st.markdown('<div class="step-sub-section">計画誤差率情報</div>', unsafe_allow_html=True)
+            plan_info_data = {
+                '対象商品コード': [product_code],
+                '実績合計': [f"{actual_data.sum():,.2f}"],
+                '計画合計': [f"{plan_total:,.2f}" if plan_total > 0 else "0.00"],
+                '計画誤差（実績合計−計画合計）': [f"{plan_error:,.2f}"],
+                '計画誤差率': [f"{plan_error_rate:.1f}%" if plan_error_rate is not None else "計算不可"]
+            }
+            plan_info_df = pd.DataFrame(plan_info_data)
+            st.dataframe(plan_info_df, use_container_width=True, hide_index=True)
+            
+            # 3. 計画異常値処理の判定結果
+            st.markdown('<div class="step-sub-section">計画異常値処理の判定結果</div>', unsafe_allow_html=True)
+            
+            if plan_error_rate is None:
+                # 計画誤差率計算不可の場合
+                st.markdown("""
+                <div class="annotation-warning-box">
+                    <span class="icon">⚠</span>
+                    <div class="text"><strong>計画異常値処理：</strong>計画誤差率が計算できません。安全在庫②を代替採用します。</div>
+                </div>
+                """, unsafe_allow_html=True)
+                adopted_model = "ss2"
+                adopted_model_name = "安全在庫②（実測値：実績−平均）"
+            elif is_anomaly:
+                # 異常値の場合
+                st.markdown(f"""
+                <div class="annotation-warning-box">
+                    <span class="icon">⚠</span>
+                    <div class="text"><strong>計画異常値処理：</strong>計画誤差率が {plan_error_rate:.1f}％で、閾値（{plan_plus_threshold_final:.1f}％ / {plan_minus_threshold_final:.1f}％）を外れているため、安全在庫③は採用できません。安全在庫②を代替採用します。</div>
+                </div>
+                """, unsafe_allow_html=True)
+                adopted_model = "ss2"
+                adopted_model_name = "安全在庫②（実測値：実績−平均）"
+            else:
+                # 正常値の場合
+                st.markdown(f"""
+                <div class="annotation-info-box">
+                    <span class="icon">ℹ</span>
+                    <div class="text"><strong>計画異常値処理：</strong>計画誤差率は {plan_error_rate:.1f}％で許容範囲内です。安全在庫③をそのまま採用します。</div>
+                </div>
+                """, unsafe_allow_html=True)
+                adopted_model = "ss3"
+                adopted_model_name = "安全在庫③（実測値：実績−計画）"
+            
+            # セッション状態に保存
+            st.session_state.step2_adopted_model = adopted_model
+            st.session_state.step2_adopted_model_name = adopted_model_name
+            
+            # 採用モデルの安全在庫を取得
+            if adopted_model == "ss2":
+                adopted_safety_stock = final_results['model2_empirical_actual']['safety_stock']
+            else:
+                adopted_safety_stock = final_results['model3_empirical_plan']['safety_stock']
+            
+            st.session_state.step2_adopted_safety_stock = adopted_safety_stock
+            
+            # ボタン: 安全在庫③を適正化する（安全在庫②を代替採用）
+            if st.button("安全在庫③を適正化する（安全在庫②を代替採用）", type="primary", use_container_width=True, key="step2_finalize_safety_stock_button"):
+                st.session_state.step2_adopted_model = adopted_model
+                st.session_state.step2_adopted_model_name = adopted_model_name
+                st.session_state.step2_adopted_safety_stock = adopted_safety_stock
+                st.success(f"✅ 採用モデル：{adopted_model_name}を採用しました。")
+                st.rerun()
+            
+            if st.session_state.get('step2_adopted_model') is not None:
+                adopted_model = st.session_state.get('step2_adopted_model')
+                adopted_model_name = st.session_state.get('step2_adopted_model_name')
+                adopted_safety_stock = st.session_state.get('step2_adopted_safety_stock')
+                
+                st.markdown('<div class="step-sub-section">計画異常値処理後：安全在庫比較結果</div>', unsafe_allow_html=True)
+                
+                # a) 採用モデル確定メッセージ（バナー）
+                daily_actual_mean = final_calculator.actual_data.mean()
+                adopted_safety_stock_days = adopted_safety_stock / daily_actual_mean if daily_actual_mean > 0 else 0
+                
+                if adopted_model == "ss2":
+                    st.success(f"✅ 採用モデル：安全在庫②（実測値：実績−平均）を採用しました。")
+                else:
+                    st.success(f"✅ 採用モデル：安全在庫③（実測値：実績−計画）を採用しました。")
+                
+                # b) 棒グラフ（左右２グラフ＋中央に「➡」表示）
+                col_left, col_arrow, col_right = st.columns([3, 1, 3])
+                
+                with col_left:
+                    # 左側グラフ：候補モデル比較
+                    fig_left, fig_right = create_adopted_model_comparison_charts(
+                        product_code=product_code,
+                        current_days=final_results['current_safety_stock']['safety_stock_days'],
+                        ss1_days=final_results['model1_theoretical']['safety_stock'] / daily_actual_mean if final_results['model1_theoretical']['safety_stock'] is not None else None,
+                        ss2_days=final_results['model2_empirical_actual']['safety_stock'] / daily_actual_mean,
+                        ss3_days=final_results['model3_empirical_plan']['safety_stock'] / daily_actual_mean,
+                        adopted_model=adopted_model,
+                        is_ss1_undefined=final_results['model1_theoretical'].get('is_undefined', False)
+                    )
+                    st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}")
+                
+                with col_arrow:
+                    st.markdown("<h2 style='text-align: center; margin-top: 200px;'>➡</h2>", unsafe_allow_html=True)
+                
+                with col_right:
+                    # 右側グラフ：採用モデル専用
+                    st.plotly_chart(fig_right, use_container_width=True, key=f"adopted_model_right_{product_code}")
+                
+                # c) テーブル
+                theoretical_value = final_results['model1_theoretical']['safety_stock']
+                is_model1_undefined = final_results['model1_theoretical'].get('is_undefined', False) or theoretical_value is None
+                empirical_actual_value = final_results['model2_empirical_actual']['safety_stock']
+                empirical_plan_value = final_results['model3_empirical_plan']['safety_stock']
+                current_value = final_results['current_safety_stock']['safety_stock']
+                current_days = final_results['current_safety_stock']['safety_stock_days']
+                
+                theoretical_days = theoretical_value / daily_actual_mean if (daily_actual_mean > 0 and not is_model1_undefined and theoretical_value is not None) else 0
+                empirical_actual_days = empirical_actual_value / daily_actual_mean if daily_actual_mean > 0 else 0
+                empirical_plan_days = empirical_plan_value / daily_actual_mean if daily_actual_mean > 0 else 0
+                
+                if is_model1_undefined:
+                    theoretical_display = "計算不可（p=0→Z=∞）"
+                else:
+                    theoretical_display = f"{theoretical_value:.2f}（{theoretical_days:.1f}日）"
+                
+                comparison_data = {
+                    '現行設定': [
+                        f"{current_value:.2f}（{current_days:.1f}日）",
+                        f"{current_days / current_days:.2f}" if current_days > 0 else "1.00"
+                    ],
+                    '安全在庫①': [
+                        theoretical_display,
+                        f"{theoretical_days / current_days:.2f}" if (current_days > 0 and not is_model1_undefined and theoretical_days > 0) else "—"
+                    ],
+                    '安全在庫②': [
+                        f"{empirical_actual_value:.2f}（{empirical_actual_days:.1f}日）",
+                        f"{empirical_actual_days / current_days:.2f}" if current_days > 0 else "—"
+                    ],
+                    '安全在庫③': [
+                        f"{empirical_plan_value:.2f}（{empirical_plan_days:.1f}日）",
+                        f"{empirical_plan_days / current_days:.2f}" if current_days > 0 else "—"
+                    ],
+                    '採用モデル': [
+                        f"{adopted_safety_stock:.2f}（{adopted_safety_stock_days:.1f}日）",
+                        f"{adopted_safety_stock_days / current_days:.2f}" if current_days > 0 else "—"
+                    ]
+                }
+                
+                comparison_df = pd.DataFrame(comparison_data, index=['安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
+                
+                # 採用モデル列をハイライト
+                def highlight_adopted_model(val):
+                    if isinstance(val, str) and '採用モデル' in str(val):
+                        return 'background-color: #90EE90; font-weight: bold;'
+                    return ''
+                
+                # 列名で採用モデル列を特定
+                styled_df = comparison_df.style.applymap(
+                    lambda x: 'background-color: #90EE90; font-weight: bold;' if isinstance(x, str) and x != '' else '',
+                    subset=['採用モデル']
+                )
+                st.dataframe(styled_df, use_container_width=True)
+                
+                # d) 注釈
+                if adopted_safety_stock_days is not None and current_days > 0:
+                    reduction_days = current_days - adopted_safety_stock_days
+                    reduction_rate = (reduction_days / current_days * 100) if current_days > 0 else 0
+                    st.markdown(f"""
+                    <div class="annotation-success-box">
+                        <span class="icon">✅</span>
+                        <div class="text"><strong>在庫削減効果：</strong>計画異常値処理により {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.divider()
+    
+    # ========== 手順⑧：上限カットを適用する ==========
+    if st.session_state.get('step2_adopted_model') is not None:
+        st.markdown("""
+        <div class="step-middle-section">
+            <p>手順⑧：上限カットを適用する</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
@@ -992,207 +1224,30 @@ def display_step2():
                 model3_applied = final_results['model3_empirical_plan'].get('category_limit_applied', False)
                 category_limit_applied = model1_applied or model2_applied or model3_applied
             
-            if category_limit_applied:
-                # 上限カットが適用された場合
-                st.markdown("""
-                <div class="annotation-success-box">
-                    <span class="icon">✅</span>
-                    <div class="text"><strong>上限カットの適用：</strong>上限カットは適用されました。</div>
-                </div>
-                """, unsafe_allow_html=True)
-                product_code = st.session_state.get('step2_product_code')
-                
-                # 上限カット適用前後の安全在庫比較テーブル
-                display_after_cap_comparison(
-                    product_code,
-                    st.session_state.get('step2_after_results'),
-                    final_results,
-                    st.session_state.get('step2_after_calculator'),
-                    final_calculator,
-                    cap_applied=True  # 上限カットが適用されたことを示すフラグ
-                )
+            product_code = st.session_state.get('step2_product_code')
+            
+            # 上限カット適用前後の安全在庫比較結果
+            st.markdown('<div class="step-sub-section">安全在庫比較結果</div>', unsafe_allow_html=True)
+            
+            # 採用モデルを取得（手順⑦で決定されたモデル）
+            adopted_model = st.session_state.get('step2_adopted_model', 'ss3')  # デフォルトはss3
+            if adopted_model == "ss2":
+                adopted_model_days = final_results['model2_empirical_actual']['safety_stock'] / final_calculator.actual_data.mean() if final_calculator.actual_data.mean() > 0 else 0
             else:
-                # 上限カットが適用されていない場合でも比較結果を表示
-                st.markdown("""
-                <div class="annotation-success-box">
-                    <span class="icon">✅</span>
-                    <div class="text"><strong>上限カットの適用：</strong>上限カットは適用されませんでした。</div>
-                </div>
-                """, unsafe_allow_html=True)
-                product_code = st.session_state.get('step2_product_code')
-                
-                # 上限カット適用前後の安全在庫比較テーブル（上限カットが適用されなかった場合でも表示）
-                display_after_cap_comparison(
-                    product_code,
-                    st.session_state.get('step2_after_results'),
-                    final_results,
-                    st.session_state.get('step2_after_calculator'),
-                    final_calculator,
-                    cap_applied=False  # 上限カットが適用されなかったことを示すフラグ
-                )
+                adopted_model_days = final_results['model3_empirical_plan']['safety_stock'] / final_calculator.actual_data.mean() if final_calculator.actual_data.mean() > 0 else 0
+            
+            # 上限カット適用前後の安全在庫比較テーブル
+            display_after_cap_comparison(
+                product_code,
+                st.session_state.get('step2_after_results'),
+                final_results,
+                st.session_state.get('step2_after_calculator'),
+                final_calculator,
+                cap_applied=category_limit_applied,
+                adopted_model_days=adopted_model_days
+            )
             
             st.divider()
-    
-    # ========== 手順⑧：計画異常値処理を実施し、安全在庫を確定する ==========
-    if st.session_state.get('step2_final_results') is not None and st.session_state.get('step2_final_calculator') is not None:
-        st.markdown("""
-        <div class="step-middle-section">
-            <p>手順⑧：計画異常値処理を実施し、安全在庫を確定する</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を最終決定します。<br>計画誤差率が大きい場合は安全在庫②を、許容範囲内の場合は安全在庫③を採用します。</div>
-        """, unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 計画誤差率の閾値設定（手順1の値を継承、必要に応じて変更可能）
-        st.markdown('<div class="step-sub-section">計画異常値処理の閾値設定</div>', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            plan_plus_threshold_final = st.number_input(
-                "計画誤差率（プラス）の閾値（%）",
-                min_value=0.0,
-                max_value=500.0,
-                value=st.session_state.get("step2_plan_plus_threshold", 50.0),
-                step=5.0,
-                help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
-                key="step2_plan_plus_threshold_final"
-            )
-        with col2:
-            plan_minus_threshold_final = st.number_input(
-                "計画誤差率（マイナス）の閾値（%）",
-                min_value=-500.0,
-                max_value=0.0,
-                value=st.session_state.get("step2_plan_minus_threshold", -50.0),
-                step=5.0,
-                help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
-                key="step2_plan_minus_threshold_final"
-            )
-        
-        # 計画誤差率を計算
-        product_code = st.session_state.get('step2_product_code')
-        plan_data = st.session_state.get('step2_plan_data')
-        actual_data = st.session_state.get('step2_actual_data')
-        
-        if plan_data is not None and actual_data is not None:
-            plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
-            is_anomaly, anomaly_reason = is_plan_anomaly(
-                plan_error_rate,
-                plan_plus_threshold_final,
-                plan_minus_threshold_final
-            )
-            
-            # 判定結果の表示
-            st.markdown('<div class="step-sub-section">計画異常値処理の判定結果</div>', unsafe_allow_html=True)
-            
-            final_results = st.session_state.get('step2_final_results')
-            final_calculator = st.session_state.get('step2_final_calculator')
-            
-            if plan_error_rate is None:
-                # 計画誤差率計算不可の場合
-                st.markdown("""
-                <div class="annotation-warning-box">
-                    <span class="icon">⚠</span>
-                    <div class="text"><strong>計画誤差率計算不可：</strong>計画合計が0のため、計画誤差率を計算できません。安全在庫②または③を手動で選択してください。</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 手動選択UI
-                selected_model = st.radio(
-                    "採用する安全在庫モデル",
-                    options=["安全在庫②", "安全在庫③"],
-                    help="計画誤差率が計算できないため、手動で選択してください。",
-                    key="step2_manual_model_selection"
-                )
-                
-                if selected_model == "安全在庫②":
-                    final_safety_stock = final_results['model2_empirical_actual']['safety_stock']
-                    final_model_name = "安全在庫②"
-                else:
-                    final_safety_stock = final_results['model3_empirical_plan']['safety_stock']
-                    final_model_name = "安全在庫③"
-            else:
-                # 計画誤差率が計算可能な場合
-                if is_anomaly:
-                    # 異常の場合
-                    st.markdown(f"""
-                    <div class="annotation-warning-box">
-                        <span class="icon">⚠</span>
-                        <div class="text"><strong>計画異常値処理：</strong>{anomaly_reason}。安全在庫②を採用して確定します。</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    final_safety_stock = final_results['model2_empirical_actual']['safety_stock']
-                    final_model_name = "安全在庫②"
-                else:
-                    # 正常の場合
-                    st.markdown(f"""
-                    <div class="annotation-success-box">
-                        <span class="icon">✅</span>
-                        <div class="text"><strong>計画異常値処理：</strong>{anomaly_reason}。安全在庫③を採用して確定しますか？</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    final_safety_stock = final_results['model3_empirical_plan']['safety_stock']
-                    final_model_name = "安全在庫③"
-            
-            # 計画誤差率情報の表示
-            st.markdown('<div class="step-sub-section">計画誤差率情報</div>', unsafe_allow_html=True)
-            plan_info_data = {
-                '項目': ['計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計'],
-                '値': [
-                    f"{plan_error_rate:.2f}%" if plan_error_rate is not None else "計算不可",
-                    f"{plan_error:,.2f}",
-                    f"{actual_data.sum():,.2f}",
-                    f"{plan_total:,.2f}" if plan_total > 0 else "0.00"
-                ]
-            }
-            plan_info_df = pd.DataFrame(plan_info_data)
-            st.dataframe(plan_info_df, use_container_width=True, hide_index=True)
-            
-            # 最終安全在庫の表示
-            daily_actual_mean = final_calculator.actual_data.mean()
-            final_safety_stock_days = final_safety_stock / daily_actual_mean if daily_actual_mean > 0 else 0
-            
-            st.markdown('<div class="step-sub-section">確定する安全在庫</div>', unsafe_allow_html=True)
-            final_safety_stock_data = {
-                '項目': ['採用モデル', '安全在庫数量', '安全在庫日数'],
-                '値': [
-                    final_model_name,
-                    f"{final_safety_stock:.2f}",
-                    f"{final_safety_stock_days:.1f}日"
-                ]
-            }
-            final_safety_stock_df = pd.DataFrame(final_safety_stock_data)
-            st.dataframe(final_safety_stock_df, use_container_width=True, hide_index=True)
-            
-            # 確定ボタン
-            if st.button("安全在庫を確定する", type="primary", use_container_width=True, key="step2_finalize_safety_stock"):
-                st.session_state.step2_finalized_safety_stock = {
-                    'product_code': product_code,
-                    'model': final_model_name,
-                    'safety_stock': final_safety_stock,
-                    'safety_stock_days': final_safety_stock_days,
-                    'plan_error_rate': plan_error_rate,
-                    'plan_error': plan_error,
-                    'actual_total': actual_data.sum(),
-                    'plan_total': plan_total,
-                    'is_plan_anomaly': is_anomaly if plan_error_rate is not None else None
-                }
-                st.success(f"✅ 安全在庫を確定しました。採用モデル：{final_model_name}（{final_safety_stock:.2f}、{final_safety_stock_days:.1f}日）")
-                st.rerun()
-            
-            # 確定済みの場合の表示
-            if 'step2_finalized_safety_stock' in st.session_state:
-                finalized = st.session_state.step2_finalized_safety_stock
-                st.markdown("""
-                <div class="annotation-success-box">
-                    <span class="icon">✅</span>
-                    <div class="text"><strong>確定済み：</strong>安全在庫は確定済みです。採用モデル：{model}（{qty:.2f}、{days:.1f}日）</div>
-                </div>
-                """.format(
-                    model=finalized['model'],
-                    qty=finalized['safety_stock'],
-                    days=finalized['safety_stock_days']
-                ), unsafe_allow_html=True)
 
 
 # ========================================
@@ -1324,7 +1379,7 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
 
 
 def display_safety_stock_comparison(product_code: str, results: dict, calculator: SafetyStockCalculator):
-    """安全在庫比較結果を表示"""
+    """安全在庫比較結果を表示（棒グラフ＋表の一体化）"""
     
     # 安全在庫値を取得
     theoretical_value = results['model1_theoretical']['safety_stock']
@@ -1342,7 +1397,25 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     empirical_actual_days = empirical_actual_value / daily_actual_mean if daily_actual_mean > 0 else 0
     empirical_plan_days = empirical_plan_value / daily_actual_mean if daily_actual_mean > 0 else 0
     
-    # 比較データを作成（列名変更と欠品許容率とZの対応表示）
+    # 1. 棒グラフを表示
+    # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
+    # テーブルの「項目」列の幅（10%）分だけ右にずらす
+    col_left, col_graph = st.columns([0.1, 0.9])
+    with col_left:
+        st.empty()  # 左側に空のスペースを確保（テーブルの「項目」列に対応）
+    with col_graph:
+        fig = create_safety_stock_comparison_bar_chart(
+            product_code=product_code,
+            current_days=current_days,
+            ss1_days=theoretical_days if not is_model1_undefined and theoretical_days > 0 else None,
+            ss2_days=empirical_actual_days,
+            ss3_days=empirical_plan_days,
+            is_ss1_undefined=is_model1_undefined,
+            use_after_colors=False  # Before色を使用
+        )
+        st.plotly_chart(fig, use_container_width=True, key=f"safety_stock_comparison_{product_code}")
+    
+    # 2. 比較テーブルを表示
     stockout_tolerance_pct = results['common_params']['stockout_tolerance_pct']
     safety_factor = results['common_params']['safety_factor']
     is_p_zero = stockout_tolerance_pct <= 0
@@ -1351,34 +1424,71 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     if is_model1_undefined or is_p_zero:
         theoretical_display = "計算不可（p=0→Z=∞）"
         theoretical_ratio = "—"
-        z_display = "計算不可（p=0→Z=∞）"
     else:
         theoretical_display = f"{theoretical_value:.2f}（{theoretical_days:.1f}日）"
         theoretical_ratio = f"{theoretical_value / current_value:.2f}" if current_value > 0 else "—"
-        z_display = f"{stockout_tolerance_pct:.1f}% → Z={safety_factor:.3f}"
     
+    # テーブルの列構成を5列に固定（グラフのX軸カテゴリと完全同期）
+    # 順序：「項目」「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」
     comparison_data = {
-        'モデル': [
-            '安全在庫①：理論値',
-            '安全在庫②：実測値（実績−平均）',
-            '安全在庫③：実測値（実績−計画）',
-            '現行設定'
-        ],
-        '安全在庫数量（日数）': [
-            theoretical_display,
-            f"{empirical_actual_value:.2f}（{empirical_actual_days:.1f}日）",
-            f"{empirical_plan_value:.2f}（{empirical_plan_days:.1f}日）",
-            f"{current_value:.2f}（{current_days:.1f}日）"
-        ],
-        '現行比': [
-            theoretical_ratio,
-            f"{empirical_actual_value / current_value:.2f}" if current_value > 0 else "—",
-            f"{empirical_plan_value / current_value:.2f}" if current_value > 0 else "—",
+        '項目': ['安全在庫数量（日数）', '現行比'],
+        '現行設定': [
+            f"{current_value:.2f}（{current_days:.1f}日）",
             "1.00"
+        ],
+        '安全在庫①': [
+            theoretical_display,
+            theoretical_ratio
+        ],
+        '安全在庫②': [
+            f"{empirical_actual_value:.2f}（{empirical_actual_days:.1f}日）",
+            f"{empirical_actual_value / current_value:.2f}" if current_value > 0 else "—"
+        ],
+        '安全在庫③': [
+            f"{empirical_plan_value:.2f}（{empirical_plan_days:.1f}日）",
+            f"{empirical_plan_value / current_value:.2f}" if current_value > 0 else "—"
         ]
     }
     
     comparison_df = pd.DataFrame(comparison_data)
+    # set_indexを使わず、「項目」列も通常の列として表示（5列構成を維持）
+    
+    # 列幅を統一するためのスタイル設定
+    # 1列目「項目」を12%に固定、2-5列目を残りの88%を4等分（各22%）
+    st.markdown("""
+    <style>
+    /* テーブル全体のレイアウトを固定 */
+    div[data-testid="stDataFrame"] table {
+        table-layout: fixed !important;
+        width: 100% !important;
+    }
+    /* 1列目「項目」を12%に固定（ラベル列なので最小限の幅） */
+    div[data-testid="stDataFrame"] th:nth-child(1),
+    div[data-testid="stDataFrame"] td:nth-child(1) {
+        width: 12% !important;
+    }
+    /* 2-5列目（現行設定、安全在庫①、安全在庫②、安全在庫③）を完全に等幅に（各22%） */
+    div[data-testid="stDataFrame"] th:nth-child(2),
+    div[data-testid="stDataFrame"] td:nth-child(2),
+    div[data-testid="stDataFrame"] th:nth-child(3),
+    div[data-testid="stDataFrame"] td:nth-child(3),
+    div[data-testid="stDataFrame"] th:nth-child(4),
+    div[data-testid="stDataFrame"] td:nth-child(4),
+    div[data-testid="stDataFrame"] th:nth-child(5),
+    div[data-testid="stDataFrame"] td:nth-child(5) {
+        width: 22% !important;
+    }
+    /* 長いヘッダーは改行で対応（列幅は固定のまま） */
+    div[data-testid="stDataFrame"] th {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        line-height: 1.2 !important;
+        padding: 8px 4px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # インデックスを非表示にしてテーブルを表示
     st.dataframe(comparison_df, use_container_width=True, hide_index=True)
     
     # 算出条件テーブルを追加（折りたたみ式、初期状態は閉じる）
@@ -1694,8 +1804,6 @@ def display_after_processing_comparison(product_code: str,
                                         after_calculator: SafetyStockCalculator):
     """処理後の安全在庫再算出結果を表示（Before/After比較）"""
     
-    # Before/After安全在庫①②③の比較グラフ（タイトルは呼び出し側で設定済み）
-    
     # 平均需要を取得（安全在庫日数に変換するため）
     before_mean_demand = before_calculator.actual_data.mean() if before_calculator and hasattr(before_calculator, 'actual_data') else 1.0
     after_mean_demand = after_calculator.actual_data.mean() if after_calculator and hasattr(after_calculator, 'actual_data') else 1.0
@@ -1706,32 +1814,45 @@ def display_after_processing_comparison(product_code: str,
     if after_mean_demand <= 0:
         after_mean_demand = 1.0
     
-    # 安全在庫数量を安全在庫日数に変換
-    before_values = [
-        before_results['model1_theoretical']['safety_stock'] / before_mean_demand if before_results['model1_theoretical']['safety_stock'] is not None else 0.0,
-        before_results['model2_empirical_actual']['safety_stock'] / before_mean_demand,
-        before_results['model3_empirical_plan']['safety_stock'] / before_mean_demand
-    ]
-    after_values = [
-        after_results['model1_theoretical']['safety_stock'] / after_mean_demand if after_results['model1_theoretical']['safety_stock'] is not None else 0.0,
-        after_results['model2_empirical_actual']['safety_stock'] / after_mean_demand,
-        after_results['model3_empirical_plan']['safety_stock'] / after_mean_demand
-    ]
-    
-    # chartsモジュールからグラフを生成
-    fig = create_after_processing_comparison_chart(product_code, before_values, after_values)
-    st.plotly_chart(fig, use_container_width=True, key=f"after_processing_comparison_detail_{product_code}")
-    
-    # 比較テーブル + 現行比表示（タイトルは呼び出し側で設定済み）
-    
     # 現行安全在庫（日数）を取得
     current_days = before_results['current_safety_stock']['safety_stock_days']
     current_value = before_results['current_safety_stock']['safety_stock']
     
-    # 安全在庫①がNoneの場合（p=0%など）の処理
+    # 安全在庫数量を安全在庫日数に変換
+    before_ss1_days = before_results['model1_theoretical']['safety_stock'] / before_mean_demand if before_results['model1_theoretical']['safety_stock'] is not None else None
+    before_ss2_days = before_results['model2_empirical_actual']['safety_stock'] / before_mean_demand
+    before_ss3_days = before_results['model3_empirical_plan']['safety_stock'] / before_mean_demand
+    
+    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / after_mean_demand if after_results['model1_theoretical']['safety_stock'] is not None else None
+    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / after_mean_demand
+    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / after_mean_demand
+    
+    # 安全在庫①が未定義かどうか
     is_before_ss1_undefined = before_results['model1_theoretical'].get('is_undefined', False) or before_results['model1_theoretical']['safety_stock'] is None
     is_after_ss1_undefined = after_results['model1_theoretical'].get('is_undefined', False) or after_results['model1_theoretical']['safety_stock'] is None
     
+    # 1. Before/After比較棒グラフを表示
+    # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
+    # テーブルの「項目」列の幅（12%）分だけ右にずらす
+    col_left, col_graph = st.columns([0.12, 0.88])
+    with col_left:
+        st.empty()  # 左側に空のスペースを確保（テーブルの「項目」列に対応）
+    with col_graph:
+        fig = create_before_after_comparison_bar_chart(
+            product_code=product_code,
+            current_days=current_days,
+            before_ss1_days=before_ss1_days,
+            before_ss2_days=before_ss2_days,
+            before_ss3_days=before_ss3_days,
+            after_ss1_days=after_ss1_days,
+            after_ss2_days=after_ss2_days,
+            after_ss3_days=after_ss3_days,
+            is_before_ss1_undefined=is_before_ss1_undefined,
+            is_after_ss1_undefined=is_after_ss1_undefined
+        )
+        st.plotly_chart(fig, use_container_width=True, key=f"after_processing_comparison_detail_{product_code}")
+    
+    # 2. 比較テーブル + 現行比表示
     # 処理前の安全在庫数量を取得
     before_quantities = [
         before_results['model1_theoretical']['safety_stock'],
@@ -1748,23 +1869,23 @@ def display_after_processing_comparison(product_code: str,
     
     # 処理前の安全在庫数量（日数）を表示形式で作成
     before_display = []
-    for i, (qty, days) in enumerate(zip(before_quantities, before_values)):
+    for i, (qty, days) in enumerate(zip(before_quantities, [before_ss1_days, before_ss2_days, before_ss3_days])):
         if i == 0 and (is_before_ss1_undefined or qty is None or days is None or days == 0.0):
             before_display.append("—")
         else:
-            before_display.append(f"{qty:.2f}（{days:.1f}日）")
+            before_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 処理後の安全在庫数量（日数）を表示形式で作成
     after_display = []
-    for i, (qty, days) in enumerate(zip(after_quantities, after_values)):
+    for i, (qty, days) in enumerate(zip(after_quantities, [after_ss1_days, after_ss2_days, after_ss3_days])):
         if i == 0 and (is_after_ss1_undefined or qty is None or days is None or days == 0.0):
             after_display.append("—")
         else:
-            after_display.append(f"{qty:.2f}（{days:.1f}日）")
+            after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 現行比を計算（処理後_安全在庫（日数） ÷ 現行安全在庫（日数））
     current_ratios = []
-    for i, v in enumerate(after_values):
+    for i, v in enumerate([after_ss1_days, after_ss2_days, after_ss3_days]):
         if i == 0 and (is_after_ss1_undefined or v is None or v == 0.0):
             current_ratios.append("—")
         elif current_days > 0 and v is not None:
@@ -1790,23 +1911,34 @@ def display_after_processing_comparison(product_code: str,
         z_display = f"{stockout_tolerance_pct:.1f}% → Z={safety_factor:.3f}"
     
     comparison_data = {
-        'モデル': [
-            '安全在庫①：理論値',
-            '安全在庫②：実測値（実績−平均）',
-            '安全在庫③：実測値（実績−計画）',
-            '現行設定'
+        '現行設定': [
+            current_display_before,
+            current_display_after,
+            current_ratio_display
         ],
-        '処理前_安全在庫数量（日数）': before_display + [current_display_before],
-        '処理後_安全在庫数量（日数）': after_display + [current_display_after],
-        '現行比（処理後 ÷ 現行）': current_ratios + [current_ratio_display]
+        '安全在庫①': [
+            before_display[0],
+            after_display[0],
+            current_ratios[0]
+        ],
+        '安全在庫②': [
+            before_display[1],
+            after_display[1],
+            current_ratios[1]
+        ],
+        '安全在庫③': [
+            before_display[2],
+            after_display[2],
+            current_ratios[2]
+        ]
     }
     
-    comparison_df = pd.DataFrame(comparison_data)
-    st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+    comparison_df = pd.DataFrame(comparison_data, index=['処理前_安全在庫数量（日数）', '処理後_安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
+    st.dataframe(comparison_df, use_container_width=True)
     
-    # 在庫削減効果メッセージを表示（推奨モデル = 安全在庫③）
-    if after_values[2] is not None and current_days > 0:
-        recommended_ratio = after_values[2] / current_days
+    # 3. テキストボックス型注釈を表示
+    if after_ss3_days is not None and current_days > 0:
+        recommended_ratio = after_ss3_days / current_days
         reduction_rate = (1 - recommended_ratio) * 100
         st.markdown(f"""
         <div class="annotation-success-box">
@@ -1828,7 +1960,8 @@ def display_after_cap_comparison(product_code: str,
                                  after_results: dict,
                                  before_calculator: SafetyStockCalculator,
                                  after_calculator: SafetyStockCalculator,
-                                 cap_applied: bool = True):
+                                 cap_applied: bool = True,
+                                 adopted_model_days: float = None):
     """上限カット適用前後の安全在庫比較結果を表示
     
     Args:
@@ -1838,10 +1971,8 @@ def display_after_cap_comparison(product_code: str,
         before_calculator: 上限カット適用前の計算機
         after_calculator: 上限カット適用後の計算機
         cap_applied: 上限カットが適用されたかどうか（Falseの場合は「同左」を表示）
+        adopted_model_days: 採用モデルの安全在庫日数
     """
-    
-    # タイトルを表示
-    st.markdown('<div class="step-sub-section">安全在庫比較結果</div>', unsafe_allow_html=True)
     
     # 現行安全在庫（日数）を取得
     current_days = before_results['current_safety_stock']['safety_stock_days']
@@ -1862,6 +1993,42 @@ def display_after_cap_comparison(product_code: str,
     is_after_ss1_undefined = after_results['model1_theoretical'].get('is_undefined', False) or after_results['model1_theoretical']['safety_stock'] is None
     
     # 処理前の安全在庫数量を取得
+    before_ss1_days = before_results['model1_theoretical']['safety_stock'] / before_mean_demand if (before_results['model1_theoretical']['safety_stock'] is not None and before_mean_demand > 0) else None
+    before_ss2_days = before_results['model2_empirical_actual']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
+    before_ss3_days = before_results['model3_empirical_plan']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
+    
+    # 処理後の安全在庫数量を取得
+    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / after_mean_demand if (after_results['model1_theoretical']['safety_stock'] is not None and after_mean_demand > 0) else None
+    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / after_mean_demand if after_mean_demand > 0 else 0
+    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / after_mean_demand if after_mean_demand > 0 else 0
+    
+    # 採用モデルの日数（デフォルトはss3）
+    if adopted_model_days is None:
+        adopted_model_days = after_ss3_days
+    
+    # 1. 棒グラフを表示
+    # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
+    # テーブルの「項目」列の幅（12%）分だけ右にずらす
+    col_left, col_graph = st.columns([0.12, 0.88])
+    with col_left:
+        st.empty()  # 左側に空のスペースを確保（テーブルの「項目」列に対応）
+    with col_graph:
+        fig = create_cap_comparison_bar_chart(
+            product_code=product_code,
+            current_days=current_days,
+            before_ss1_days=before_ss1_days,
+            before_ss2_days=before_ss2_days,
+            before_ss3_days=before_ss3_days,
+            after_ss1_days=after_ss1_days,
+            after_ss2_days=after_ss2_days,
+            after_ss3_days=after_ss3_days,
+            adopted_model_days=adopted_model_days,
+            is_before_ss1_undefined=is_before_ss1_undefined,
+            is_after_ss1_undefined=is_after_ss1_undefined
+        )
+        st.plotly_chart(fig, use_container_width=True, key=f"cap_comparison_{product_code}")
+    
+    # 処理前の安全在庫数量を取得
     before_quantities = [
         before_results['model1_theoretical']['safety_stock'],
         before_results['model2_empirical_actual']['safety_stock'],
@@ -1875,27 +2042,13 @@ def display_after_cap_comparison(product_code: str,
         after_results['model3_empirical_plan']['safety_stock']
     ]
     
-    # 処理前の安全在庫数量（日数）を計算
-    before_days = [
-        before_quantities[0] / before_mean_demand if (before_quantities[0] is not None and before_mean_demand > 0) else 0.0,
-        before_quantities[1] / before_mean_demand if before_mean_demand > 0 else 0.0,
-        before_quantities[2] / before_mean_demand if before_mean_demand > 0 else 0.0
-    ]
-    
-    # 処理後の安全在庫数量（日数）を計算
-    after_days = [
-        after_quantities[0] / after_mean_demand if (after_quantities[0] is not None and after_mean_demand > 0) else 0.0,
-        after_quantities[1] / after_mean_demand if after_mean_demand > 0 else 0.0,
-        after_quantities[2] / after_mean_demand if after_mean_demand > 0 else 0.0
-    ]
-    
     # 処理前の安全在庫数量（日数）を表示形式で作成
     before_display = []
-    for i, (qty, days) in enumerate(zip(before_quantities, before_days)):
+    for i, (qty, days) in enumerate(zip(before_quantities, [before_ss1_days, before_ss2_days, before_ss3_days])):
         if i == 0 and (is_before_ss1_undefined or qty is None or days is None or days == 0.0):
             before_display.append("—")
         else:
-            before_display.append(f"{qty:.2f}（{days:.1f}日）")
+            before_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 処理後の安全在庫数量（日数）を表示形式で作成
     after_display = []
@@ -1905,83 +2058,76 @@ def display_after_cap_comparison(product_code: str,
             after_display.append("同左")
     else:
         # 上限カットが適用された場合、通常通り表示
-        for i, (qty, days) in enumerate(zip(after_quantities, after_days)):
+        for i, (qty, days) in enumerate(zip(after_quantities, [after_ss1_days, after_ss2_days, after_ss3_days])):
             if i == 0 and (is_after_ss1_undefined or qty is None or days is None or days == 0.0):
                 after_display.append("—")
             else:
-                after_display.append(f"{qty:.2f}（{days:.1f}日）")
+                after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
-    # 現行比を計算（処理後_安全在庫（日数） ÷ 現行安全在庫（日数））
+    # 現行比を計算（カット後_安全在庫（日数） ÷ 現行安全在庫（日数））
     current_ratios = []
-    if not cap_applied:
-        # 上限カットが適用されなかった場合、上限カット前の値と同じ現行比を計算
-        for i, v in enumerate(before_days):
-            if i == 0 and (is_before_ss1_undefined or v is None or v == 0.0):
-                current_ratios.append("—")
-            elif current_days > 0 and v is not None:
-                ratio = v / current_days
-                current_ratios.append(f"{ratio:.2f}")
-            else:
-                current_ratios.append("—")
-    else:
-        # 上限カットが適用された場合、通常通り計算
-        for i, v in enumerate(after_days):
-            if i == 0 and (is_after_ss1_undefined or v is None or v == 0.0):
-                current_ratios.append("—")
-            elif current_days > 0 and v is not None:
-                ratio = v / current_days
-                current_ratios.append(f"{ratio:.2f}")
-            else:
-                current_ratios.append("—")
+    target_days_list = [after_ss1_days, after_ss2_days, after_ss3_days] if cap_applied else [before_ss1_days, before_ss2_days, before_ss3_days]
+    for i, v in enumerate(target_days_list):
+        if i == 0 and (is_after_ss1_undefined if cap_applied else is_before_ss1_undefined) or v is None or v == 0.0:
+            current_ratios.append("—")
+        elif current_days > 0 and v is not None:
+            ratio = v / current_days
+            current_ratios.append(f"{ratio:.2f}")
+        else:
+            current_ratios.append("—")
     
     # 現行安全在庫の表示形式を作成
     current_display_before = f"{current_value:.2f}（{current_days:.1f}日）"
     current_display_after = "同左"
     current_ratio_display = "1.00"
     
-    # 欠品許容率とZの対応表示を取得
-    stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
-    safety_factor = before_results['common_params']['safety_factor']
-    is_p_zero = stockout_tolerance_pct <= 0
-    
-    # 安全在庫①の欠品許容率→Z（片側）表示
-    if is_before_ss1_undefined or is_p_zero:
-        z_display = "計算不可（p=0→Z=∞）"
-    else:
-        z_display = f"{stockout_tolerance_pct:.1f}% → Z={safety_factor:.3f}"
-    
+    # 2. テーブルを表示
     comparison_data = {
-        'モデル': [
-            '安全在庫①：理論値',
-            '安全在庫②：実測値（実績−平均）',
-            '安全在庫③：実測値（実績−計画）',
-            '現行設定'
+        '現行設定': [
+            current_display_before,
+            current_display_after,
+            current_ratio_display
         ],
-        '上限カット前_安全在庫数量（日数）': before_display + [current_display_before],
-        '上限カット後_安全在庫数量（日数）': after_display + [current_display_after],
-        '現行比（上限カット後 ÷ 現行）': current_ratios + [current_ratio_display]
+        '安全在庫①': [
+            before_display[0],
+            after_display[0],
+            current_ratios[0]
+        ],
+        '安全在庫②': [
+            before_display[1],
+            after_display[1],
+            current_ratios[1]
+        ],
+        '安全在庫③': [
+            before_display[2],
+            after_display[2],
+            current_ratios[2]
+        ],
+        '採用モデル': [
+            f"{adopted_model_days * before_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",
+            f"{adopted_model_days * after_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",
+            f"{adopted_model_days / current_days:.2f}" if (adopted_model_days is not None and current_days > 0) else "—"
+        ]
     }
     
-    comparison_df = pd.DataFrame(comparison_data)
-    st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+    comparison_df = pd.DataFrame(comparison_data, index=['カット前_安全在庫数量（日数）', 'カット後_安全在庫数量（日数）', '現行比（カット後 ÷ 現行）'])
+    st.dataframe(comparison_df, use_container_width=True)
     
-    # 在庫削減効果メッセージを表示（推奨モデル = 安全在庫③）
-    # 上限カットが適用されなかった場合でも、上限カット前の値を使用して計算
-    target_days = after_days[2] if cap_applied else before_days[2]
-    if target_days is not None and current_days > 0:
-        recommended_ratio = target_days / current_days
-        reduction_rate = (1 - recommended_ratio) * 100
+    # 3. テキストボックス型注釈を表示
+    if adopted_model_days is not None and current_days > 0:
+        reduction_days = current_days - adopted_model_days
+        reduction_rate = (reduction_days / current_days * 100) if current_days > 0 else 0
         st.markdown(f"""
         <div class="annotation-success-box">
             <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>推奨モデルは現行比 {recommended_ratio:.2f} で、約 {reduction_rate:.1f}% の在庫削減が期待できます。</div>
+            <div class="text"><strong>在庫削減効果：</strong>上限カットにより {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）</div>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
         <div class="annotation-success-box">
             <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>安全在庫③の値が取得できないため、削減効果を計算できません。</div>
+            <div class="text"><strong>在庫削減効果：</strong>採用モデルの値が取得できないため、削減効果を計算できません。</div>
         </div>
         """, unsafe_allow_html=True)
 
