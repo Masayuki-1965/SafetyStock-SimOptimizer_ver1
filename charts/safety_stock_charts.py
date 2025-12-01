@@ -1700,46 +1700,59 @@ def create_before_after_comparison_bar_chart(
     
     before_colors = [before_current_color, before_ss1_color, before_ss2_color, before_ss3_color]
     
-    # Afterの色を4カテゴリ分の配列として準備
-    after_current_color = COLOR_CURRENT  # 現行設定: 白色
-    after_ss1_color = COLOR_SS1_AFTER if (not is_after_ss1_undefined and after_ss1_days is not None) else before_ss1_color  # 安全在庫①: 濃い赤系（未定義の場合はBeforeの色）
-    after_ss2_color = COLOR_SS2_AFTER  # 安全在庫②: 濃いグレー
-    after_ss3_color = COLOR_SS3_AFTER  # 安全在庫③: 濃い緑色
+    # Afterの色を4カテゴリ分の配列として準備（Beforeと完全に同じ色を使用）
+    # 明示的にbefore_colorsと同じ色を使用することで、濃い色が適用されないようにする
+    after_colors = before_colors.copy()  # Beforeと同じ薄い色をそのまま使用
     
-    after_colors = [after_current_color, after_ss1_color, after_ss2_color, after_ss3_color]
+    # 枠線の設定：現行設定のみ枠線を付ける（配列で指定）
+    before_marker_line_colors = ['#999999' if i == 0 else 'rgba(0,0,0,0)' for i in range(4)]
+    before_marker_line_widths = [1.0 if i == 0 else 0 for i in range(4)]
+    after_marker_line_colors = ['#999999' if i == 0 else 'rgba(0,0,0,0)' for i in range(4)]
+    after_marker_line_widths = [1.0 if i == 0 else 0 for i in range(4)]
+    
+    # パターンの設定：Afterのみ斜線パターン（配列で指定）
+    before_pattern_shapes = [None] * 4
+    after_pattern_shapes = ['/'] * 4
     
     # Figureを作成
     fig = go.Figure()
     
-    # Beforeトレース（1本のみ、4カテゴリ分のy配列を持つ）
-    # 注：Plotlyでは1つのトレース内で異なるmarker_lineを設定できないため、
-    # 現行設定のみに輪郭線を付けることはできない
-    # ペア表示を壊さないことを最優先し、全バーに同じ薄いグレーの輪郭線を付ける
+    # Beforeトレース：1つのトレースで4つのカテゴリすべてを含む（レイアウトを維持）
+    # 凡例に□シンボルを表示するため、nameにUnicode文字を含める
     fig.add_trace(
         go.Bar(
-            name="Before（処理前・薄色）",
+            name="□ Before（処理前・薄色）",
             x=models,
             y=before_days,
             marker_color=before_colors,
-            marker_line=dict(color='#CCCCCC', width=1.0),  # 全バー同じ薄いグレーの輪郭線
+            marker_line=dict(
+                color=before_marker_line_colors,
+                width=before_marker_line_widths
+            ),
+            showlegend=True,
+            legendgroup='before'
         )
     )
     
-    # Afterトレース（1本のみ、4カテゴリ分のy配列を持つ）
+    # Afterトレース：1つのトレースで4つのカテゴリすべてを含む（レイアウトを維持）
+    # 凡例に斜線シンボル（▨）を表示するため、nameにUnicode文字を含める
     fig.add_trace(
         go.Bar(
-            name="After（処理後・濃色）",
+            name="▨ After（処理後・斜線付き）",
             x=models,
             y=after_days,
-            marker_color=after_colors,
-            marker_line=dict(color='#CCCCCC', width=1.0),  # 全バー同じ薄いグレーの輪郭線
+            marker=dict(
+                color=after_colors,  # Beforeと同じ薄い色
+                line=dict(
+                    color=after_marker_line_colors,
+                    width=after_marker_line_widths
+                ),
+                pattern_shape=after_pattern_shapes  # 斜線パターン（配列で指定：現行設定を含むすべてに適用）
+            ),
+            showlegend=True,
+            legendgroup='after'
         )
     )
-    
-    # デバッグ用：トレース数とデータを確認
-    print("DEBUG before_days:", before_days)
-    print("DEBUG after_days :", after_days)
-    print("DEBUG len(fig.data):", len(fig.data))
     
     fig.update_layout(
         title=f"{product_code} - 安全在庫（Before/After）",
@@ -1753,7 +1766,15 @@ def create_before_after_comparison_bar_chart(
         bargap=0.25,  # モデル間のすき間
         bargroupgap=0.0,  # 同一モデル内の Before/After は密着
         height=500,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            traceorder='normal',
+            itemsizing='constant'
+        )
     )
     
     return fig
