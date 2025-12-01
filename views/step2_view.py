@@ -138,30 +138,6 @@ def display_step2():
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 計画誤差率の閾値設定
-    st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        plan_plus_threshold = st.number_input(
-            "計画誤差率（プラス）の閾値（%）",
-            min_value=0.0,
-            max_value=500.0,
-            value=st.session_state.get("step2_plan_plus_threshold", 50.0),
-            step=5.0,
-            help="計画誤差率がこの値以上の場合、計画誤差率（プラス）大として扱います。",
-            key="step2_plan_plus_threshold"
-        )
-    with col2:
-        plan_minus_threshold = st.number_input(
-            "計画誤差率（マイナス）の閾値（%）",
-            min_value=-500.0,
-            max_value=0.0,
-            value=st.session_state.get("step2_plan_minus_threshold", -50.0),
-            step=5.0,
-            help="計画誤差率がこの値以下の場合、計画誤差率（マイナス）大として扱います。",
-            key="step2_plan_minus_threshold"
-        )
-    
     # 商品コード選択モード
     st.markdown('<div class="step-sub-section">商品コードの選択</div>', unsafe_allow_html=True)
     selection_mode = st.radio(
@@ -171,6 +147,32 @@ def display_step2():
         horizontal=True,
         key="step2_selection_mode"
     )
+    
+    # 計画誤差率の閾値設定（詳細設定として折り畳み）
+    with st.expander("詳細設定（任意）", expanded=False):
+        st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±50%）のままで問題ない場合は、この設定を変更する必要はありません。慣れてきたユーザーが、より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
+        st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            plan_plus_threshold = st.number_input(
+                "計画誤差率（プラス）の閾値（%）",
+                min_value=0.0,
+                max_value=500.0,
+                value=st.session_state.get("step2_plan_plus_threshold", 50.0),
+                step=5.0,
+                help="計画誤差率がこの値以上の場合、計画誤差率（プラス）大として扱います。",
+                key="step2_plan_plus_threshold"
+            )
+        with col2:
+            plan_minus_threshold = st.number_input(
+                "計画誤差率（マイナス）の閾値（%）",
+                min_value=-500.0,
+                max_value=0.0,
+                value=st.session_state.get("step2_plan_minus_threshold", -50.0),
+                step=5.0,
+                help="計画誤差率がこの値以下の場合、計画誤差率（マイナス）大として扱います。",
+                key="step2_plan_minus_threshold"
+            )
     
     # 計画誤差率を計算して商品リストをフィルタリング
     filtered_products = []
@@ -1429,7 +1431,7 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
         theoretical_ratio = f"{theoretical_value / current_value:.2f}" if current_value > 0 else "—"
     
     # テーブルの列構成を5列に固定（グラフのX軸カテゴリと完全同期）
-    # 順序：「項目」「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」
+    # 順序：「項目」「現行設定」「安全在庫①」「安全在庫②」「安全在庫③（推奨モデル）」
     comparison_data = {
         '項目': ['安全在庫数量（日数）', '現行比'],
         '現行設定': [
@@ -1444,7 +1446,7 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
             f"{empirical_actual_value:.2f}（{empirical_actual_days:.1f}日）",
             f"{empirical_actual_value / current_value:.2f}" if current_value > 0 else "—"
         ],
-        '安全在庫③': [
+        '安全在庫③（推奨モデル）': [
             f"{empirical_plan_value:.2f}（{empirical_plan_days:.1f}日）",
             f"{empirical_plan_value / current_value:.2f}" if current_value > 0 else "—"
         ]
@@ -1554,10 +1556,20 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     # 在庫削減効果メッセージを追加
     recommended_ratio = empirical_plan_value / current_value if current_value > 0 else 0
     reduction_rate = (1 - recommended_ratio) * 100
+    
+    # 正負で表現を変更
+    if recommended_ratio < 1:
+        # 現行設定より小さい場合：削減
+        effect_text = f"約 {abs(reduction_rate):.1f}% の在庫削減が期待できます"
+    else:
+        # 現行設定より大きい場合：増加
+        increase_rate = (recommended_ratio - 1) * 100
+        effect_text = f"約 {increase_rate:.1f}% の在庫増加となります"
+    
     st.markdown(f"""
     <div class="annotation-success-box">
         <span class="icon">✅</span>
-        <div class="text"><strong>在庫削減効果：</strong>推奨モデルは現行比 {recommended_ratio:.2f} で、約 {reduction_rate:.1f}% の在庫削減が期待できます。</div>
+        <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1838,6 +1850,14 @@ def display_after_processing_comparison(product_code: str,
     with col_left:
         st.empty()  # 左側に空のスペースを確保（テーブルの「項目」列に対応）
     with col_graph:
+        # 数量データを取得
+        before_ss1_value = before_results['model1_theoretical']['safety_stock'] if not is_before_ss1_undefined else None
+        before_ss2_value = before_results['model2_empirical_actual']['safety_stock']
+        before_ss3_value = before_results['model3_empirical_plan']['safety_stock']
+        after_ss1_value = after_results['model1_theoretical']['safety_stock'] if not is_after_ss1_undefined else None
+        after_ss2_value = after_results['model2_empirical_actual']['safety_stock']
+        after_ss3_value = after_results['model3_empirical_plan']['safety_stock']
+        
         fig = create_before_after_comparison_bar_chart(
             product_code=product_code,
             current_days=current_days,
@@ -1848,7 +1868,15 @@ def display_after_processing_comparison(product_code: str,
             after_ss2_days=after_ss2_days,
             after_ss3_days=after_ss3_days,
             is_before_ss1_undefined=is_before_ss1_undefined,
-            is_after_ss1_undefined=is_after_ss1_undefined
+            is_after_ss1_undefined=is_after_ss1_undefined,
+            mean_demand=after_mean_demand,
+            current_value=current_value,
+            before_ss1_value=before_ss1_value,
+            before_ss2_value=before_ss2_value,
+            before_ss3_value=before_ss3_value,
+            after_ss1_value=after_ss1_value,
+            after_ss2_value=after_ss2_value,
+            after_ss3_value=after_ss3_value
         )
         st.plotly_chart(fig, use_container_width=True, key=f"after_processing_comparison_detail_{product_code}")
     
@@ -1940,10 +1968,20 @@ def display_after_processing_comparison(product_code: str,
     if after_ss3_days is not None and current_days > 0:
         recommended_ratio = after_ss3_days / current_days
         reduction_rate = (1 - recommended_ratio) * 100
+        
+        # 正負で表現を変更
+        if recommended_ratio < 1:
+            # 現行設定より小さい場合：削減
+            effect_text = f"約 {abs(reduction_rate):.1f}% の在庫削減が期待できます"
+        else:
+            # 現行設定より大きい場合：増加
+            increase_rate = (recommended_ratio - 1) * 100
+            effect_text = f"約 {increase_rate:.1f}% の在庫増加となります"
+        
         st.markdown(f"""
         <div class="annotation-success-box">
             <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>推奨モデルは現行比 {recommended_ratio:.2f} で、約 {reduction_rate:.1f}% の在庫削減が期待できます。</div>
+            <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
         </div>
         """, unsafe_allow_html=True)
     else:

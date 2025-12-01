@@ -1522,8 +1522,8 @@ def create_safety_stock_comparison_bar_chart(
         Plotly Figureオブジェクト
     """
     # X軸カテゴリを4つに固定（ダミーカテゴリを削除）
-    # 順序：「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」
-    fixed_models = ['現行設定', '安全在庫①', '安全在庫②', '安全在庫③']
+    # 順序：「現行設定」「安全在庫①」「安全在庫②」「安全在庫③（推奨モデル）」
+    fixed_models = ['現行設定', '安全在庫①', '安全在庫②', '安全在庫③（推奨モデル）']
     
     models = []
     values = []
@@ -1550,8 +1550,8 @@ def create_safety_stock_comparison_bar_chart(
     values.append(ss2_days)
     colors.append(COLOR_SS2_AFTER if use_after_colors else COLOR_SS2_BEFORE)
     
-    # 4. 安全在庫③
-    models.append('安全在庫③')
+    # 4. 安全在庫③（推奨モデル）
+    models.append('安全在庫③（推奨モデル）')
     values.append(ss3_days)
     colors.append(COLOR_SS3_AFTER if use_after_colors else COLOR_SS3_BEFORE)
     
@@ -1567,7 +1567,7 @@ def create_safety_stock_comparison_bar_chart(
                     y=[value],
                     name=model,
                     marker_color=color,
-                    marker_line=dict(color='#666666', width=1.5),
+                    marker_line=dict(color='#999999', width=1.0),
                     showlegend=True
                 )
             )
@@ -1623,7 +1623,15 @@ def create_before_after_comparison_bar_chart(
     after_ss2_days: float,
     after_ss3_days: float,
     is_before_ss1_undefined: bool = False,
-    is_after_ss1_undefined: bool = False
+    is_after_ss1_undefined: bool = False,
+    mean_demand: float = None,
+    current_value: float = None,
+    before_ss1_value: Optional[float] = None,
+    before_ss2_value: Optional[float] = None,
+    before_ss3_value: Optional[float] = None,
+    after_ss1_value: Optional[float] = None,
+    after_ss2_value: Optional[float] = None,
+    after_ss3_value: Optional[float] = None
 ) -> go.Figure:
     """
     Before/After比較用の棒グラフを生成（手順⑤〜⑥用）
@@ -1639,118 +1647,111 @@ def create_before_after_comparison_bar_chart(
         after_ss3_days: Afterの安全在庫③の安全在庫日数
         is_before_ss1_undefined: Beforeの安全在庫①が未定義かどうか
         is_after_ss1_undefined: Afterの安全在庫①が未定義かどうか
+        mean_demand: 平均需要（数量計算用、Noneの場合は日数のみ表示）
+        current_value: 現行設定の安全在庫数量
+        before_ss1_value: Beforeの安全在庫①の安全在庫数量
+        before_ss2_value: Beforeの安全在庫②の安全在庫数量
+        before_ss3_value: Beforeの安全在庫③の安全在庫数量
+        after_ss1_value: Afterの安全在庫①の安全在庫数量
+        after_ss2_value: Afterの安全在庫②の安全在庫数量
+        after_ss3_value: Afterの安全在庫③の安全在庫数量
     
     Returns:
         Plotly Figureオブジェクト
     """
-    models = []
-    before_values = []
-    after_values = []
+    # X軸カテゴリを4つに固定
+    models = ["現行設定", "安全在庫①", "安全在庫②", "安全在庫③（推奨モデル）"]
     
-    # 現行設定
-    models.append('現行設定')
-    before_values.append(current_days)
-    after_values.append(current_days)
+    # Beforeの値を4カテゴリ分の配列として準備（必ず長さ4、Noneや0を紛れ込ませない）
+    # 現行設定: current_days（引数から）
+    current_before_days = current_days
     
-    # 安全在庫①
-    if not is_before_ss1_undefined and before_ss1_days is not None:
-        models.append('安全在庫①')
-        before_values.append(before_ss1_days)
-        after_values.append(after_ss1_days if not is_after_ss1_undefined and after_ss1_days is not None else before_ss1_days)
+    # 安全在庫①: before_ss1_days（未定義でない場合のみ使用、それ以外は0.0）
+    ss1_before_days = before_ss1_days if (not is_before_ss1_undefined and before_ss1_days is not None) else 0.0
     
-    # 安全在庫②
-    models.append('安全在庫②')
-    before_values.append(before_ss2_days)
-    after_values.append(after_ss2_days)
+    # 安全在庫②: before_ss2_days（引数から）
+    ss2_before_days = before_ss2_days
     
-    # 安全在庫③
-    models.append('安全在庫③')
-    before_values.append(before_ss3_days)
-    after_values.append(after_ss3_days)
+    # 安全在庫③: before_ss3_days（引数から）
+    ss3_before_days = before_ss3_days
     
+    before_days = [current_before_days, ss1_before_days, ss2_before_days, ss3_before_days]
+    
+    # Afterの値を4カテゴリ分の配列として準備（必ず長さ4、Noneや0を紛れ込ませない）
+    # 現行設定: current_days（引数から、Beforeと同じ）
+    current_after_days = current_days
+    
+    # 安全在庫①: after_ss1_days（未定義でない場合のみ使用、それ以外はBeforeの値を使用）
+    ss1_after_days = after_ss1_days if (not is_after_ss1_undefined and after_ss1_days is not None) else ss1_before_days
+    
+    # 安全在庫②: after_ss2_days（引数から）
+    ss2_after_days = after_ss2_days
+    
+    # 安全在庫③: after_ss3_days（引数から）
+    ss3_after_days = after_ss3_days
+    
+    after_days = [current_after_days, ss1_after_days, ss2_after_days, ss3_after_days]
+    
+    # Beforeの色を4カテゴリ分の配列として準備
+    before_current_color = COLOR_CURRENT  # 現行設定: 白色
+    before_ss1_color = COLOR_SS1_BEFORE if (not is_before_ss1_undefined and before_ss1_days is not None) else 'rgba(0,0,0,0)'  # 安全在庫①: 薄い赤系（未定義の場合は透明）
+    before_ss2_color = COLOR_SS2_BEFORE  # 安全在庫②: 薄いグレー
+    before_ss3_color = COLOR_SS3_BEFORE  # 安全在庫③: 薄い緑色
+    
+    before_colors = [before_current_color, before_ss1_color, before_ss2_color, before_ss3_color]
+    
+    # Afterの色を4カテゴリ分の配列として準備
+    after_current_color = COLOR_CURRENT  # 現行設定: 白色
+    after_ss1_color = COLOR_SS1_AFTER if (not is_after_ss1_undefined and after_ss1_days is not None) else before_ss1_color  # 安全在庫①: 濃い赤系（未定義の場合はBeforeの色）
+    after_ss2_color = COLOR_SS2_AFTER  # 安全在庫②: 濃いグレー
+    after_ss3_color = COLOR_SS3_AFTER  # 安全在庫③: 濃い緑色
+    
+    after_colors = [after_current_color, after_ss1_color, after_ss2_color, after_ss3_color]
+    
+    # Figureを作成
     fig = go.Figure()
     
-    # Before（薄い色）
-    before_colors = []
-    for model in models:
-        if model == '現行設定':
-            before_colors.append(COLOR_CURRENT)
-        elif model == '安全在庫①':
-            before_colors.append(COLOR_SS1_BEFORE)
-        elif model == '安全在庫②':
-            before_colors.append(COLOR_SS2_BEFORE)
-        elif model == '安全在庫③':
-            before_colors.append(COLOR_SS3_BEFORE)
+    # Beforeトレース（1本のみ、4カテゴリ分のy配列を持つ）
+    # 注：Plotlyでは1つのトレース内で異なるmarker_lineを設定できないため、
+    # 現行設定のみに輪郭線を付けることはできない
+    # ペア表示を壊さないことを最優先し、全バーに同じ薄いグレーの輪郭線を付ける
+    fig.add_trace(
+        go.Bar(
+            name="Before（処理前・薄色）",
+            x=models,
+            y=before_days,
+            marker_color=before_colors,
+            marker_line=dict(color='#CCCCCC', width=1.0),  # 全バー同じ薄いグレーの輪郭線
+        )
+    )
     
-    for i, (model, value, color) in enumerate(zip(models, before_values, before_colors)):
-        if model == '現行設定':
-            fig.add_trace(
-                go.Bar(
-                    x=[model],
-                    y=[value],
-                    name="Before（処理前）",
-                    marker_color=color,
-                    marker_line=dict(color='#666666', width=1.5),
-                    legendgroup='before',
-                    showlegend=(i == 0)
-                )
-            )
-        else:
-            fig.add_trace(
-                go.Bar(
-                    x=[model],
-                    y=[value],
-                    name="Before（処理前）",
-                    marker_color=color,
-                    legendgroup='before',
-                    showlegend=(i == 0)
-                )
-            )
+    # Afterトレース（1本のみ、4カテゴリ分のy配列を持つ）
+    fig.add_trace(
+        go.Bar(
+            name="After（処理後・濃色）",
+            x=models,
+            y=after_days,
+            marker_color=after_colors,
+            marker_line=dict(color='#CCCCCC', width=1.0),  # 全バー同じ薄いグレーの輪郭線
+        )
+    )
     
-    # After（濃い色）
-    after_colors = []
-    for model in models:
-        if model == '現行設定':
-            after_colors.append(COLOR_CURRENT)
-        elif model == '安全在庫①':
-            after_colors.append(COLOR_SS1_AFTER)
-        elif model == '安全在庫②':
-            after_colors.append(COLOR_SS2_AFTER)
-        elif model == '安全在庫③':
-            after_colors.append(COLOR_SS3_AFTER)
-    
-    for i, (model, value, color) in enumerate(zip(models, after_values, after_colors)):
-        if model == '現行設定':
-            fig.add_trace(
-                go.Bar(
-                    x=[model],
-                    y=[value],
-                    name="After（処理後）",
-                    marker_color=color,
-                    marker_line=dict(color='#666666', width=1.5),
-                    legendgroup='after',
-                    showlegend=(i == 0)
-                )
-            )
-        else:
-            fig.add_trace(
-                go.Bar(
-                    x=[model],
-                    y=[value],
-                    name="After（処理後）",
-                    marker_color=color,
-                    legendgroup='after',
-                    showlegend=(i == 0)
-                )
-            )
+    # デバッグ用：トレース数とデータを確認
+    print("DEBUG before_days:", before_days)
+    print("DEBUG after_days :", after_days)
+    print("DEBUG len(fig.data):", len(fig.data))
     
     fig.update_layout(
         title=f"{product_code} - 安全在庫（Before/After）",
-        xaxis=dict(title="モデル"),
+        xaxis=dict(
+            title="モデル",
+            categoryorder='array',
+            categoryarray=models  # X軸カテゴリの順序を固定
+        ),
         yaxis=dict(title="安全在庫日数"),
-        barmode='group',
-        bargap=0,  # 棒と棒の間隔をゼロ（完全密着）
-        bargroupgap=0,  # グループ間の間隔をゼロ（完全密着）
+        barmode="group",  # 必ずgroup
+        bargap=0.25,  # モデル間のすき間
+        bargroupgap=0.0,  # 同一モデル内の Before/After は密着
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
@@ -1822,7 +1823,7 @@ def create_adopted_model_comparison_charts(
                     y=[value],
                     name=model,
                     marker_color=color,
-                    marker_line=dict(color='#666666', width=1.5),
+                    marker_line=dict(color='#666666', width=1.0),  # 枠線の太さを標準に変更
                     showlegend=True
                 )
             )
@@ -1960,6 +1961,7 @@ def create_cap_comparison_bar_chart(
             # 採用モデルの色は、採用されたモデルに応じて決定
             before_colors.append(COLOR_SS2_AFTER if adopted_model_days == before_ss2_days else COLOR_SS3_AFTER)
     
+    # Before（カット前）- 全バーを"before"グループに統一
     for i, (model, value, color) in enumerate(zip(models, before_values, before_colors)):
         if model == '現行設定':
             fig.add_trace(
@@ -1968,8 +1970,9 @@ def create_cap_comparison_bar_chart(
                     y=[value],
                     name="カット前",
                     marker_color=color,
-                    marker_line=dict(color='#666666', width=1.5),
+                    marker_line=dict(color='#666666', width=1.0),  # 枠線の太さを標準に変更
                     legendgroup='before',
+                    offsetgroup='before',  # Before系を統一グループに
                     showlegend=(i == 0)
                 )
             )
@@ -1981,11 +1984,12 @@ def create_cap_comparison_bar_chart(
                     name="カット前",
                     marker_color=color,
                     legendgroup='before',
+                    offsetgroup='before',  # Before系を統一グループに
                     showlegend=(i == 0)
                 )
             )
     
-    # After（同じ色）
+    # After（カット後）- 全バーを"after"グループに統一
     after_colors = before_colors.copy()
     
     for i, (model, value, color) in enumerate(zip(models, after_values, after_colors)):
@@ -1996,8 +2000,9 @@ def create_cap_comparison_bar_chart(
                     y=[value],
                     name="カット後",
                     marker_color=color,
-                    marker_line=dict(color='#666666', width=1.5),
+                    marker_line=dict(color='#666666', width=1.0),  # 枠線の太さを標準に変更
                     legendgroup='after',
+                    offsetgroup='after',  # After系を統一グループに
                     showlegend=(i == 0)
                 )
             )
@@ -2009,6 +2014,7 @@ def create_cap_comparison_bar_chart(
                     name="カット後",
                     marker_color=color,
                     legendgroup='after',
+                    offsetgroup='after',  # After系を統一グループに
                     showlegend=(i == 0)
                 )
             )
@@ -2018,8 +2024,8 @@ def create_cap_comparison_bar_chart(
         xaxis=dict(title="モデル"),
         yaxis=dict(title="安全在庫日数"),
         barmode='group',
-        bargap=0,  # 棒と棒の間隔をゼロ（完全密着）
-        bargroupgap=0,  # グループ間の間隔をゼロ（完全密着）
+        bargap=0,  # 同じoffsetgroup内のバー間の間隔（各モデルごとに1本ずつなので影響なし）
+        bargroupgap=0.15,  # モデル間の間隔を広げて、各モデルが独立して視認できるように
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
