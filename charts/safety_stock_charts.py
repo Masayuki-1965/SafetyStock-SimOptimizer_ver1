@@ -1883,7 +1883,7 @@ def create_adopted_model_comparison_charts(
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
         showlegend=True,
-        margin=dict(l=50, r=80, t=100, b=80)  # 手順④・⑥と同じ余白幅を確保
+        margin=dict(l=50, r=40, t=100, b=80)  # 左側グラフを広く表示するため右マージンを縮小
     )
     
     # 右側グラフ：採用モデル専用
@@ -1904,6 +1904,7 @@ def create_adopted_model_comparison_charts(
             name=adopted_label,
             marker_color=adopted_color,
             marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
+            # widthパラメータを削除して左側のグラフと同じデフォルト幅に統一
             showlegend=False
         )
     )
@@ -1915,7 +1916,7 @@ def create_adopted_model_comparison_charts(
         barmode='group',
         height=500,
         showlegend=False,
-        margin=dict(l=50, r=80, t=100, b=80)  # 手順④・⑥と同じ余白幅を確保
+        margin=dict(l=10, r=30, t=100, b=80)  # 右側グラフをさらに狭く表示するため左右マージンを最小化
     )
     
     return fig_left, fig_right

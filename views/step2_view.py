@@ -1027,7 +1027,8 @@ def display_step2():
                     st.empty()  # 左側に空のスペースを確保（テーブルのインデックス列に対応）
                 with col_graphs:
                     # グラフ間の距離を縮める（中央の「➡」が収まる程度の間隔に調整）
-                    col_left, col_arrow, col_right = st.columns([4, 0.5, 4])
+                    # 左側のグラフを広く、右側のグラフを狭くしてバランスを改善
+                    col_left, col_arrow, col_right = st.columns([6.5, 0.5, 2])
                     
                     with col_left:
                         # 左側グラフ：候補モデル比較
