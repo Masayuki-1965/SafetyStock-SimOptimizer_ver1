@@ -1032,12 +1032,22 @@ def display_step2():
                     
                     with col_left:
                         # 左側グラフ：候補モデル比較
+                        # daily_actual_mean > 0 のガードを追加してゼロ除算を防止
+                        if daily_actual_mean > 0:
+                            ss1_days = final_results['model1_theoretical']['safety_stock'] / daily_actual_mean if final_results['model1_theoretical']['safety_stock'] is not None else None
+                            ss2_days = final_results['model2_empirical_actual']['safety_stock'] / daily_actual_mean
+                            ss3_days = final_results['model3_empirical_plan']['safety_stock'] / daily_actual_mean
+                        else:
+                            ss1_days = None
+                            ss2_days = 0
+                            ss3_days = 0
+                        
                         fig_left, fig_right = create_adopted_model_comparison_charts(
                             product_code=product_code,
                             current_days=final_results['current_safety_stock']['safety_stock_days'],
-                            ss1_days=final_results['model1_theoretical']['safety_stock'] / daily_actual_mean if final_results['model1_theoretical']['safety_stock'] is not None else None,
-                            ss2_days=final_results['model2_empirical_actual']['safety_stock'] / daily_actual_mean,
-                            ss3_days=final_results['model3_empirical_plan']['safety_stock'] / daily_actual_mean,
+                            ss1_days=ss1_days,
+                            ss2_days=ss2_days,
+                            ss3_days=ss3_days,
                             adopted_model=adopted_model,
                             is_ss1_undefined=final_results['model1_theoretical'].get('is_undefined', False)
                         )
@@ -2135,7 +2145,8 @@ def display_after_cap_comparison(product_code: str,
     current_ratios = []
     target_days_list = [after_ss1_days, after_ss2_days, after_ss3_days] if cap_applied else [before_ss1_days, before_ss2_days, before_ss3_days]
     for i, v in enumerate(target_days_list):
-        if i == 0 and (is_after_ss1_undefined if cap_applied else is_before_ss1_undefined) or v is None or v == 0.0:
+        # 演算子優先順位を修正：i == 0 のときのみ undefined/None/0.0 をチェック
+        if i == 0 and ((is_after_ss1_undefined if cap_applied else is_before_ss1_undefined) or v is None or v == 0.0):
             current_ratios.append("—")
         elif current_days > 0 and v is not None:
             ratio = v / current_days
