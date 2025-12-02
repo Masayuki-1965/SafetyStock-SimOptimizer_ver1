@@ -671,7 +671,7 @@ def display_step2():
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown('<div class="step-sub-section">異常値処理結果：実績データ Before/After 比較</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">実績異常値処理後：実績データ Before/After 比較結果</div>', unsafe_allow_html=True)
             
             # 詳細情報を表示（異常値が検出された場合のみ）
             # display_outlier_processing_results内でグラフも表示されるため、ここでは直接表示しない
@@ -790,7 +790,7 @@ def display_step2():
             )
             
             # LT間差分の分布（Before/After）
-            st.markdown('<div class="step-sub-section">異常値処理結果：リードタイム間差分の分布（ヒストグラム）Before/After 比較</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">実績異常値処理後：リードタイム間差分の分布（ヒストグラム）Before/After 比較結果</div>', unsafe_allow_html=True)
             lead_time_days = int(np.ceil(before_results['common_params']['lead_time_days']))
             stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
             before_data = st.session_state.get('step2_actual_data')
@@ -893,7 +893,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を最終決定します。<br>計画誤差率が大きい場合は安全在庫②を、許容範囲内の場合は安全在庫③を採用します。</div>
+        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を決定します。<br>
+        計画誤差率が大きい場合は <strong>安全在庫②（実績のバラつきを反映したモデル</strong>）、許容範囲内の場合は <strong>安全在庫③（計画誤差を考慮した推奨モデル</strong>）を採用します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -960,7 +961,7 @@ def display_step2():
                 st.markdown("""
                 <div class="annotation-warning-box">
                     <span class="icon">⚠</span>
-                    <div class="text"><strong>計画異常値処理：</strong>計画誤差率が計算できません。安全在庫②を代替採用します。</div>
+                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率が計算できません。安全在庫②を代替採用します。</div>
                 </div>
                 """, unsafe_allow_html=True)
                 adopted_model = "ss2"
@@ -970,7 +971,7 @@ def display_step2():
                 st.markdown(f"""
                 <div class="annotation-warning-box">
                     <span class="icon">⚠</span>
-                    <div class="text"><strong>計画異常値処理：</strong>計画誤差率が {plan_error_rate:.1f}％で、閾値（{plan_plus_threshold_final:.1f}％ / {plan_minus_threshold_final:.1f}％）を外れているため、安全在庫③は採用できません。安全在庫②を代替採用します。</div>
+                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率が {plan_error_rate:.1f}％で、閾値（{plan_plus_threshold_final:.1f}％ / {plan_minus_threshold_final:.1f}％）を外れているため、安全在庫③は採用できません。安全在庫②を代替採用します。</div>
                 </div>
                 """, unsafe_allow_html=True)
                 adopted_model = "ss2"
@@ -978,10 +979,7 @@ def display_step2():
             else:
                 # 正常値の場合
                 st.markdown(f"""
-                <div class="annotation-info-box">
-                    <span class="icon">ℹ</span>
-                    <div class="text"><strong>計画異常値処理：</strong>計画誤差率は {plan_error_rate:.1f}％で許容範囲内です。安全在庫③をそのまま採用します。</div>
-                </div>
+                <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率は {plan_error_rate:.1f}％で許容範囲内です。安全在庫③をそのまま採用します。</div>
                 """, unsafe_allow_html=True)
                 adopted_model = "ss3"
                 adopted_model_name = "安全在庫③（実測値：実績−計画）"
@@ -1401,10 +1399,9 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     
     # 1. 棒グラフを表示
     # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
-    # テーブルの「項目」列の幅（10%）分だけ右にずらす
-    col_left, col_graph = st.columns([0.1, 0.9])
+    col_left, col_graph = st.columns([0.12, 0.88])
     with col_left:
-        st.empty()  # 左側に空のスペースを確保（テーブルの「項目」列に対応）
+        st.empty()  # 左側に空のスペースを確保（テーブルのインデックス列に対応）
     with col_graph:
         fig = create_safety_stock_comparison_bar_chart(
             product_code=product_code,
@@ -1428,12 +1425,17 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
         theoretical_ratio = "—"
     else:
         theoretical_display = f"{theoretical_value:.2f}（{theoretical_days:.1f}日）"
+        # 現行比を1.00ベースの数値表示に変更
         theoretical_ratio = f"{theoretical_value / current_value:.2f}" if current_value > 0 else "—"
     
-    # テーブルの列構成を5列に固定（グラフのX軸カテゴリと完全同期）
-    # 順序：「項目」「現行設定」「安全在庫①」「安全在庫②」「安全在庫③（推奨モデル）」
+    # 現行比を1.00ベースの数値表示に変更
+    empirical_actual_ratio = f"{empirical_actual_value / current_value:.2f}" if current_value > 0 else "—"
+    empirical_plan_ratio = f"{empirical_plan_value / current_value:.2f}" if current_value > 0 else "—"
+    
+    # テーブルの列構成を手順⑥と同じ構造に変更
+    # 「項目」列を削除し、代わりにDataFrameのindexを使用
+    # 順序：「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」
     comparison_data = {
-        '項目': ['安全在庫数量（日数）', '現行比'],
         '現行設定': [
             f"{current_value:.2f}（{current_days:.1f}日）",
             "1.00"
@@ -1444,19 +1446,19 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
         ],
         '安全在庫②': [
             f"{empirical_actual_value:.2f}（{empirical_actual_days:.1f}日）",
-            f"{empirical_actual_value / current_value:.2f}" if current_value > 0 else "—"
+            empirical_actual_ratio
         ],
-        '安全在庫③（推奨モデル）': [
+        '安全在庫③': [
             f"{empirical_plan_value:.2f}（{empirical_plan_days:.1f}日）",
-            f"{empirical_plan_value / current_value:.2f}" if current_value > 0 else "—"
+            empirical_plan_ratio
         ]
     }
     
-    comparison_df = pd.DataFrame(comparison_data)
-    # set_indexを使わず、「項目」列も通常の列として表示（5列構成を維持）
+    # DataFrameのindexを使用して「項目」列を表現（手順⑥と同じ構造）
+    comparison_df = pd.DataFrame(comparison_data, index=['ベース_安全在庫数量（日数）', '現行比（÷現行）'])
     
     # 列幅を統一するためのスタイル設定
-    # 1列目「項目」を12%に固定、2-5列目を残りの88%を4等分（各22%）
+    # インデックス列を18%に固定（「ベース_安全在庫数量（日数）」を表示するため）、データ列を残りの82%を4等分（各20.5%）
     st.markdown("""
     <style>
     /* テーブル全体のレイアウトを固定 */
@@ -1464,21 +1466,19 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
         table-layout: fixed !important;
         width: 100% !important;
     }
-    /* 1列目「項目」を12%に固定（ラベル列なので最小限の幅） */
-    div[data-testid="stDataFrame"] th:nth-child(1),
-    div[data-testid="stDataFrame"] td:nth-child(1) {
-        width: 12% !important;
+    /* インデックス列を18%に固定（長いテキストを表示するため） */
+    div[data-testid="stDataFrame"] th:first-child,
+    div[data-testid="stDataFrame"] td:first-child {
+        width: 18% !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        line-height: 1.3 !important;
+        padding: 8px 4px !important;
     }
-    /* 2-5列目（現行設定、安全在庫①、安全在庫②、安全在庫③）を完全に等幅に（各22%） */
-    div[data-testid="stDataFrame"] th:nth-child(2),
-    div[data-testid="stDataFrame"] td:nth-child(2),
-    div[data-testid="stDataFrame"] th:nth-child(3),
-    div[data-testid="stDataFrame"] td:nth-child(3),
-    div[data-testid="stDataFrame"] th:nth-child(4),
-    div[data-testid="stDataFrame"] td:nth-child(4),
-    div[data-testid="stDataFrame"] th:nth-child(5),
-    div[data-testid="stDataFrame"] td:nth-child(5) {
-        width: 22% !important;
+    /* データ列（現行設定、安全在庫①、安全在庫②、安全在庫③）を完全に等幅に（各20.5%） */
+    div[data-testid="stDataFrame"] th:not(:first-child),
+    div[data-testid="stDataFrame"] td:not(:first-child) {
+        width: 20.5% !important;
     }
     /* 長いヘッダーは改行で対応（列幅は固定のまま） */
     div[data-testid="stDataFrame"] th {
@@ -1490,8 +1490,8 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     </style>
     """, unsafe_allow_html=True)
     
-    # インデックスを非表示にしてテーブルを表示
-    st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+    # インデックスを表示してテーブルを表示（手順⑥と同じ）
+    st.dataframe(comparison_df, use_container_width=True)
     
     # 算出条件テーブルを追加（折りたたみ式、初期状態は閉じる）
     # このブロックと上部のテーブルを一体的に見せたいので、間に余計なスペースは入れない
@@ -1560,11 +1560,11 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     # 正負で表現を変更
     if recommended_ratio < 1:
         # 現行設定より小さい場合：削減
-        effect_text = f"約 {abs(reduction_rate):.1f}% の在庫削減が期待できます"
+        effect_text = f"約 {round(abs(reduction_rate)):.0f}% の在庫削減が期待できます"
     else:
         # 現行設定より大きい場合：増加
         increase_rate = (recommended_ratio - 1) * 100
-        effect_text = f"約 {increase_rate:.1f}% の在庫増加となります"
+        effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります"
     
     st.markdown(f"""
     <div class="annotation-success-box">
@@ -1927,14 +1927,14 @@ def display_after_processing_comparison(product_code: str,
                 after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 現行比を計算（処理後_安全在庫（日数） ÷ 現行安全在庫（日数））
-    # パーセント表示にする
+    # 1.00ベースの数値表示にする
     current_ratios = []
     for i, v in enumerate([after_ss1_days, after_ss2_days, after_ss3_days]):
         if i == 0 and (is_after_ss1_undefined or v is None or v == 0.0):
             current_ratios.append("—")
         elif current_days > 0 and v is not None:
             ratio = v / current_days
-            current_ratios.append(f"{ratio * 100:.1f}%")
+            current_ratios.append(f"{ratio:.2f}")
         else:
             current_ratios.append("—")
     
@@ -1942,7 +1942,7 @@ def display_after_processing_comparison(product_code: str,
     # 処理前と処理後は常に同じ値なので「同上」と表示
     current_display_before = f"{current_value:.2f}（{current_days:.1f}日）"
     current_display_after = "同上"
-    current_ratio_display = "100.0%"
+    current_ratio_display = "1.00"
     
     # 欠品許容率とZの対応表示を取得
     stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
@@ -1989,11 +1989,11 @@ def display_after_processing_comparison(product_code: str,
         # 正負で表現を変更
         if recommended_ratio < 1:
             # 現行設定より小さい場合：削減
-            effect_text = f"約 {abs(reduction_rate):.1f}% の在庫削減が期待できます"
+            effect_text = f"約 {round(abs(reduction_rate)):.0f}% の在庫削減が期待できます"
         else:
             # 現行設定より大きい場合：増加
             increase_rate = (recommended_ratio - 1) * 100
-            effect_text = f"約 {increase_rate:.1f}% の在庫増加となります"
+            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります"
         
         st.markdown(f"""
         <div class="annotation-success-box">
