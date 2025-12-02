@@ -1021,27 +1021,33 @@ def display_step2():
                     st.success(f"✅ 採用モデル：安全在庫③（実測値：実績−計画）を採用しました。")
                 
                 # b) 棒グラフ（左右２グラフ＋中央に「➡」表示）
-                col_left, col_arrow, col_right = st.columns([3, 1, 3])
-                
-                with col_left:
-                    # 左側グラフ：候補モデル比較
-                    fig_left, fig_right = create_adopted_model_comparison_charts(
-                        product_code=product_code,
-                        current_days=final_results['current_safety_stock']['safety_stock_days'],
-                        ss1_days=final_results['model1_theoretical']['safety_stock'] / daily_actual_mean if final_results['model1_theoretical']['safety_stock'] is not None else None,
-                        ss2_days=final_results['model2_empirical_actual']['safety_stock'] / daily_actual_mean,
-                        ss3_days=final_results['model3_empirical_plan']['safety_stock'] / daily_actual_mean,
-                        adopted_model=adopted_model,
-                        is_ss1_undefined=final_results['model1_theoretical'].get('is_undefined', False)
-                    )
-                    st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}")
-                
-                with col_arrow:
-                    st.markdown("<h2 style='text-align: center; margin-top: 200px;'>➡</h2>", unsafe_allow_html=True)
-                
-                with col_right:
-                    # 右側グラフ：採用モデル専用
-                    st.plotly_chart(fig_right, use_container_width=True, key=f"adopted_model_right_{product_code}")
+                # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
+                col_left_space, col_graphs = st.columns([0.12, 0.88])
+                with col_left_space:
+                    st.empty()  # 左側に空のスペースを確保（テーブルのインデックス列に対応）
+                with col_graphs:
+                    # グラフ間の距離を縮める（中央の「➡」が収まる程度の間隔に調整）
+                    col_left, col_arrow, col_right = st.columns([4, 0.5, 4])
+                    
+                    with col_left:
+                        # 左側グラフ：候補モデル比較
+                        fig_left, fig_right = create_adopted_model_comparison_charts(
+                            product_code=product_code,
+                            current_days=final_results['current_safety_stock']['safety_stock_days'],
+                            ss1_days=final_results['model1_theoretical']['safety_stock'] / daily_actual_mean if final_results['model1_theoretical']['safety_stock'] is not None else None,
+                            ss2_days=final_results['model2_empirical_actual']['safety_stock'] / daily_actual_mean,
+                            ss3_days=final_results['model3_empirical_plan']['safety_stock'] / daily_actual_mean,
+                            adopted_model=adopted_model,
+                            is_ss1_undefined=final_results['model1_theoretical'].get('is_undefined', False)
+                        )
+                        st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}")
+                    
+                    with col_arrow:
+                        st.markdown("<h2 style='text-align: center; margin-top: 200px;'>➡</h2>", unsafe_allow_html=True)
+                    
+                    with col_right:
+                        # 右側グラフ：採用モデル専用
+                        st.plotly_chart(fig_right, use_container_width=True, key=f"adopted_model_right_{product_code}")
                 
                 # c) テーブル
                 theoretical_value = final_results['model1_theoretical']['safety_stock']
@@ -1085,15 +1091,19 @@ def display_step2():
                 
                 comparison_df = pd.DataFrame(comparison_data, index=['安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
                 
-                # 採用モデル列をハイライト
-                def highlight_adopted_model(val):
-                    if isinstance(val, str) and '採用モデル' in str(val):
-                        return 'background-color: #90EE90; font-weight: bold;'
-                    return ''
+                # 採用モデル列をハイライト（安全在庫③と同じ薄い緑に統一）
+                # 安全在庫③の色: rgba(100, 200, 150, 0.8) をテーブルの背景色として使用
+                # 白色背景にrgba(100, 200, 150, 0.8)を重ねた場合の色を計算
+                # R: 100*0.8 + 255*0.2 = 80 + 51 = 131
+                # G: 200*0.8 + 255*0.2 = 160 + 51 = 211
+                # B: 150*0.8 + 255*0.2 = 120 + 51 = 171
+                # → rgb(131, 211, 171) → #83D3AB
+                # テーブルの背景色として使用する場合は、より薄い色を使用
+                adopted_model_bg_color = '#B4E6D1'  # 安全在庫③の色系統（rgba(100, 200, 150, 0.8)）に基づいた薄い緑
                 
                 # 列名で採用モデル列を特定
                 styled_df = comparison_df.style.applymap(
-                    lambda x: 'background-color: #90EE90; font-weight: bold;' if isinstance(x, str) and x != '' else '',
+                    lambda x: f'background-color: {adopted_model_bg_color}; font-weight: bold;' if isinstance(x, str) and x != '' else '',
                     subset=['採用モデル']
                 )
                 st.dataframe(styled_df, use_container_width=True)
@@ -1106,6 +1116,7 @@ def display_step2():
                     <div class="annotation-success-box">
                         <span class="icon">✅</span>
                         <div class="text"><strong>在庫削減効果：</strong>計画異常値処理により {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）</div>
+                        <div class="text"><strong>採用モデル：</strong>{adopted_model_name}</div>
                     </div>
                     """, unsafe_allow_html=True)
             

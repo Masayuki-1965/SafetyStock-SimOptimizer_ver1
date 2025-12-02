@@ -1833,17 +1833,17 @@ def create_adopted_model_comparison_charts(
     if not is_ss1_undefined and ss1_days is not None:
         models.append('安全在庫①')
         values.append(ss1_days)
-        colors.append(COLOR_SS1_AFTER)
+        colors.append(COLOR_SS1_BEFORE)  # 手順④・⑥と同じベースカラーに統一
     
     # 安全在庫②
     models.append('安全在庫②')
     values.append(ss2_days)
-    colors.append(COLOR_SS2_AFTER)
+    colors.append(COLOR_SS2_BEFORE)  # 手順④・⑥と同じベースカラーに統一
     
     # 安全在庫③
     models.append('安全在庫③')
     values.append(ss3_days)
-    colors.append(COLOR_SS3_AFTER)
+    colors.append(COLOR_SS3_BEFORE)  # 手順④・⑥と同じベースカラーに統一
     
     # Y軸の範囲を決定
     all_values = [v for v in values if v is not None]
@@ -1876,24 +1876,25 @@ def create_adopted_model_comparison_charts(
             )
     
     fig_left.update_layout(
-        title="安全在庫候補モデルの比較",
+        title=f"{product_code} - 実績異常値処理後_安全在庫比較",  # 商品コードを動的表示
         xaxis=dict(title="モデル"),
         yaxis=dict(title="安全在庫日数", range=[y_min, y_max]),
         barmode='group',
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-        showlegend=True
+        showlegend=True,
+        margin=dict(l=50, r=80, t=100, b=80)  # 手順④・⑥と同じ余白幅を確保
     )
     
     # 右側グラフ：採用モデル専用
     fig_right = go.Figure()
     if adopted_model == "ss2":
         adopted_value = ss2_days
-        adopted_color = COLOR_SS2_AFTER
+        adopted_color = COLOR_SS2_BEFORE  # 手順④・⑥と同じベースカラーに統一
         adopted_label = "安全在庫②（採用）"
     else:  # ss3
         adopted_value = ss3_days
-        adopted_color = COLOR_SS3_AFTER
+        adopted_color = COLOR_SS3_BEFORE  # 手順④・⑥と同じベースカラーに統一
         adopted_label = "安全在庫③（採用）"
     
     fig_right.add_trace(
@@ -1902,18 +1903,19 @@ def create_adopted_model_comparison_charts(
             y=[adopted_value],
             name=adopted_label,
             marker_color=adopted_color,
-            marker_line=dict(color='#000000', width=2.5),  # 太い枠線で強調
+            marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
             showlegend=False
         )
     )
     
     fig_right.update_layout(
-        title="採用されたモデル",
+        title=f"{product_code} - 採用モデル",  # 商品コードを動的表示
         xaxis=dict(title="モデル"),
         yaxis=dict(title="", range=[y_min, y_max], showticklabels=False),  # Y軸ラベル非表示
         barmode='group',
         height=500,
-        showlegend=False
+        showlegend=False,
+        margin=dict(l=50, r=80, t=100, b=80)  # 手順④・⑥と同じ余白幅を確保
     )
     
     return fig_left, fig_right
