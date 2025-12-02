@@ -1486,7 +1486,7 @@ def create_after_processing_comparison_chart(product_code: str,
 # カラーガイドライン（全グラフ共通）
 # ========================================
 # Before（薄い色）
-COLOR_CURRENT = '#FFFFFF'  # 白色
+COLOR_CURRENT = 'rgba(220, 220, 220, 0.5)'  # 薄いグレー（安全在庫②より薄く）
 COLOR_SS1_BEFORE = 'rgba(255, 100, 100, 0.7)'  # 薄い赤系
 COLOR_SS2_BEFORE = 'rgba(128, 128, 128, 0.8)'  # 薄いグレー
 COLOR_SS3_BEFORE = 'rgba(100, 200, 150, 0.8)'  # 薄い緑色
@@ -1710,24 +1710,39 @@ def create_before_after_comparison_bar_chart(
     after_marker_line_colors = ['#999999' if i == 0 else 'rgba(0,0,0,0)' for i in range(4)]
     after_marker_line_widths = [1.0 if i == 0 else 0 for i in range(4)]
     
-    # パターンの設定：Afterのみ斜線パターン（配列で指定）
-    before_pattern_shapes = [None] * 4
-    after_pattern_shapes = ['/'] * 4
+    # パターンの設定：Beforeのみ斜線パターン（配列で指定）、Afterは単色
+    before_pattern_shapes = ['/'] * 4  # Beforeに斜線パターン
+    # Afterは単色なので、pattern_shapeは指定しない
+    
+    # 現行設定の斜線パターンの色を設定（薄いグレーの斜線）
+    # 現行設定のBeforeは「薄いグレーの斜線（斜線外が無地）」、Afterは「全面が薄いグレーの単色」
+    # pattern_shapeで斜線を指定する場合、pattern_fgcolorで斜線の色を指定できる
+    # 現行設定のBeforeは薄いグレーのベースに薄いグレーの斜線を重ねる
+    # pattern_fgcolorにはNoneを含めることができないため、すべての要素に有効な色を指定する
+    # 現行設定のみ特別な色を指定し、他の要素はベースカラーと同じ色を使用（pattern_shapeが'/'なので斜線の色として使用される）
+    before_pattern_fgcolors = [
+        'rgba(180, 180, 180, 0.6)' if i == 0 else before_colors[i]  # 現行設定のみ特別な色、他はベースカラーと同じ
+        for i in range(4)
+    ]
     
     # Figureを作成
     fig = go.Figure()
     
     # Beforeトレース：1つのトレースで4つのカテゴリすべてを含む（レイアウトを維持）
-    # 凡例に□シンボルを表示するため、nameにUnicode文字を含める
+    # 凡例は文字だけを表示
     fig.add_trace(
         go.Bar(
-            name="□ Before（処理前・薄色）",
+            name="Before（処理前・斜線）",
             x=models,
             y=before_days,
-            marker_color=before_colors,
-            marker_line=dict(
-                color=before_marker_line_colors,
-                width=before_marker_line_widths
+            marker=dict(
+                color=before_colors,
+                line=dict(
+                    color=before_marker_line_colors,
+                    width=before_marker_line_widths
+                ),
+                pattern_shape=before_pattern_shapes,  # Beforeに斜線パターン
+                pattern_fgcolor=before_pattern_fgcolors  # 現行設定の斜線の色を指定
             ),
             showlegend=True,
             legendgroup='before'
@@ -1735,10 +1750,11 @@ def create_before_after_comparison_bar_chart(
     )
     
     # Afterトレース：1つのトレースで4つのカテゴリすべてを含む（レイアウトを維持）
-    # 凡例に斜線シンボル（▨）を表示するため、nameにUnicode文字を含める
+    # 凡例は文字だけを表示
+    # Afterは単色なので、pattern_shapeは指定しない
     fig.add_trace(
         go.Bar(
-            name="▨ After（処理後・斜線付き）",
+            name="After（処理後・単色）",
             x=models,
             y=after_days,
             marker=dict(
@@ -1746,8 +1762,8 @@ def create_before_after_comparison_bar_chart(
                 line=dict(
                     color=after_marker_line_colors,
                     width=after_marker_line_widths
-                ),
-                pattern_shape=after_pattern_shapes  # 斜線パターン（配列で指定：現行設定を含むすべてに適用）
+                )
+                # pattern_shapeは指定しない（単色のため）
             ),
             showlegend=True,
             legendgroup='after'

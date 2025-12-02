@@ -1904,28 +1904,45 @@ def display_after_processing_comparison(product_code: str,
             before_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 処理後の安全在庫数量（日数）を表示形式で作成
+    # 処理前と同じ値の場合は「同上」と表示
     after_display = []
     for i, (qty, days) in enumerate(zip(after_quantities, [after_ss1_days, after_ss2_days, after_ss3_days])):
         if i == 0 and (is_after_ss1_undefined or qty is None or days is None or days == 0.0):
             after_display.append("—")
         else:
-            after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
+            # 処理前の値と比較
+            before_qty = before_quantities[i]
+            before_days_val = [before_ss1_days, before_ss2_days, before_ss3_days][i]
+            
+            # 処理前が「—」の場合は比較しない
+            if i == 0 and (is_before_ss1_undefined or before_qty is None or before_days_val is None or before_days_val == 0.0):
+                after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
+            # 処理前と処理後の値が同じ場合は「同上」と表示
+            elif before_qty is not None and qty is not None and before_days_val is not None and days is not None:
+                if abs(before_qty - qty) < 0.01 and abs(before_days_val - days) < 0.01:
+                    after_display.append("同上")
+                else:
+                    after_display.append(f"{qty:.2f}（{days:.1f}日）")
+            else:
+                after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 現行比を計算（処理後_安全在庫（日数） ÷ 現行安全在庫（日数））
+    # パーセント表示にする
     current_ratios = []
     for i, v in enumerate([after_ss1_days, after_ss2_days, after_ss3_days]):
         if i == 0 and (is_after_ss1_undefined or v is None or v == 0.0):
             current_ratios.append("—")
         elif current_days > 0 and v is not None:
             ratio = v / current_days
-            current_ratios.append(f"{ratio:.2f}")
+            current_ratios.append(f"{ratio * 100:.1f}%")
         else:
             current_ratios.append("—")
     
     # 現行安全在庫の表示形式を作成
+    # 処理前と処理後は常に同じ値なので「同上」と表示
     current_display_before = f"{current_value:.2f}（{current_days:.1f}日）"
-    current_display_after = "同左"
-    current_ratio_display = "1.00"
+    current_display_after = "同上"
+    current_ratio_display = "100.0%"
     
     # 欠品許容率とZの対応表示を取得
     stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
