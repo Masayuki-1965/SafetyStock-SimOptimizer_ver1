@@ -1160,6 +1160,19 @@ def display_step2():
                     
                     # 統合メッセージを1つのブロックとして表示
                     st.success(f"✅ 採用モデル：{model_display_name}を採用しました。在庫削減効果：計画異常値処理により {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）。")
+                elif current_days <= 0:
+                    # 採用モデル名を統合メッセージ用の形式に変換
+                    if adopted_model == "ss2":
+                        model_display_name = "安全在庫②（実測値－実績平均）"
+                    else:
+                        model_display_name = "安全在庫③（実測値：実績−計画）"
+                    
+                    st.markdown(f"""
+                    <div class="annotation-success-box">
+                        <span class="icon">✅</span>
+                        <div class="text"><strong>採用モデル：</strong>{model_display_name}を採用しました。<strong>在庫削減効果：</strong>現行設定がないため、削減効果を計算できません。</div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             st.divider()
     
@@ -1607,24 +1620,32 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
         # 上限カットが適用されていない場合は何も表示しない
     
     # 在庫削減効果メッセージを追加
-    recommended_ratio = empirical_plan_value / current_value if current_value > 0 else 0
-    reduction_rate = (1 - recommended_ratio) * 100
-    
-    # 正負で表現を変更
-    if recommended_ratio < 1:
-        # 現行設定より小さい場合：削減
-        effect_text = f"約 {round(abs(reduction_rate)):.0f}% の在庫削減が期待できます"
+    if current_value > 0:
+        recommended_ratio = empirical_plan_value / current_value
+        reduction_rate = (1 - recommended_ratio) * 100
+        
+        # 正負で表現を変更
+        if recommended_ratio < 1:
+            # 現行設定より小さい場合：削減
+            effect_text = f"約 {round(abs(reduction_rate)):.0f}% の在庫削減が期待できます"
+        else:
+            # 現行設定より大きい場合：増加
+            increase_rate = (recommended_ratio - 1) * 100
+            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります"
+        
+        st.markdown(f"""
+        <div class="annotation-success-box">
+            <span class="icon">✅</span>
+            <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        # 現行設定より大きい場合：増加
-        increase_rate = (recommended_ratio - 1) * 100
-        effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります"
-    
-    st.markdown(f"""
-    <div class="annotation-success-box">
-        <span class="icon">✅</span>
-        <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("""
+        <div class="annotation-success-box">
+            <span class="icon">✅</span>
+            <div class="text"><strong>在庫削減効果：</strong>現行設定がないため、削減効果を計算できません。</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def display_outlier_processing_results(product_code: str,
@@ -1870,6 +1891,7 @@ def display_after_processing_comparison(product_code: str,
     """処理後の安全在庫再算出結果を表示（Before/After比較）"""
     
     # 平均需要を取得（安全在庫日数に変換するため）
+    # 比較の一貫性を保つため、処理前のデータの平均を基準として使用する
     before_mean_demand = before_calculator.actual_data.mean() if before_calculator and hasattr(before_calculator, 'actual_data') else 1.0
     after_mean_demand = after_calculator.actual_data.mean() if after_calculator and hasattr(after_calculator, 'actual_data') else 1.0
     
@@ -1884,13 +1906,15 @@ def display_after_processing_comparison(product_code: str,
     current_value = before_results['current_safety_stock']['safety_stock']
     
     # 安全在庫数量を安全在庫日数に変換
+    # 比較の一貫性を保つため、処理前のデータの平均を基準として使用する
     before_ss1_days = before_results['model1_theoretical']['safety_stock'] / before_mean_demand if before_results['model1_theoretical']['safety_stock'] is not None else None
     before_ss2_days = before_results['model2_empirical_actual']['safety_stock'] / before_mean_demand
     before_ss3_days = before_results['model3_empirical_plan']['safety_stock'] / before_mean_demand
     
-    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / after_mean_demand if after_results['model1_theoretical']['safety_stock'] is not None else None
-    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / after_mean_demand
-    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / after_mean_demand
+    # 処理後の安全在庫も、処理前のデータの平均で日数換算する（比較の一貫性のため）
+    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / before_mean_demand if after_results['model1_theoretical']['safety_stock'] is not None else None
+    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / before_mean_demand
+    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / before_mean_demand
     
     # 安全在庫①が未定義かどうか
     is_before_ss1_undefined = before_results['model1_theoretical'].get('is_undefined', False) or before_results['model1_theoretical']['safety_stock'] is None
@@ -1922,7 +1946,7 @@ def display_after_processing_comparison(product_code: str,
             after_ss3_days=after_ss3_days,
             is_before_ss1_undefined=is_before_ss1_undefined,
             is_after_ss1_undefined=is_after_ss1_undefined,
-            mean_demand=after_mean_demand,
+            mean_demand=before_mean_demand,  # 比較の一貫性のため、処理前のデータの平均を使用
             current_value=current_value,
             before_ss1_value=before_ss1_value,
             before_ss2_value=before_ss2_value,
@@ -2035,7 +2059,14 @@ def display_after_processing_comparison(product_code: str,
     st.dataframe(comparison_df, use_container_width=True)
     
     # 3. テキストボックス型注釈を表示
-    if after_ss3_days is not None and current_days > 0:
+    if current_days <= 0:
+        st.markdown("""
+        <div class="annotation-success-box">
+            <span class="icon">✅</span>
+            <div class="text"><strong>在庫削減効果：</strong>現行設定がないため、削減効果を計算できません。</div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif after_ss3_days is not None:
         recommended_ratio = after_ss3_days / current_days
         
         # 異常値が検出されたかどうかを判定
@@ -2076,13 +2107,6 @@ def display_after_processing_comparison(product_code: str,
                 <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
             </div>
             """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="annotation-success-box">
-            <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>安全在庫③の値が取得できないため、削減効果を計算できません。</div>
-        </div>
-        """, unsafe_allow_html=True)
 
 
 def display_after_cap_comparison(product_code: str,
@@ -2128,9 +2152,10 @@ def display_after_cap_comparison(product_code: str,
     before_ss3_days = before_results['model3_empirical_plan']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
     
     # 処理後の安全在庫数量を取得
-    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / after_mean_demand if (after_results['model1_theoretical']['safety_stock'] is not None and after_mean_demand > 0) else None
-    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / after_mean_demand if after_mean_demand > 0 else 0
-    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / after_mean_demand if after_mean_demand > 0 else 0
+    # 比較の一貫性を保つため、処理前のデータの平均を基準として使用する
+    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / before_mean_demand if (after_results['model1_theoretical']['safety_stock'] is not None and before_mean_demand > 0) else None
+    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
+    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
     
     # 採用モデルの日数（デフォルトはss3）
     if adopted_model_days is None:
@@ -2236,7 +2261,7 @@ def display_after_cap_comparison(product_code: str,
         ],
         '採用モデル': [
             f"{adopted_model_days * before_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",
-            f"{adopted_model_days * after_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",
+            f"{adopted_model_days * before_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",  # 比較の一貫性のため、処理前のデータの平均を使用
             f"{adopted_model_days / current_days:.2f}" if (adopted_model_days is not None and current_days > 0) else "—"
         ]
     }
@@ -2245,20 +2270,20 @@ def display_after_cap_comparison(product_code: str,
     st.dataframe(comparison_df, use_container_width=True)
     
     # 3. テキストボックス型注釈を表示
-    if adopted_model_days is not None and current_days > 0:
+    if current_days <= 0:
+        st.markdown("""
+        <div class="annotation-success-box">
+            <span class="icon">✅</span>
+            <div class="text"><strong>在庫削減効果：</strong>現行設定がないため、削減効果を計算できません。</div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif adopted_model_days is not None:
         reduction_days = current_days - adopted_model_days
         reduction_rate = (reduction_days / current_days * 100) if current_days > 0 else 0
         st.markdown(f"""
         <div class="annotation-success-box">
             <span class="icon">✅</span>
             <div class="text"><strong>在庫削減効果：</strong>上限カットにより {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）</div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="annotation-success-box">
-            <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>採用モデルの値が取得できないため、削減効果を計算できません。</div>
         </div>
         """, unsafe_allow_html=True)
 
