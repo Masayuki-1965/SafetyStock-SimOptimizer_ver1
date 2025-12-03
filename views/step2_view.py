@@ -6,6 +6,7 @@ STEP2 ビュー
 import streamlit as st
 import pandas as pd
 import numpy as np
+from typing import Optional
 from modules.data_loader import DataLoader
 from modules.safety_stock_models import SafetyStockCalculator
 from modules.outlier_handler import OutlierHandler
@@ -1006,7 +1007,7 @@ def display_step2():
                 st.session_state.step2_adopted_model = adopted_model
                 st.session_state.step2_adopted_model_name = adopted_model_name
                 st.session_state.step2_adopted_safety_stock = adopted_safety_stock
-                st.success(f"✅ 採用モデル：{adopted_model_name}を採用しました。")
+                # メッセージは結果表示時に統合メッセージとして表示するため、ここでは表示しない
                 st.rerun()
             
             if st.session_state.get('step2_adopted_model') is not None:
@@ -1016,14 +1017,9 @@ def display_step2():
                 
                 st.markdown('<div class="step-sub-section">計画異常値処理後：安全在庫比較結果</div>', unsafe_allow_html=True)
                 
-                # a) 採用モデル確定メッセージ（バナー）
+                # a) 採用モデル確定メッセージ（バナー）は削除し、統合メッセージに統合
                 daily_actual_mean = final_calculator.actual_data.mean()
                 adopted_safety_stock_days = adopted_safety_stock / daily_actual_mean if daily_actual_mean > 0 else 0
-                
-                if adopted_model == "ss2":
-                    st.success(f"✅ 採用モデル：安全在庫②（実測値：実績−平均）を採用しました。")
-                else:
-                    st.success(f"✅ 採用モデル：安全在庫③（実測値：実績−計画）を採用しました。")
                 
                 # b) 棒グラフ（左右２グラフ＋中央に「➡」表示）
                 # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
@@ -1151,17 +1147,19 @@ def display_step2():
                 """, unsafe_allow_html=True)
                 st.dataframe(styled_df, use_container_width=True)
                 
-                # d) 注釈
+                # d) 統合された結論メッセージ（注釈）
                 if adopted_safety_stock_days is not None and current_days > 0:
                     reduction_days = current_days - adopted_safety_stock_days
                     reduction_rate = (reduction_days / current_days * 100) if current_days > 0 else 0
-                    st.markdown(f"""
-                    <div class="annotation-success-box">
-                        <span class="icon">✅</span>
-                        <div class="text"><strong>在庫削減効果：</strong>計画異常値処理により {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）</div>
-                        <div class="text"><strong>採用モデル：</strong>{adopted_model_name}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    
+                    # 採用モデル名を統合メッセージ用の形式に変換
+                    if adopted_model == "ss2":
+                        model_display_name = "安全在庫②（実測値－実績平均）"
+                    else:
+                        model_display_name = "安全在庫③（実測値：実績−計画）"
+                    
+                    # 統合メッセージを1つのブロックとして表示
+                    st.success(f"✅ 採用モデル：{model_display_name}を採用しました。在庫削減効果：計画異常値処理により {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）。")
             
             st.divider()
     
@@ -2093,7 +2091,7 @@ def display_after_cap_comparison(product_code: str,
                                  before_calculator: SafetyStockCalculator,
                                  after_calculator: SafetyStockCalculator,
                                  cap_applied: bool = True,
-                                 adopted_model_days: float = None):
+                                 adopted_model_days: Optional[float] = None):
     """上限カット適用前後の安全在庫比較結果を表示
     
     Args:
