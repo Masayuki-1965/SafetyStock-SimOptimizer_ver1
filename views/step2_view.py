@@ -256,7 +256,8 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">安全在庫算出に必要な条件（リードタイム、欠品許容率、標準偏差の計算方法）を設定します。<br>これらの設定値は、後続の手順で使用される安全在庫モデルの算出に影響します。</div>
+    <div class="step-description">安全在庫の算出に必要な条件（<strong>リードタイム</strong>、<strong>欠品許容率</strong>）を設定します。<br>
+    これらの設定値は、後続の手順で適用される安全在庫モデルの結果に直接影響します。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -307,7 +308,8 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、実績のバラつき（実績−平均）と計画誤差率（実績−計画）を可視化します。<br>これらの差分を時系列グラフと統計情報で確認することで、安全在庫を設定する際の根拠となるデータの特性を把握できます。</div>
+    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、<strong>実績のバラつき（実績−平均）</strong>と <strong>計画誤差（実績−計画）</strong> を可視化します。<br>
+    時系列グラフと統計情報により、需要変動の大きさや計画精度を把握し、<strong>次の手順④で安全在庫を算出するための前提となるデータ特性</strong> を確認します。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -442,7 +444,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">リードタイム間差分の分布を分析し、3種類の安全在庫モデル（理論値・実測値（実績−平均）・実測値（実績−計画））を算出します。<br>ヒストグラムで分布の形状を確認し、各モデルの安全在庫ラインがどのように設定されるかを理解できます。</div>
+        <div class="step-description">リードタイム間差分に基づく <strong>2つの実測モデル（安全在庫②・③）</strong>を中心に、比較指標として <strong>理論モデル（安全在庫①）</strong>も算出し、3種類の安全在庫を比較・評価します。<br>
+        ヒストグラムで「実績のばらつき」や「計画誤差」の分布の形状を確認し、各モデルの安全在庫ラインがどのように導かれるかを理解できます。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -562,7 +565,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">需要データに含まれる統計的な上振れ異常値を検出し、設定した上限値へ補正します。<br>スパイク（突発的に跳ね上がる異常な値）を抑えることで、安全在庫が過大に算定されるのを防ぎ、結果を安定させます。</div>
+        <div class="step-description">実績データに含まれる <strong>統計的スパイク（異常な上振れ値）</strong>を検出し、設定した <strong>上限値（異常基準）</strong>へ補正します。<br>
+        突発的に大きく跳ね上がる値を抑えることで、安全在庫が過大に算定されることを防ぎ、算出結果の妥当性を高めます。</div>
         """, unsafe_allow_html=True)
         
         # 実績異常値処理パラメータ設定
@@ -716,7 +720,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">実績異常値補正が安全在庫の算定結果にどの程度影響するかを確認します。</div>
+        <div class="step-description">実績異常値補正を反映した安全在庫を再算出し、<strong>補正前（Before）との違い </strong>がどの程度生じるかを比較・把握します。<br>
+補正が安全在庫の設定に与える影響を確認し、より妥当なモデルを選択します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -893,8 +898,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">計画誤差率を計算し、計画異常値処理の判定結果に基づいて、安全在庫として採用するモデル（②または③）を決定します。<br>
-        計画誤差率が大きい場合は <strong>安全在庫②（実績のバラつきを反映したモデル</strong>）、許容範囲内の場合は <strong>安全在庫③（計画誤差を考慮した推奨モデル</strong>）を採用します。</div>
+        <div class="step-description">計画誤差率を計算し、その判定結果に基づいて、安全在庫として採用するモデル（②または③）を決定します。<br>
+        計画誤差率が大きい場合は <strong>安全在庫②（実績のバラつきを反映したモデル）</strong>、許容範囲内の場合は <strong>安全在庫③（計画誤差を考慮した推奨モデル）</strong>を採用します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -1141,7 +1146,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">異常値処理後の安全在庫が過大にならないよう、区分別の上限日数で安全在庫を調整します。<br>上限日数は区分ごとに設定でき、0を入力すると上限なしとなります。</div>
+        <div class="step-description">異常値処理後の安全在庫が過大にならないよう、<strong>区分別の上限日数を適用</strong>して安全在庫を調整します。<br>
+        上限日数は区分ごとに設定でき、<strong>0 を入力した場合は上限なし（制限なし）</strong>として扱います。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -2006,23 +2012,45 @@ def display_after_processing_comparison(product_code: str,
     # 3. テキストボックス型注釈を表示
     if after_ss3_days is not None and current_days > 0:
         recommended_ratio = after_ss3_days / current_days
-        reduction_rate = (1 - recommended_ratio) * 100
         
-        # 正負で表現を変更
-        if recommended_ratio < 1:
-            # 現行設定より小さい場合：削減
-            effect_text = f"約 {round(abs(reduction_rate)):.0f}% の在庫削減が期待できます"
+        # 異常値が検出されたかどうかを判定
+        processing_info = st.session_state.get('step2_processing_info', {})
+        is_skipped = processing_info.get('skipped', False)
+        candidate_count = processing_info.get('candidate_count', 0)
+        outlier_detected = not is_skipped and candidate_count > 0
+        
+        # 安全在庫③への影響の有無を判定（処理前後の値を比較）
+        before_ss3_value = before_results['model3_empirical_plan']['safety_stock']
+        after_ss3_value = after_results['model3_empirical_plan']['safety_stock']
+        ss3_changed = before_ss3_value is not None and after_ss3_value is not None and abs(before_ss3_value - after_ss3_value) >= 0.01
+        
+        # 異常値が検出されなかった場合、かつ安全在庫③に変更がない場合
+        if not outlier_detected and not ss3_changed:
+            st.markdown(f"""
+            <div class="annotation-success-box">
+                <span class="icon">✅</span>
+                <div class="text"><strong>在庫削減効果：</strong>異常値は検出されなかったため、安全在庫③（推奨モデル）の現行比 {recommended_ratio:.2f} に変更はありません。</div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            # 現行設定より大きい場合：増加
-            increase_rate = (recommended_ratio - 1) * 100
-            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります"
-        
-        st.markdown(f"""
-        <div class="annotation-success-box">
-            <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
-        </div>
-        """, unsafe_allow_html=True)
+            # 異常値が検出された場合、または安全在庫③に変更があった場合
+            reduction_rate = (1 - recommended_ratio) * 100
+            
+            # 正負で表現を変更
+            if recommended_ratio < 1:
+                # 現行設定より小さい場合：削減
+                effect_text = f"約 {round(abs(reduction_rate)):.0f}% の在庫削減が期待できます"
+            else:
+                # 現行設定より大きい場合：増加
+                increase_rate = (recommended_ratio - 1) * 100
+                effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります"
+            
+            st.markdown(f"""
+            <div class="annotation-success-box">
+                <span class="icon">✅</span>
+                <div class="text"><strong>在庫削減効果：</strong>安全在庫③（推奨モデル）は現行比 {recommended_ratio:.2f} で、{effect_text}。</div>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.markdown("""
         <div class="annotation-success-box">
