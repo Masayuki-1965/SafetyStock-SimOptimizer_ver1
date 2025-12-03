@@ -676,7 +676,7 @@ def display_step2():
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown('<div class="step-sub-section">実績異常値処理後：実績データ Before/After 比較結果</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">実績異常値処理後：実績データ比較結果（Before/After）</div>', unsafe_allow_html=True)
             
             # 詳細情報を表示（異常値が検出された場合のみ）
             # display_outlier_processing_results内でグラフも表示されるため、ここでは直接表示しない
@@ -778,7 +778,7 @@ def display_step2():
         
         # 再算出結果の表示（Before/After比較）
         if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
-            st.markdown('<div class="step-sub-section">実績異常値処理後：安全在庫 Before / After 比較結果</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">実績異常値処理後：安全在庫比較結果（Before/After）</div>', unsafe_allow_html=True)
             
             product_code = st.session_state.get('step2_product_code')
             before_results = st.session_state.get('step2_results')
@@ -796,7 +796,7 @@ def display_step2():
             )
             
             # LT間差分の分布（Before/After）
-            st.markdown('<div class="step-sub-section">実績異常値処理後：リードタイム間差分の分布（ヒストグラム）Before/After 比較結果</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">実績異常値処理後：リードタイム間差分の分布比較結果（Before/After）</div>', unsafe_allow_html=True)
             lead_time_days = int(np.ceil(before_results['common_params']['lead_time_days']))
             stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
             before_data = st.session_state.get('step2_actual_data')
@@ -1015,7 +1015,7 @@ def display_step2():
                 adopted_model_name = st.session_state.get('step2_adopted_model_name')
                 adopted_safety_stock = st.session_state.get('step2_adopted_safety_stock')
                 
-                st.markdown('<div class="step-sub-section">計画異常値処理後：安全在庫比較結果</div>', unsafe_allow_html=True)
+                st.markdown('<div class="step-sub-section">計画異常値処理後：安全在庫比較結果（採用モデル含む）</div>', unsafe_allow_html=True)
                 
                 # a) 採用モデル確定メッセージ（バナー）は削除し、統合メッセージに統合
                 daily_actual_mean = final_calculator.actual_data.mean()
@@ -1280,7 +1280,7 @@ def display_step2():
             product_code = st.session_state.get('step2_product_code')
             
             # 上限カット適用前後の安全在庫比較結果
-            st.markdown('<div class="step-sub-section">安全在庫比較結果</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-sub-section">上限カット後：安全在庫比較結果（採用モデル含む）</div>', unsafe_allow_html=True)
             
             # 採用モデルを取得（手順⑦で決定されたモデル）
             adopted_model = st.session_state.get('step2_adopted_model', 'ss3')  # デフォルトはss3

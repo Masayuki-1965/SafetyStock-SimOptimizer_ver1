@@ -1883,7 +1883,7 @@ def create_adopted_model_comparison_charts(
     bar_width_right = 0.85  # 右グラフの棒の幅（さらに3ミリ狭くする：0.95から0.85に減らす）
     
     fig_left.update_layout(
-        title=f"{product_code} - 実績異常値処理後_安全在庫比較",  # 商品コードを動的表示
+        title=f"{product_code} - 安全在庫（After）",  # 商品コードを動的表示
         xaxis=dict(title="モデル"),
         yaxis=dict(title="安全在庫日数", range=[y_min, y_max]),
         barmode='group',
@@ -1928,7 +1928,7 @@ def create_adopted_model_comparison_charts(
     )
     
     fig_right.update_layout(
-        title=f"{product_code} - 採用モデル",  # 商品コードを動的表示
+        title="▶▶▶▶▶　【採用モデル】",  # 商品コードなしで採用モデルのみ表示
         xaxis=dict(
             title="",  # 右側のグラフの横軸ラベルを非表示
             # 右グラフの棒の幅を左グラフの個々の棒と同じにするため、xaxisの設定を調整
