@@ -1027,13 +1027,16 @@ def display_step2():
                 
                 # b) 棒グラフ（左右２グラフ＋中央に「➡」表示）
                 # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
+                # 上の5本の棒グラフ（「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」「採用モデル」）と
+                # 下の表の5列を視覚的に揃えるため、左グラフ（4本）と右グラフ（1本）の幅の比率を4:1に近づける
                 col_left_space, col_graphs = st.columns([0.12, 0.88])
                 with col_left_space:
                     st.empty()  # 左側に空のスペースを確保（テーブルのインデックス列に対応）
                 with col_graphs:
-                    # グラフ間の距離を縮める（中央の「➡」が収まる程度の間隔に調整）
-                    # 左側のグラフを広く、右側のグラフを狭くしてバランスを改善
-                    col_left, col_arrow, col_right = st.columns([6.5, 0.5, 2])
+                    # グラフ間の距離を縮める（中央の矢印用カラムを細くして左右のグラフを中央へ寄せる）
+                    # 左グラフ4本と右グラフ1本の比率を考慮して、左:矢印:右 = 4:0.2:1 の比率で配置
+                    # 右グラフの棒を太くするため、右グラフのサイズを広げる
+                    col_left, col_arrow, col_right = st.columns([3.5, 0.2, 1.3])
                     
                     with col_left:
                         # 左側グラフ：候補モデル比較
@@ -1059,7 +1062,14 @@ def display_step2():
                         st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}")
                     
                     with col_arrow:
-                        st.markdown("<h2 style='text-align: center; margin-top: 200px;'>➡</h2>", unsafe_allow_html=True)
+                        # 中央の矢印を縦に3つ並べて強調表示
+                        st.markdown("""
+                        <div style='text-align: center; margin-top: 180px;'>
+                            <div style='font-size: 48px; font-weight: bold; color: #333333; line-height: 1.2;'>➡</div>
+                            <div style='font-size: 48px; font-weight: bold; color: #333333; line-height: 1.2;'>➡</div>
+                            <div style='font-size: 48px; font-weight: bold; color: #333333; line-height: 1.2;'>➡</div>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
                     with col_right:
                         # 右側グラフ：採用モデル専用
@@ -1105,7 +1115,7 @@ def display_step2():
                     ]
                 }
                 
-                comparison_df = pd.DataFrame(comparison_data, index=['安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
+                comparison_df = pd.DataFrame(comparison_data, index=['処理後_安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
                 
                 # 採用モデル列をハイライト（安全在庫③と同じ薄い緑に統一）
                 # 安全在庫③の色: rgba(100, 200, 150, 0.8) をテーブルの背景色として使用
@@ -1122,6 +1132,23 @@ def display_step2():
                     lambda x: f'background-color: {adopted_model_bg_color}; font-weight: bold;' if isinstance(x, str) and x != '' else '',
                     subset=['採用モデル']
                 )
+                # 行ラベルが切れないように、CSSで調整
+                st.markdown("""
+                <style>
+                .stDataFrame {
+                    width: 100%;
+                }
+                .stDataFrame table {
+                    table-layout: auto;
+                }
+                .stDataFrame th:first-child,
+                .stDataFrame td:first-child {
+                    min-width: 250px !important;
+                    white-space: nowrap !important;
+                    max-width: none !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 st.dataframe(styled_df, use_container_width=True)
                 
                 # d) 注釈

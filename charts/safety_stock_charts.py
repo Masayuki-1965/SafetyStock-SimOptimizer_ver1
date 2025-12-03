@@ -1875,16 +1875,30 @@ def create_adopted_model_comparison_charts(
                 )
             )
     
+    # 左グラフの棒の幅を計算（4本の棒を均等に配置）
+    # barmode='group'の場合、デフォルトの棒の幅は約0.8（bargap=0.2相当）
+    # 左グラフの個々の棒の幅を右グラフにも適用するため、明示的にwidthを設定
+    bar_width = 0.8  # 左グラフの個々の棒の幅（デフォルト値）
+    
     fig_left.update_layout(
         title=f"{product_code} - 実績異常値処理後_安全在庫比較",  # 商品コードを動的表示
         xaxis=dict(title="モデル"),
         yaxis=dict(title="安全在庫日数", range=[y_min, y_max]),
         barmode='group',
+        bargap=0.2,  # 棒グループ間の間隔を明示的に設定
+        bargroupgap=0.1,  # グループ内の棒間の間隔を設定
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
         showlegend=True,
-        margin=dict(l=50, r=40, t=100, b=80)  # 左側グラフを広く表示するため右マージンを縮小
+        # 上下のグラフと表の列を視覚的に同期させるため、マージンを調整
+        # 左グラフの左側の余白を少し狭くして、右グラフのサイズを広げるためのスペースを確保
+        margin=dict(l=30, r=20, t=100, b=80)  # 左マージンを50から30に縮小
     )
+    
+    # 左グラフの各棒にwidthを設定して統一
+    for trace in fig_left.data:
+        if isinstance(trace, go.Bar):
+            trace.width = bar_width
     
     # 右側グラフ：採用モデル専用
     fig_right = go.Figure()
@@ -1897,6 +1911,10 @@ def create_adopted_model_comparison_charts(
         adopted_color = COLOR_SS3_BEFORE  # 手順④・⑥と同じベースカラーに統一
         adopted_label = "安全在庫③（採用）"
     
+    # 右グラフの棒を左グラフの個々の棒と同じ太さにするため、widthを左グラフと同じ値に設定
+    # 左グラフは4つのカテゴリがあり、右グラフは1つのカテゴリしかないため、
+    # 右グラフの棒を左グラフの個々の棒と同じ太さにするには、widthを左グラフと同じbar_widthに設定する
+    # 左グラフの各カテゴリに対してwidth=0.8が設定されているので、右グラフでも同じwidth=0.8を使用
     fig_right.add_trace(
         go.Bar(
             x=[adopted_label],
@@ -1904,19 +1922,31 @@ def create_adopted_model_comparison_charts(
             name=adopted_label,
             marker_color=adopted_color,
             marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
-            # widthパラメータを削除して左側のグラフと同じデフォルト幅に統一
+            width=bar_width,  # 左グラフの個々の棒と同じ幅を設定
             showlegend=False
         )
     )
     
     fig_right.update_layout(
         title=f"{product_code} - 採用モデル",  # 商品コードを動的表示
-        xaxis=dict(title="モデル"),
+        xaxis=dict(
+            title="モデル",
+            # 右グラフの棒の幅を左グラフの個々の棒と同じにするため、xaxisの設定を調整
+            # カテゴリの幅を調整して、棒が左グラフと同じ太さに見えるようにする
+            type='category',
+            categoryorder='array',
+            categoryarray=[adopted_label]
+            # rangeを設定しないことで、デフォルトの動作に任せる
+        ),
         yaxis=dict(title="", range=[y_min, y_max], showticklabels=False),  # Y軸ラベル非表示
         barmode='group',
+        bargap=0.2,  # 左グラフと同じ設定
         height=500,
         showlegend=False,
-        margin=dict(l=10, r=30, t=100, b=80)  # 右側グラフをさらに狭く表示するため左右マージンを最小化
+        # 上下のグラフと表の列を視覚的に同期させるため、マージンを調整
+        # 右グラフの棒を左グラフの個々の棒と同じ太さにするため、マージンを調整
+        # 左グラフの左マージンを30に縮小したので、右グラフのサイズを広げるためマージンを調整
+        margin=dict(l=10, r=10, t=100, b=80)  # 左右のマージンを小さくして、グラフの描画領域を広げる
     )
     
     return fig_left, fig_right
