@@ -1878,7 +1878,9 @@ def create_adopted_model_comparison_charts(
     # 左グラフの棒の幅を計算（4本の棒を均等に配置）
     # barmode='group'の場合、デフォルトの棒の幅は約0.8（bargap=0.2相当）
     # 左グラフの個々の棒の幅を右グラフにも適用するため、明示的にwidthを設定
-    bar_width = 0.8  # 左グラフの個々の棒の幅（デフォルト値）
+    bar_width_left = 0.8  # 左グラフの個々の棒の幅（デフォルト値）
+    # 右側の棒の太さを0.72に設定（右グラフの横サイズは変えず、余白を狭くして対応）
+    bar_width_right = 0.72  # 右グラフの棒の幅
     
     fig_left.update_layout(
         title=f"{product_code} - 実績異常値処理後_安全在庫比較",  # 商品コードを動的表示
@@ -1898,7 +1900,7 @@ def create_adopted_model_comparison_charts(
     # 左グラフの各棒にwidthを設定して統一
     for trace in fig_left.data:
         if isinstance(trace, go.Bar):
-            trace.width = bar_width
+            trace.width = bar_width_left
     
     # 右側グラフ：採用モデル専用
     fig_right = go.Figure()
@@ -1911,10 +1913,8 @@ def create_adopted_model_comparison_charts(
         adopted_color = COLOR_SS3_BEFORE  # 手順④・⑥と同じベースカラーに統一
         adopted_label = "安全在庫③（採用）"
     
-    # 右グラフの棒を左グラフの個々の棒と同じ太さにするため、widthを左グラフと同じ値に設定
-    # 左グラフは4つのカテゴリがあり、右グラフは1つのカテゴリしかないため、
-    # 右グラフの棒を左グラフの個々の棒と同じ太さにするには、widthを左グラフと同じbar_widthに設定する
-    # 左グラフの各カテゴリに対してwidth=0.8が設定されているので、右グラフでも同じwidth=0.8を使用
+    # 右グラフの棒の幅は、右側のグラフの幅が狭くなる分、比例して細くする
+    # 右側のグラフの幅比率: 1.1/1.3 ≈ 0.846 に基づいて、棒の幅も比例して小さくする
     fig_right.add_trace(
         go.Bar(
             x=[adopted_label],
@@ -1922,7 +1922,7 @@ def create_adopted_model_comparison_charts(
             name=adopted_label,
             marker_color=adopted_color,
             marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
-            width=bar_width,  # 左グラフの個々の棒と同じ幅を設定
+            width=bar_width_right,  # 右グラフの幅が狭くなる分、棒の幅も比例して細くする
             showlegend=False
         )
     )
@@ -1944,9 +1944,8 @@ def create_adopted_model_comparison_charts(
         height=500,
         showlegend=False,
         # 上下のグラフと表の列を視覚的に同期させるため、マージンを調整
-        # 右グラフの棒を左グラフの個々の棒と同じ太さにするため、マージンを調整
-        # 左グラフの左マージンを30に縮小したので、右グラフのサイズを広げるためマージンを調整
-        margin=dict(l=10, r=10, t=100, b=80)  # 左右のマージンを小さくして、グラフの描画領域を広げる
+        # 右側の棒の太さを0.72に太くした分、余白を狭くしてグラフの横サイズを維持
+        margin=dict(l=5, r=5, t=100, b=80)  # 左右のマージンをさらに小さくして、棒が太くなってもグラフの横サイズを維持
     )
     
     return fig_left, fig_right

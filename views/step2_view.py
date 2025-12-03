@@ -1031,8 +1031,8 @@ def display_step2():
                 with col_graphs:
                     # グラフ間の距離を縮める（中央の矢印用カラムを細くして左右のグラフを中央へ寄せる）
                     # 左グラフ4本と右グラフ1本の比率を考慮して、左:矢印:右 = 4:0.2:1 の比率で配置
-                    # 右グラフの棒を太くするため、右グラフのサイズを広げる
-                    col_left, col_arrow, col_right = st.columns([3.5, 0.2, 1.3])
+                    # 左側のグラフを広げ、右側のグラフを狭くする
+                    col_left, col_arrow, col_right = st.columns([3.7, 0.2, 1.1])
                     
                     with col_left:
                         # 左側グラフ：候補モデル比較
