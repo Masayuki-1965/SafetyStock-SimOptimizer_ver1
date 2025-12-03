@@ -1879,8 +1879,8 @@ def create_adopted_model_comparison_charts(
     # barmode='group'の場合、デフォルトの棒の幅は約0.8（bargap=0.2相当）
     # 左グラフの個々の棒の幅を右グラフにも適用するため、明示的にwidthを設定
     bar_width_left = 0.8  # 左グラフの個々の棒の幅（デフォルト値）
-    # 右側の棒の太さを0.72に設定（右グラフの横サイズは変えず、余白を狭くして対応）
-    bar_width_right = 0.72  # 右グラフの棒の幅
+    # 右側の棒グラフの太さをさらに3ミリ狭くする（グラフサイズは変更しない）
+    bar_width_right = 0.85  # 右グラフの棒の幅（さらに3ミリ狭くする：0.95から0.85に減らす）
     
     fig_left.update_layout(
         title=f"{product_code} - 実績異常値処理後_安全在庫比較",  # 商品コードを動的表示
@@ -1930,22 +1930,23 @@ def create_adopted_model_comparison_charts(
     fig_right.update_layout(
         title=f"{product_code} - 採用モデル",  # 商品コードを動的表示
         xaxis=dict(
-            title="モデル",
+            title="",  # 右側のグラフの横軸ラベルを非表示
             # 右グラフの棒の幅を左グラフの個々の棒と同じにするため、xaxisの設定を調整
             # カテゴリの幅を調整して、棒が左グラフと同じ太さに見えるようにする
             type='category',
             categoryorder='array',
-            categoryarray=[adopted_label]
-            # rangeを設定しないことで、デフォルトの動作に任せる
+            categoryarray=[adopted_label],
+            # 棒をさらに3ミリ狭くするため、domainを調整して左右に余白を広げる
+            domain=[0.04, 0.96]  # 左右に4%ずつ余白を作って棒をさらに3ミリ狭くする
         ),
         yaxis=dict(title="", range=[y_min, y_max], showticklabels=False),  # Y軸ラベル非表示
         barmode='group',
-        bargap=0.2,  # 左グラフと同じ設定
+        bargap=0.25,  # 棒グループ間の間隔をさらに広げて、棒をさらに3ミリ狭くする
         height=500,
         showlegend=False,
         # 上下のグラフと表の列を視覚的に同期させるため、マージンを調整
-        # 右側の棒の太さを0.72に太くした分、余白を狭くしてグラフの横サイズを維持
-        margin=dict(l=5, r=5, t=100, b=80)  # 左右のマージンをさらに小さくして、棒が太くなってもグラフの横サイズを維持
+        # 右側の棒グラフの太さを可能な限り太くする（グラフサイズは変更しない）
+        margin=dict(l=0, r=0, t=100, b=80)  # 左右のマージンを最小限にして、棒を可能な限り太くする
     )
     
     return fig_left, fig_right
