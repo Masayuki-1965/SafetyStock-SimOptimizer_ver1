@@ -28,7 +28,8 @@ from charts.safety_stock_charts import (
     create_safety_stock_comparison_bar_chart,
     create_before_after_comparison_bar_chart,
     create_adopted_model_comparison_charts,
-    create_cap_comparison_bar_chart
+    create_cap_comparison_bar_chart,
+    create_cap_adopted_model_comparison_charts
 )
 
 # 標準偏差の計算方法（固定）
@@ -2200,31 +2201,89 @@ def display_after_cap_comparison(product_code: str,
     after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
     after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / before_mean_demand if before_mean_demand > 0 else 0
     
-    # 採用モデルの日数（デフォルトはss3）
-    if adopted_model_days is None:
-        adopted_model_days = after_ss3_days
+    # 採用モデルを取得（手順⑦で決定されたモデル）
+    adopted_model = st.session_state.get('step2_adopted_model', 'ss3')  # デフォルトはss3
     
-    # 1. 棒グラフを表示
+    # カット前の採用モデルの日数を計算
+    if adopted_model == "ss2":
+        before_adopted_model_days = before_ss2_days
+    else:  # ss3
+        before_adopted_model_days = before_ss3_days
+    
+    # カット後の採用モデルの日数を計算
+    if adopted_model == "ss2":
+        after_adopted_model_days = after_ss2_days
+    else:  # ss3
+        after_adopted_model_days = after_ss3_days
+    
+    # 採用モデルの日数（デフォルトはカット後の値）
+    if adopted_model_days is None:
+        adopted_model_days = after_adopted_model_days
+    
+    # 上限カット日数を取得
+    cap_days = None
+    if before_calculator and before_calculator.abc_category:
+        abc_category = before_calculator.abc_category.upper()
+        category_cap_days = st.session_state.get('category_cap_days', {})
+        cap_days = category_cap_days.get(abc_category)
+    
+    # 1. 棒グラフを表示（手順⑦と同じレイアウト）
     # グラフとテーブルの位置を同期させるため、st.columnsでレイアウトを調整
-    # テーブルの「項目」列の幅（12%）分だけ右にずらす
-    col_left, col_graph = st.columns([0.12, 0.88])
-    with col_left:
-        st.empty()  # 左側に空のスペースを確保（テーブルの「項目」列に対応）
-    with col_graph:
-        fig = create_cap_comparison_bar_chart(
-            product_code=product_code,
-            current_days=current_days,
-            before_ss1_days=before_ss1_days,
-            before_ss2_days=before_ss2_days,
-            before_ss3_days=before_ss3_days,
-            after_ss1_days=after_ss1_days,
-            after_ss2_days=after_ss2_days,
-            after_ss3_days=after_ss3_days,
-            adopted_model_days=adopted_model_days,
-            is_before_ss1_undefined=is_before_ss1_undefined,
-            is_after_ss1_undefined=is_after_ss1_undefined
-        )
-        st.plotly_chart(fig, use_container_width=True, key=f"cap_comparison_{product_code}")
+    # 上の5本の棒グラフ（「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」「採用モデル」）と
+    # 下の表の5列を視覚的に揃えるため、左グラフ（4本）と右グラフ（1本）の幅の比率を4:1に近づける
+    col_left_space, col_graphs = st.columns([0.12, 0.88])
+    with col_left_space:
+        st.empty()  # 左側に空のスペースを確保（テーブルのインデックス列に対応）
+    with col_graphs:
+        # グラフ間の距離を縮める（中央の矢印用カラムを細くして左右のグラフを中央へ寄せる）
+        # 左グラフ4本と右グラフ1本の比率を考慮して、左:矢印:右 = 4:0.2:1 の比率で配置
+        # 左側のグラフを7mm広げ、右側のグラフを7mm狭くする
+        col_left, col_arrow, col_right = st.columns([3.8, 0.2, 1.0])
+        
+        with col_left:
+            # 左側グラフ：候補モデル比較
+            # カット前の採用モデルの日数を計算
+            if adopted_model == "ss2":
+                before_adopted_model_days = before_ss2_days
+            else:  # ss3
+                before_adopted_model_days = before_ss3_days
+            
+            # カット後の採用モデルの日数を計算
+            if adopted_model == "ss2":
+                after_adopted_model_days = after_ss2_days
+            else:  # ss3
+                after_adopted_model_days = after_ss3_days
+            
+            fig_left, fig_right = create_cap_adopted_model_comparison_charts(
+                product_code=product_code,
+                current_days=current_days,
+                before_ss1_days=before_ss1_days,
+                before_ss2_days=before_ss2_days,
+                before_ss3_days=before_ss3_days,
+                after_ss1_days=after_ss1_days,
+                after_ss2_days=after_ss2_days,
+                after_ss3_days=after_ss3_days,
+                adopted_model=adopted_model,
+                adopted_model_days=after_adopted_model_days,  # カット後の値を渡す
+                cap_days=cap_days,
+                is_before_ss1_undefined=is_before_ss1_undefined,
+                is_after_ss1_undefined=is_after_ss1_undefined
+            )
+            st.plotly_chart(fig_left, use_container_width=True, key=f"cap_adopted_model_left_{product_code}")
+        
+        with col_arrow:
+            # 中央の矢印を縦に3つ並べて強調表示
+            st.markdown("""
+            <div style='text-align: center; margin-top: 180px;'>
+                <div style='font-size: 48px; font-weight: bold; color: #333333; line-height: 1.2;'>➡</div>
+                <div style='font-size: 48px; font-weight: bold; color: #333333; line-height: 1.2;'>➡</div>
+                <div style='font-size: 48px; font-weight: bold; color: #333333; line-height: 1.2;'>➡</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_right:
+            # 右側グラフ：採用モデル専用
+            st.plotly_chart(fig_right, use_container_width=True, key=f"cap_adopted_model_right_{product_code}")
     
     # 処理前の安全在庫数量を取得
     before_quantities = [
@@ -2251,16 +2310,25 @@ def display_after_cap_comparison(product_code: str,
     # 処理後の安全在庫数量（日数）を表示形式で作成
     after_display = []
     if not cap_applied:
-        # 上限カットが適用されなかった場合、「同左」を表示
+        # 上限カットが適用されなかった場合、「同上」を表示
         for i in range(len(after_quantities)):
-            after_display.append("同左")
+            after_display.append("同上")
     else:
-        # 上限カットが適用された場合、通常通り表示
-        for i, (qty, days) in enumerate(zip(after_quantities, [after_ss1_days, after_ss2_days, after_ss3_days])):
+        # 上限カットが適用された場合、カット前と同じ場合は「同上」、異なる場合は通常通り表示
+        for i, (qty, days, before_qty, before_day) in enumerate(zip(
+            after_quantities, 
+            [after_ss1_days, after_ss2_days, after_ss3_days],
+            before_quantities,
+            [before_ss1_days, before_ss2_days, before_ss3_days]
+        )):
             if i == 0 and (is_after_ss1_undefined or qty is None or days is None or days == 0.0):
                 after_display.append("—")
             else:
-                after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
+                # カット前とカット後が同じ場合は「同上」を表示
+                if days is not None and before_day is not None and abs(days - before_day) < 0.01:
+                    after_display.append("同上")
+                else:
+                    after_display.append(f"{qty:.2f}（{days:.1f}日）" if days is not None else "—")
     
     # 現行比を計算（カット後_安全在庫（日数） ÷ 現行安全在庫（日数））
     current_ratios = []
@@ -2277,7 +2345,7 @@ def display_after_cap_comparison(product_code: str,
     
     # 現行安全在庫の表示形式を作成
     current_display_before = f"{current_value:.2f}（{current_days:.1f}日）"
-    current_display_after = "同左"
+    current_display_after = "同上"  # カット前と同じなので「同上」
     current_ratio_display = "1.00"
     
     # 2. テーブルを表示
@@ -2304,15 +2372,43 @@ def display_after_cap_comparison(product_code: str,
         ],
         '採用モデル': [
             f"{adopted_model_days * before_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",
-            f"{adopted_model_days * before_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",  # 比較の一貫性のため、処理前のデータの平均を使用
+            "同上",  # 採用モデルはカット前後で同じなので「同上」
             f"{adopted_model_days / current_days:.2f}" if (adopted_model_days is not None and current_days > 0) else "—"
         ]
     }
     
     comparison_df = pd.DataFrame(comparison_data, index=['カット前_安全在庫数量（日数）', 'カット後_安全在庫数量（日数）', '現行比（カット後 ÷ 現行）'])
-    st.dataframe(comparison_df, use_container_width=True)
     
-    # 3. テキストボックス型注釈を表示
+    # 採用モデル列をハイライト（手順⑦と同じ色を使用）
+    # 安全在庫③の色系統（rgba(100, 200, 150, 0.8)）に基づいた薄い緑
+    adopted_model_bg_color = '#B4E6D1'  # 手順⑦と同じ色
+    
+    # 列名で採用モデル列を特定
+    styled_df = comparison_df.style.applymap(
+        lambda x: f'background-color: {adopted_model_bg_color}; font-weight: bold;' if isinstance(x, str) and x != '' else '',
+        subset=['採用モデル']
+    )
+    # 行ラベルが切れないように、CSSで調整
+    st.markdown("""
+    <style>
+    .stDataFrame {
+        width: 100%;
+    }
+    .stDataFrame table {
+        table-layout: auto;
+    }
+    .stDataFrame th:first-child,
+    .stDataFrame td:first-child {
+        min-width: 250px !important;
+        white-space: nowrap !important;
+        max-width: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    st.dataframe(styled_df, use_container_width=True)
+    
+    # 3. テキストボックス型注釈を表示（4パターン動的表示）
+    # 採用モデルのみを基準として判定
     if current_days <= 0:
         st.markdown("""
         <div class="annotation-success-box">
@@ -2320,13 +2416,54 @@ def display_after_cap_comparison(product_code: str,
             <div class="text"><strong>在庫削減効果：</strong>現行設定がないため、削減効果を計算できません。</div>
         </div>
         """, unsafe_allow_html=True)
-    elif adopted_model_days is not None:
-        reduction_days = current_days - adopted_model_days
-        reduction_rate = (reduction_days / current_days * 100) if current_days > 0 else 0
-        st.markdown(f"""
-        <div class="annotation-success-box">
-            <span class="icon">✅</span>
-            <div class="text"><strong>在庫削減効果：</strong>上限カットにより {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）</div>
-        </div>
-        """, unsafe_allow_html=True)
+    elif adopted_model_days is not None and before_adopted_model_days is not None and after_adopted_model_days is not None:
+        # 採用モデルに上限カットが適用されたかどうかを判定（BeforeとAfterを比較）
+        # 値が異なれば上限カットが適用されたと判定（0.01日以上の差があれば適用とみなす）
+        cap_applied_to_adopted_model = abs(before_adopted_model_days - after_adopted_model_days) >= 0.01
+        
+        # 現行比を計算（カット後の採用モデル日数 ÷ 現行設定日数）
+        current_ratio = after_adopted_model_days / current_days if current_days > 0 else 0
+        
+        # 増減率を計算（現行設定日数とカット後の採用モデル日数の差）
+        change_days = after_adopted_model_days - current_days
+        change_rate = abs(change_days / current_days * 100) if current_days > 0 else 0
+        change_rate_rounded = round(change_rate)  # 四捨五入して整数表示
+        
+        # 4パターンに分岐
+        if cap_applied_to_adopted_model:
+            # 上限カット適用
+            if change_days < 0:
+                # (1) 上限カット適用 ＆ 削減
+                st.markdown(f"""
+                <div class="annotation-success-box">
+                    <span class="icon">✅</span>
+                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットを適用しました。現行比 {current_ratio:.2f} となり、約 {change_rate_rounded}% の在庫削減が期待できます。</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # (2) 上限カット適用 ＆ 増加
+                st.markdown(f"""
+                <div class="annotation-success-box">
+                    <span class="icon">✅</span>
+                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットを適用しました。現行比 {current_ratio:.2f} となり、約 {change_rate_rounded}% の在庫増加となります。</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            # 上限カット未適用
+            if change_days < 0:
+                # (3) 上限カット未適用 ＆ 削減
+                st.markdown(f"""
+                <div class="annotation-success-box">
+                    <span class="icon">✅</span>
+                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットが適用されなかったため、現行比 {current_ratio:.2f} に変更はありません。約 {change_rate_rounded}% の在庫削減効果が期待できます。</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # (4) 上限カット未適用 ＆ 増加
+                st.markdown(f"""
+                <div class="annotation-success-box">
+                    <span class="icon">✅</span>
+                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットが適用されなかったため、現行比 {current_ratio:.2f} に変更はありません。約 {change_rate_rounded}% の在庫増加となります。</div>
+                </div>
+                """, unsafe_allow_html=True)
 
