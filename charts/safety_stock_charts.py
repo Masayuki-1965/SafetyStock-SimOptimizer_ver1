@@ -2068,7 +2068,8 @@ def create_cap_adopted_model_comparison_charts(
                         color=before_color,
                         line=dict(color='#666666', width=1.0),
                         pattern_shape='/',  # 斜線パターン
-                        pattern_fgcolor=before_color
+                        pattern_fgcolor=before_color,
+                        opacity=0.6  # 半透明を明示
                     ),
                     legendgroup='before',
                     showlegend=(i == 0)
@@ -2083,7 +2084,8 @@ def create_cap_adopted_model_comparison_charts(
                     marker=dict(
                         color=before_color,
                         pattern_shape='/',  # 斜線パターン
-                        pattern_fgcolor=before_color
+                        pattern_fgcolor=before_color,
+                        opacity=0.6  # 半透明を明示
                     ),
                     legendgroup='before',
                     showlegend=(i == 0)
@@ -2101,6 +2103,7 @@ def create_cap_adopted_model_comparison_charts(
                     marker=dict(
                         color=color,
                         line=dict(color='#666666', width=1.0),
+                        pattern_shape='',  # 空文字で斜線を完全無効化
                         opacity=1.0  # 不透明を明示
                     ),
                     legendgroup='after',
@@ -2115,6 +2118,7 @@ def create_cap_adopted_model_comparison_charts(
                     name="カット後（After）",
                     marker=dict(
                         color=color,
+                        pattern_shape='',  # 空文字で斜線を完全無効化
                         opacity=1.0  # 不透明を明示
                     ),
                     legendgroup='after',
@@ -2199,7 +2203,8 @@ def create_cap_adopted_model_comparison_charts(
                 color=before_adopted_color,
                 line=dict(color='#666666', width=1.0),
                 pattern_shape='/',  # 斜線パターン
-                pattern_fgcolor=before_adopted_color
+                pattern_fgcolor=before_adopted_color,
+                opacity=0.6  # 半透明を明示
             ),
             legendgroup='before',
             showlegend=False,
@@ -2216,6 +2221,7 @@ def create_cap_adopted_model_comparison_charts(
             marker=dict(
                 color=adopted_color,
                 line=dict(color='#666666', width=1.0),
+                pattern_shape='',  # 空文字で斜線を完全無効化
                 opacity=1.0  # 不透明を明示
             ),
             legendgroup='after',
