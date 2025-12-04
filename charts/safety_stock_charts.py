@@ -2038,6 +2038,10 @@ def create_cap_adopted_model_comparison_charts(
         elif model == '安全在庫③':
             colors.append(COLOR_SS3_BEFORE)
     
+    # 棒幅を定義（BeforeとAfterで完全に一致させる）
+    bar_width_left = 0.8  # 左グラフの個々の棒の幅（デフォルト値）
+    bar_width_right = 0.85  # 右グラフの棒の幅
+    
     # カット前（Before）を追加（斜線パターン、後面に表示、透明感あり）
     for i, (model, value, color) in enumerate(zip(models, before_values, colors)):
         # 色をrgba形式に変換して透明度を0.6に設定（後面表示のため）
@@ -2072,7 +2076,8 @@ def create_cap_adopted_model_comparison_charts(
                         opacity=0.6  # 半透明を明示
                     ),
                     legendgroup='before',
-                    showlegend=(i == 0)
+                    showlegend=(i == 0),
+                    width=bar_width_left  # 棒幅を明示的に設定（BeforeとAfterで一致させる）
                 )
             )
         else:
@@ -2088,43 +2093,42 @@ def create_cap_adopted_model_comparison_charts(
                         opacity=0.6  # 半透明を明示
                     ),
                     legendgroup='before',
-                    showlegend=(i == 0)
+                    showlegend=(i == 0),
+                    width=bar_width_left  # 棒幅を明示的に設定（BeforeとAfterで一致させる）
                 )
             )
     
     # カット後（After）を追加（単色塗りつぶし、前面に表示、不透明）
+    # 【重要】After用のmarker dictはBeforeをコピーせず、完全に新規作成する
+    # これにより、Beforeのmarker設定（斜線パターンなど）がAfterに影響しないことを保証
     for i, (model, value, color) in enumerate(zip(models, after_values, colors)):
+        # After用のmarker dictを新規作成（Beforeのmarker dictを参照しない）
         if model == '現行設定':
-            fig_left.add_trace(
-                go.Bar(
-                    x=[model],
-                    y=[value],
-                    name="カット後（After）",
-                    marker=dict(
-                        color=color,
-                        line=dict(color='#666666', width=1.0),
-                        pattern_shape='',  # 空文字で斜線を完全無効化
-                        opacity=1.0  # 不透明を明示
-                    ),
-                    legendgroup='after',
-                    showlegend=(i == 0)
-                )
+            # 現行設定用のAfter marker dict（枠線あり）
+            after_marker = dict(
+                color=color,
+                line=dict(color='#666666', width=1.0),
+                pattern=dict(shape="")  # 空文字で斜線パターンを完全無効化（上限カット未適用領域で斜線が見えないようにする）
             )
         else:
-            fig_left.add_trace(
-                go.Bar(
-                    x=[model],
-                    y=[value],
-                    name="カット後（After）",
-                    marker=dict(
-                        color=color,
-                        pattern_shape='',  # 空文字で斜線を完全無効化
-                        opacity=1.0  # 不透明を明示
-                    ),
-                    legendgroup='after',
-                    showlegend=(i == 0)
-                )
+            # その他のモデル用のAfter marker dict（枠線なし）
+            after_marker = dict(
+                color=color,
+                pattern=dict(shape="")  # 空文字で斜線パターンを完全無効化（上限カット未適用領域で斜線が見えないようにする）
             )
+        
+        fig_left.add_trace(
+            go.Bar(
+                x=[model],  # Beforeと同じx座標（完全一致）
+                y=[value],
+                name="カット後（After）",
+                marker=after_marker,  # 新規作成したmarker dictを使用（Beforeとは独立）
+                opacity=1.0,  # traceレベルで不透明を明示（上限カット未適用領域でBeforeの斜線が透けて見えないようにする）
+                legendgroup='after',
+                showlegend=(i == 0),
+                width=bar_width_left  # Beforeと同じwidth（完全一致）
+            )
+        )
     
     # 上限カットラインを追加（オレンジの破線）
     if cap_days is not None:
@@ -2139,10 +2143,6 @@ def create_cap_adopted_model_comparison_charts(
             col=None
         )
     
-    # 手順⑦を完全コピー：左グラフの棒の幅を計算
-    bar_width_left = 0.8  # 左グラフの個々の棒の幅（デフォルト値）
-    bar_width_right = 0.85  # 右グラフの棒の幅
-    
     fig_left.update_layout(
         title=f"{product_code} - 安全在庫（上限カット前後）",  # タイトルを変更
         xaxis=dict(title="モデル"),
@@ -2155,11 +2155,6 @@ def create_cap_adopted_model_comparison_charts(
         showlegend=True,
         margin=dict(l=30, r=20, t=100, b=80)  # 手順⑦と同じ
     )
-    
-    # 左グラフの各棒にwidthを設定して統一
-    for trace in fig_left.data:
-        if isinstance(trace, go.Bar):
-            trace.width = bar_width_left
     
     # 右側グラフ：採用モデル専用（手順⑦と同じレイアウト）
     fig_right = go.Figure()
@@ -2213,20 +2208,24 @@ def create_cap_adopted_model_comparison_charts(
     )
     
     # カット後（After）を追加（単色塗りつぶし、前面に表示、不透明）
+    # 【重要】After用のmarker dictはBeforeをコピーせず、完全に新規作成する
+    # これにより、Beforeのmarker設定（斜線パターンなど）がAfterに影響しないことを保証
+    after_adopted_marker = dict(
+        color=adopted_color,
+        line=dict(color='#666666', width=1.0),
+        pattern=dict(shape="")  # 空文字で斜線パターンを完全無効化（上限カット未適用領域で斜線が見えないようにする）
+    )
+    
     fig_right.add_trace(
         go.Bar(
-            x=[adopted_label],
+            x=[adopted_label],  # Beforeと同じx座標（完全一致）
             y=[after_adopted_value],
             name="カット後（After）",
-            marker=dict(
-                color=adopted_color,
-                line=dict(color='#666666', width=1.0),
-                pattern_shape='',  # 空文字で斜線を完全無効化
-                opacity=1.0  # 不透明を明示
-            ),
+            marker=after_adopted_marker,  # 新規作成したmarker dictを使用（Beforeとは独立）
+            opacity=1.0,  # traceレベルで不透明を明示（上限カット未適用領域でBeforeの斜線が透けて見えないようにする）
             legendgroup='after',
             showlegend=False,
-            width=bar_width_right  # 手順⑦と同じ
+            width=bar_width_right  # Beforeと同じwidth（完全一致）
         )
     )
     
