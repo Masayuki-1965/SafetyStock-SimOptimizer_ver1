@@ -1149,17 +1149,50 @@ def display_step2():
                 
                 # d) 統合された結論メッセージ（注釈）
                 if adopted_safety_stock_days is not None and current_days > 0:
-                    reduction_days = current_days - adopted_safety_stock_days
-                    reduction_rate = (reduction_days / current_days * 100) if current_days > 0 else 0
+                    # 現行比を計算
+                    recommended_ratio = adopted_safety_stock_days / current_days
                     
-                    # 採用モデル名を統合メッセージ用の形式に変換
-                    if adopted_model == "ss2":
-                        model_display_name = "安全在庫②（実測値－実績平均）"
-                    else:
-                        model_display_name = "安全在庫③（実測値：実績−計画）"
+                    # Aパターン：安全在庫③（推奨モデル）を採用した場合
+                    if adopted_model == "ss3":
+                        model_display_name = "安全在庫③（推奨モデル）"
+                        
+                        # ① 現行設定 ＞ 安全在庫③ の場合
+                        if recommended_ratio < 1:
+                            reduction_rate = (1 - recommended_ratio) * 100
+                            effect_text = f"約 {round(reduction_rate):.0f}% の在庫削減が期待できます。"
+                        # ② 現行設定 ＜ 安全在庫③ の場合
+                        else:
+                            increase_rate = (recommended_ratio - 1) * 100
+                            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります。"
+                        
+                        # 統合メッセージを1つのブロックとして表示
+                        st.markdown(f"""
+                        <div class="annotation-success-box">
+                            <span class="icon">✅</span>
+                            <div class="text"><strong>採用モデル：</strong>{model_display_name}を採用しました。現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
-                    # 統合メッセージを1つのブロックとして表示
-                    st.success(f"✅ 採用モデル：{model_display_name}を採用しました。在庫削減効果：計画異常値処理により {reduction_days:.1f} 日削減（現行比 {reduction_rate:.1f}％）。")
+                    # Bパターン：安全在庫②を代替採用した場合
+                    else:  # adopted_model == "ss2"
+                        model_display_name = "安全在庫②（実績のバラつきを反映したモデル）"
+                        
+                        # ③ 現行設定 ＞ 安全在庫② の場合
+                        if recommended_ratio < 1:
+                            reduction_rate = (1 - recommended_ratio) * 100
+                            effect_text = f"約 {round(reduction_rate):.0f}% の在庫削減が期待できます。"
+                        # ④ 現行設定 ＜ 安全在庫② の場合
+                        else:
+                            increase_rate = (recommended_ratio - 1) * 100
+                            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります。"
+                        
+                        # 統合メッセージを1つのブロックとして表示
+                        st.markdown(f"""
+                        <div class="annotation-success-box">
+                            <span class="icon">✅</span>
+                            <div class="text"><strong>採用モデル：</strong>{model_display_name}を代替採用しました。現行比 {recommended_ratio:.2f} で、{effect_text}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
                 elif current_days <= 0:
                     # 採用モデル名を統合メッセージ用の形式に変換
                     if adopted_model == "ss2":
@@ -2082,10 +2115,20 @@ def display_after_processing_comparison(product_code: str,
         
         # 異常値が検出されなかった場合、かつ安全在庫③に変更がない場合
         if not outlier_detected and not ss3_changed:
+            # Aパターン：現行設定 ＞ 安全在庫③（推奨モデル）、Bパターン：現行設定 ＜ 安全在庫③（推奨モデル）
+            if recommended_ratio < 1:
+                # Aパターン：削減効果を追加
+                reduction_rate = (1 - recommended_ratio) * 100
+                effect_text = f"約 {round(reduction_rate):.0f}% の在庫削減効果が期待できます。"
+            else:
+                # Bパターン：増加率を追加
+                increase_rate = (recommended_ratio - 1) * 100
+                effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります。"
+            
             st.markdown(f"""
             <div class="annotation-success-box">
                 <span class="icon">✅</span>
-                <div class="text"><strong>在庫削減効果：</strong>異常値は検出されなかったため、安全在庫③（推奨モデル）の現行比 {recommended_ratio:.2f} に変更はありません。</div>
+                <div class="text"><strong>在庫削減効果：</strong>異常値は検出されなかったため、安全在庫③（推奨モデル）の現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
             </div>
             """, unsafe_allow_html=True)
         else:
