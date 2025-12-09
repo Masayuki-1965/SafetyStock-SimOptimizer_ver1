@@ -257,6 +257,31 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
         # セッション状態に保存
         st.session_state.uploaded_data_loader = data_loader
         
+        # アンマッチチェックを実行（①〜③が正常に読み込めた場合のみ）
+        if (data_loader.plan_df is not None and 
+            data_loader.actual_df is not None and 
+            data_loader.safety_stock_monthly_df is not None and 
+            not data_loader.safety_stock_monthly_df.empty):
+            try:
+                mismatch_df = check_product_code_mismatch(data_loader)
+                st.session_state.product_code_mismatch_df = mismatch_df
+            except Exception as e:
+                # アンマッチチェックでエラーが発生した場合は警告のみ表示し、処理は続行
+                st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
+                st.session_state.product_code_mismatch_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+        else:
+            # 安全在庫データがない場合もアンマッチチェックを実行（安全在庫なしのパターンは検出できないが、計画・実績のアンマッチは検出可能）
+            if data_loader.plan_df is not None and data_loader.actual_df is not None:
+                try:
+                    mismatch_df = check_product_code_mismatch(data_loader)
+                    st.session_state.product_code_mismatch_df = mismatch_df
+                except Exception as e:
+                    st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
+                    st.session_state.product_code_mismatch_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+            else:
+                # 計画または実績データがない場合はアンマッチチェックをスキップ
+                st.session_state.product_code_mismatch_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+        
         st.success("✅ 全てのデータを適用しました。画面が更新されます。")
         st.rerun()
         
@@ -295,4 +320,102 @@ def create_csv_download_filename(prefix: str, suffix: str = "") -> str:
         return f"{prefix}_{suffix}_{timestamp}.csv"
     else:
         return f"{prefix}_{timestamp}.csv"
+
+
+def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
+    """
+    商品コードのアンマッチをチェックする
+    
+    以下の4つのパターンを検出する：
+    A: 計画のみ（計画はあるのに実績がない）
+    B: 実績のみ（実績はあるのに計画がない）
+    C: 計画・実績あり／安全在庫なし（計画・実績はあるが安全在庫が未設定）
+    D: 安全在庫のみ（安全在庫は設定されているが計画・実績がない）
+    
+    Args:
+        data_loader: DataLoaderインスタンス（データが読み込まれていること）
+    
+    Returns:
+        pd.DataFrame: アンマッチリスト（区分、商品コード、説明の3列）
+    """
+    # 各データのproduct_cdの集合を取得（すべて文字列に統一）
+    # 計画データの商品コード集合
+    if data_loader.plan_df is not None:
+        plan_codes = set(str(code) for code in data_loader.plan_df.index)
+    else:
+        plan_codes = set()
+    
+    # 実績データの商品コード集合
+    if data_loader.actual_df is not None:
+        actual_codes = set(str(code) for code in data_loader.actual_df.index)
+    else:
+        actual_codes = set()
+    
+    # 安全在庫データの商品コード集合
+    if data_loader.safety_stock_monthly_df is not None and not data_loader.safety_stock_monthly_df.empty:
+        # 列名が'商品コード'でない場合も考慮
+        if '商品コード' in data_loader.safety_stock_monthly_df.columns:
+            safety_codes = set(str(code) for code in data_loader.safety_stock_monthly_df['商品コード'])
+        else:
+            # 最初の列を商品コードとして扱う
+            safety_codes = set(str(code) for code in data_loader.safety_stock_monthly_df.iloc[:, 0])
+    else:
+        safety_codes = set()
+    
+    # アンマッチパターンの判定
+    mismatch_list = []
+    
+    # A: 計画のみ（計画はあるのに実績がない）
+    plan_only = plan_codes - actual_codes
+    for code in plan_only:
+        mismatch_list.append({
+            '区分': '計画のみ',
+            '商品コード': code,
+            '説明': '実績がないため、安全在庫が算出できません（このまま実行する場合は算出対象外とします）。原因を確認してください。'
+        })
+    
+    # B: 実績のみ（実績はあるのに計画がない）
+    actual_only = actual_codes - plan_codes
+    for code in actual_only:
+        mismatch_list.append({
+            '区分': '実績のみ',
+            '商品コード': code,
+            '説明': '実績はあるのに計画がありません。計画漏れの可能性があります。確認してください。'
+        })
+    
+    # C: 計画・実績あり／安全在庫なし（計画と実績の両方があるが安全在庫が未設定）
+    plan_and_actual = plan_codes & actual_codes
+    plan_actual_no_safety = plan_and_actual - safety_codes
+    for code in plan_actual_no_safety:
+        mismatch_list.append({
+            '区分': '計画・実績あり／安全在庫なし',
+            '商品コード': code,
+            '説明': '計画・実績はありますが安全在庫が未設定です。安全在庫の新規設定候補です。'
+        })
+    
+    # D: 安全在庫のみ（安全在庫は設定されているが計画・実績がない）
+    safety_only = safety_codes - plan_and_actual
+    for code in safety_only:
+        mismatch_list.append({
+            '区分': '安全在庫のみ',
+            '商品コード': code,
+            '説明': '安全在庫は設定されていますが、計画・実績がありません。安全在庫設定の解除候補です。'
+        })
+    
+    # DataFrameに変換
+    if mismatch_list:
+        mismatch_df = pd.DataFrame(mismatch_list)
+        # 区分でソート（指定された順序）
+        sort_order = {
+            '計画のみ': 1,
+            '実績のみ': 2,
+            '計画・実績あり／安全在庫なし': 3,
+            '安全在庫のみ': 4
+        }
+        mismatch_df['sort_key'] = mismatch_df['区分'].map(sort_order)
+        mismatch_df = mismatch_df.sort_values('sort_key').drop('sort_key', axis=1).reset_index(drop=True)
+        return mismatch_df
+    else:
+        # アンマッチがない場合は空のDataFrameを返す
+        return pd.DataFrame(columns=['区分', '商品コード', '説明'])
 

@@ -209,8 +209,14 @@ def display_step3():
                 }
                 all_results.append(result_row)
                 
+            except KeyError as e:
+                # KeyErrorの場合は、商品コードがデータに存在しない可能性がある
+                st.warning(f"⚠️ {product_code} の計算でエラーが発生しました: 商品コードがデータに存在しない可能性があります。詳細: {str(e)}")
+                continue
             except Exception as e:
-                st.warning(f"{product_code} の計算でエラーが発生しました: {str(e)}")
+                # その他のエラーの場合は、エラーの型とメッセージを表示
+                error_type = type(e).__name__
+                st.warning(f"⚠️ {product_code} の計算でエラーが発生しました ({error_type}): {str(e)}")
                 continue
             
             progress_bar.progress((idx + 1) / total_products)
@@ -678,8 +684,14 @@ def display_step3():
                     }
                     final_results.append(result_row)
                     
+                except KeyError as e:
+                    # KeyErrorの場合は、商品コードがデータに存在しない可能性がある
+                    st.warning(f"⚠️ {product_code} の処理でエラーが発生しました: 商品コードがデータに存在しない可能性があります。詳細: {str(e)}")
+                    continue
                 except Exception as e:
-                    st.warning(f"{product_code} の処理でエラーが発生しました: {str(e)}")
+                    # その他のエラーの場合は、エラーの型とメッセージを表示
+                    error_type = type(e).__name__
+                    st.warning(f"⚠️ {product_code} の処理でエラーが発生しました ({error_type}): {str(e)}")
                     continue
                 
                 progress_bar.progress((idx + 1) / total_products)

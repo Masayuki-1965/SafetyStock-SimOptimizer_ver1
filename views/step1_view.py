@@ -354,6 +354,9 @@ def display_file_upload_section():
             st.session_state.get('uploaded_current_abc_file_obj')
         )
     
+    # アンマッチチェック結果の表示
+    display_data_consistency_check_results()
+    
     st.divider()
 
 
@@ -966,4 +969,106 @@ def display_existing_abc_summary(data_loader):
         missing_codes = st.session_state.get('abc_existing_missing_codes') or set()
         if missing_codes:
             st.info(f"現行ABC区分データに含まれる {len(missing_codes)} 件の商品コードが実績データに存在しません。対象外として集計しました。")
+
+
+def display_data_consistency_check_results():
+    """データ整合性チェック結果（アンマッチリスト）を表示"""
+    import pandas as pd
+    from utils.data_io import dataframe_to_csv_bytes
+    
+    # アンマッチチェック結果が存在するか確認
+    mismatch_df = st.session_state.get('product_code_mismatch_df')
+    
+    # データが読み込まれていない場合は表示しない
+    if mismatch_df is None:
+        return
+    
+    # アンマッチがない場合
+    if mismatch_df.empty or len(mismatch_df) == 0:
+        st.markdown("""
+        <div class="annotation-success-box">
+            <span class="icon">✅</span>
+            <div class="text"><strong>アンマッチ確認結果：</strong> 商品コードのアンマッチはありません。すべてのデータが整合しています。</div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # アンマッチがある場合
+    st.markdown("""
+    <div class="annotation-success-box">
+        <span class="icon">✅</span>
+        <div class="text"><strong>アンマッチ確認結果：</strong> 一部の商品コードにアンマッチがあります。下のアンマッチリストを確認してください。</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 中項目タイトル
+    st.markdown("""
+    <div class="step1-middle-section">
+        <p>データ整合性チェック結果サマリー</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 小項目タイトルとCSVダウンロードボタンを横並びに配置
+    col_title, col_download = st.columns([4, 1])
+    
+    with col_title:
+        st.markdown('<div class="step1-sub-section with-bullet">商品コードアンマッチリスト</div>', unsafe_allow_html=True)
+    
+    with col_download:
+        # CSVダウンロードボタン（右上に配置）
+        csv_bytes = dataframe_to_csv_bytes(mismatch_df)
+        st.download_button(
+            label="Download as CSV",
+            data=csv_bytes,
+            file_name="data_consistency_mismatch_list.csv",
+            mime="text/csv",
+            key="download_mismatch_list",
+            help="アンマッチリストをCSV形式でダウンロードします"
+        )
+    
+    # テーブル表示（カラム幅を調整して説明文が切れないようにする）
+    st.markdown("""
+    <style>
+    /* アンマッチリストテーブルの列幅調整 */
+    div[data-testid="stDataFrame"] table,
+    div[data-testid="stDataFrame"] .dataframe {
+        table-layout: fixed !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    /* 区分列（1列目） */
+    div[data-testid="stDataFrame"] th:nth-child(1),
+    div[data-testid="stDataFrame"] td:nth-child(1) {
+        width: 15% !important;
+        min-width: 100px !important;
+        padding: 8px 12px !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+    }
+    /* 商品コード列（2列目） */
+    div[data-testid="stDataFrame"] th:nth-child(2),
+    div[data-testid="stDataFrame"] td:nth-child(2) {
+        width: 20% !important;
+        min-width: 120px !important;
+        padding: 8px 12px !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+    }
+    /* 説明列（3列目） */
+    div[data-testid="stDataFrame"] th:nth-child(3),
+    div[data-testid="stDataFrame"] td:nth-child(3) {
+        width: 65% !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        padding: 8px 12px !important;
+    }
+    /* テーブル全体のスタイル */
+    div[data-testid="stDataFrame"] {
+        overflow-x: auto !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.dataframe(mismatch_df, use_container_width=True, hide_index=True)
 
