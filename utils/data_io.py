@@ -263,24 +263,59 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
             data_loader.safety_stock_monthly_df is not None and 
             not data_loader.safety_stock_monthly_df.empty):
             try:
-                mismatch_df = check_product_code_mismatch(data_loader)
-                st.session_state.product_code_mismatch_df = mismatch_df
+                mismatch_detail_df = check_product_code_mismatch(data_loader)
+                # 詳細データとサマリーデータの両方を保存
+                st.session_state.product_code_mismatch_detail_df = mismatch_detail_df
+                # サマリーデータを作成
+                if not mismatch_detail_df.empty:
+                    mismatch_summary_df = (
+                        mismatch_detail_df
+                        .groupby("区分")
+                        .agg(
+                            対象商品コード件数=("商品コード", "nunique"),
+                            例=("商品コード", "first"),
+                            説明=("説明", "first"),
+                        )
+                        .reset_index()
+                    )
+                    st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
+                else:
+                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
             except Exception as e:
                 # アンマッチチェックでエラーが発生した場合は警告のみ表示し、処理は続行
                 st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
-                st.session_state.product_code_mismatch_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+                st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
         else:
             # 安全在庫データがない場合もアンマッチチェックを実行（安全在庫なしのパターンは検出できないが、計画・実績のアンマッチは検出可能）
             if data_loader.plan_df is not None and data_loader.actual_df is not None:
                 try:
-                    mismatch_df = check_product_code_mismatch(data_loader)
-                    st.session_state.product_code_mismatch_df = mismatch_df
+                    mismatch_detail_df = check_product_code_mismatch(data_loader)
+                    # 詳細データとサマリーデータの両方を保存
+                    st.session_state.product_code_mismatch_detail_df = mismatch_detail_df
+                    # サマリーデータを作成
+                    if not mismatch_detail_df.empty:
+                        mismatch_summary_df = (
+                            mismatch_detail_df
+                            .groupby("区分")
+                            .agg(
+                                対象商品コード件数=("商品コード", "nunique"),
+                                例=("商品コード", "first"),
+                                説明=("説明", "first"),
+                            )
+                            .reset_index()
+                        )
+                        st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
+                    else:
+                        st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
                 except Exception as e:
                     st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
-                    st.session_state.product_code_mismatch_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+                    st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
             else:
                 # 計画または実績データがない場合はアンマッチチェックをスキップ
-                st.session_state.product_code_mismatch_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+                st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
+                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
         
         st.success("✅ 全てのデータを適用しました。画面が更新されます。")
         st.rerun()

@@ -976,15 +976,16 @@ def display_data_consistency_check_results():
     import pandas as pd
     from utils.data_io import dataframe_to_csv_bytes
     
-    # アンマッチチェック結果が存在するか確認
-    mismatch_df = st.session_state.get('product_code_mismatch_df')
+    # アンマッチチェック結果が存在するか確認（サマリーデータと詳細データ）
+    mismatch_summary_df = st.session_state.get('product_code_mismatch_summary_df')
+    mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
     
     # データが読み込まれていない場合は表示しない
-    if mismatch_df is None:
+    if mismatch_summary_df is None:
         return
     
     # アンマッチがない場合
-    if mismatch_df.empty or len(mismatch_df) == 0:
+    if mismatch_summary_df.empty or len(mismatch_summary_df) == 0:
         st.markdown("""
         <div class="annotation-success-box">
             <span class="icon">✅</span>
@@ -1015,25 +1016,43 @@ def display_data_consistency_check_results():
         st.markdown('<div class="step1-sub-section with-bullet">商品コードアンマッチリスト</div>', unsafe_allow_html=True)
     
     with col_download:
-        # CSVダウンロードボタン（右上に配置）
-        csv_bytes = dataframe_to_csv_bytes(mismatch_df)
-        st.download_button(
-            label="Download as CSV",
-            data=csv_bytes,
-            file_name="data_consistency_mismatch_list.csv",
-            mime="text/csv",
-            key="download_mismatch_list",
-            help="アンマッチリストをCSV形式でダウンロードします"
-        )
+        # CSVダウンロードボタン（右上に配置、詳細データをダウンロード）
+        if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+            csv_bytes = dataframe_to_csv_bytes(mismatch_detail_df)
+            st.download_button(
+                label="Download as CSV",
+                data=csv_bytes,
+                file_name="data_consistency_mismatch_list.csv",
+                mime="text/csv",
+                key="download_mismatch_list",
+                help="アンマッチリスト（全件）をCSV形式でダウンロードします"
+            )
     
-    # テーブル表示（カラム幅を調整して説明文が切れないようにする）
+    # テーブル表示（サマリーデータを表示、カラム幅を調整して説明文が切れないようにする）
     st.markdown("""
     <style>
+    /* アンマッチリストテーブルの親コンテナの調整（すべての親要素を対象） */
+    div[data-testid="stDataFrame"],
+    div[data-testid="stDataFrame"] > div,
+    div[data-testid="stDataFrame"] > div > div {
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    /* 親コンテナの overflow: hidden や max-width 制約を完全に解除 */
+    div[data-testid="stDataFrame"] > div,
+    div[data-testid="stDataFrame"] > div > div,
+    div[data-testid="stDataFrame"] > div > div > div {
+        overflow: visible !important;
+        max-width: none !important;
+    }
     /* アンマッチリストテーブルの列幅調整 */
     div[data-testid="stDataFrame"] table,
     div[data-testid="stDataFrame"] .dataframe {
         table-layout: fixed !important;
         width: 100% !important;
+        max-width: 100% !important;
         border-collapse: collapse !important;
     }
     /* 区分列（1列目） */
@@ -1044,31 +1063,60 @@ def display_data_consistency_check_results():
         padding: 8px 12px !important;
         white-space: normal !important;
         word-wrap: break-word !important;
+        text-align: left !important;
     }
-    /* 商品コード列（2列目） */
+    /* 対象商品コード件数列（2列目） */
     div[data-testid="stDataFrame"] th:nth-child(2),
     div[data-testid="stDataFrame"] td:nth-child(2) {
-        width: 20% !important;
+        width: 10% !important;
+        min-width: 60px !important;
+        padding: 8px 12px !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        text-align: center !important;
+    }
+    /* 例列（3列目） */
+    div[data-testid="stDataFrame"] th:nth-child(3),
+    div[data-testid="stDataFrame"] td:nth-child(3) {
+        width: 15% !important;
         min-width: 120px !important;
         padding: 8px 12px !important;
         white-space: normal !important;
         word-wrap: break-word !important;
+        text-align: left !important;
     }
-    /* 説明列（3列目） */
-    div[data-testid="stDataFrame"] th:nth-child(3),
-    div[data-testid="stDataFrame"] td:nth-child(3) {
+    /* 説明列（4列目）- 幅を65%に設定し、テキスト折り返しを強化 */
+    div[data-testid="stDataFrame"] th:nth-child(4),
+    div[data-testid="stDataFrame"] td:nth-child(4) {
         width: 65% !important;
+        min-width: 300px !important;
         white-space: normal !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
+        word-break: break-word !important;
         padding: 8px 12px !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
     }
-    /* テーブル全体のスタイル */
+    /* テーブルセルのテキストが確実に折り返されるように */
+    div[data-testid="stDataFrame"] td {
+        overflow: visible !important;
+        text-overflow: clip !important;
+    }
+    /* テーブル全体の横スクロールを許容 */
     div[data-testid="stDataFrame"] {
         overflow-x: auto !important;
+    }
+    /* Streamlitのデフォルトスタイルを上書き */
+    .stDataFrame {
+        overflow-x: auto !important;
+    }
+    .stDataFrame table {
+        table-layout: fixed !important;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    st.dataframe(mismatch_df, use_container_width=True, hide_index=True)
+    # サマリーデータを表示
+    st.dataframe(mismatch_summary_df, use_container_width=True, hide_index=True)
 
