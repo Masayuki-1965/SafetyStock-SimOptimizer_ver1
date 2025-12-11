@@ -666,14 +666,14 @@ def display_step2():
                 st.markdown("""
                 <div class="annotation-success-box">
                     <span class="icon">✅</span>
-                    <div class="text"><strong>結果：</strong>異常値は検出されませんでした。</div>
+                    <div class="text"><strong>実績異常値処理結果：</strong>異常値は検出されませんでした。</div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown("""
                 <div class="annotation-success-box">
                     <span class="icon">✅</span>
-                    <div class="text"><strong>結果：</strong>異常値を検出し、補正処理を実施しました。</div>
+                    <div class="text"><strong>実績異常値処理結果：</strong>異常値を検出し、補正処理を実施しました。</div>
                 </div>
                 """, unsafe_allow_html=True)
             

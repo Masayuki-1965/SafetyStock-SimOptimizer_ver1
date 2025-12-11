@@ -90,7 +90,8 @@ def display_step3():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">全機種の安全在庫算出に必要な条件（リードタイム、欠品許容率、標準偏差の計算方法）を設定します。<br>これらの設定値は、後続の手順で使用される安全在庫モデルの算出に影響します。</div>
+    <div class="step-description">全機種の安全在庫の算出に必要な条件（<strong>リードタイム</strong>、<strong>欠品許容率</strong>）を設定します。<br>
+    これらの設定値は、後続の手順で適用される安全在庫モデルの結果に直接影響します。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
