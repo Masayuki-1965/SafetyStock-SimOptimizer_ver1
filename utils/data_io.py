@@ -364,8 +364,8 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
     以下の4つのパターンを検出する：
     A: 計画のみ（計画はあるのに実績がない）
     B: 実績のみ（実績はあるのに計画がない）
-    C: 計画・実績あり／安全在庫なし（計画・実績はあるが安全在庫が未設定）
-    D: 安全在庫のみ（安全在庫は設定されているが計画・実績がない）
+    C: 安全在庫なし（計画・実績あり）（計画・実績はあるが安全在庫が未設定）
+    D: 安全在庫あり（計画・実績なし）（安全在庫は設定されているが計画・実績がない）
     
     Args:
         data_loader: DataLoaderインスタンス（データが読み込まれていること）
@@ -406,7 +406,7 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
         mismatch_list.append({
             '区分': '計画のみ',
             '商品コード': code,
-            '説明': '実績がないため、安全在庫が算出できません（このまま実行する場合は算出対象外とします）。原因を確認してください。'
+            '説明': '実績がないため安全在庫は算出できません（算出対象外になります）。原因を確認してください。'
         })
     
     # B: 実績のみ（実績はあるのに計画がない）
@@ -418,23 +418,25 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
             '説明': '実績はあるのに計画がありません。計画漏れの可能性があります。確認してください。'
         })
     
-    # C: 計画・実績あり／安全在庫なし（計画と実績の両方があるが安全在庫が未設定）
+    # C: 安全在庫なし（計画・実績あり）（計画と実績の両方があるが安全在庫が未設定）
     plan_and_actual = plan_codes & actual_codes
     plan_actual_no_safety = plan_and_actual - safety_codes
     for code in plan_actual_no_safety:
         mismatch_list.append({
-            '区分': '計画・実績あり／安全在庫なし',
+            '区分': '安全在庫なし（計画・実績あり）',
             '商品コード': code,
-            '説明': '計画・実績はありますが安全在庫が未設定です。安全在庫の新規設定候補です。'
+            '説明': '計画・実績はありますが安全在庫が未設定です。新規設定の候補です。'
         })
     
-    # D: 安全在庫のみ（安全在庫は設定されているが計画・実績がない）
-    safety_only = safety_codes - plan_and_actual
+    # D: 安全在庫あり（計画・実績なし）（安全在庫は設定されているが計画・実績がない）
+    # 計画にも実績にも存在しない商品を抽出
+    plan_or_actual = plan_codes | actual_codes  # 計画または実績のいずれかに存在（和集合）
+    safety_only = safety_codes - plan_or_actual
     for code in safety_only:
         mismatch_list.append({
-            '区分': '安全在庫のみ',
+            '区分': '安全在庫あり（計画・実績なし）',
             '商品コード': code,
-            '説明': '安全在庫は設定されていますが、計画・実績がありません。安全在庫設定の解除候補です。'
+            '説明': '安全在庫はありますが計画・実績がありません。設定解除の候補です。'
         })
     
     # DataFrameに変換
@@ -444,8 +446,8 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
         sort_order = {
             '計画のみ': 1,
             '実績のみ': 2,
-            '計画・実績あり／安全在庫なし': 3,
-            '安全在庫のみ': 4
+            '安全在庫なし（計画・実績あり）': 3,
+            '安全在庫あり（計画・実績なし）': 4
         }
         mismatch_df['sort_key'] = mismatch_df['区分'].map(sort_order)
         mismatch_df = mismatch_df.sort_values('sort_key').drop('sort_key', axis=1).reset_index(drop=True)

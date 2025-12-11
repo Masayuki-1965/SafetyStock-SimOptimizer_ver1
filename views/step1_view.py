@@ -1028,95 +1028,158 @@ def display_data_consistency_check_results():
                 help="アンマッチリスト（全件）をCSV形式でダウンロードします"
             )
     
-    # テーブル表示（サマリーデータを表示、カラム幅を調整して説明文が切れないようにする）
+    # HTMLテーブルで表示（カラム幅を完全に制御）
     st.markdown("""
     <style>
-    /* アンマッチリストテーブルの親コンテナの調整（すべての親要素を対象） */
-    div[data-testid="stDataFrame"],
-    div[data-testid="stDataFrame"] > div,
-    div[data-testid="stDataFrame"] > div > div {
-        overflow-x: auto !important;
-        overflow-y: visible !important;
-        max-width: 100% !important;
-        width: 100% !important;
+    .mismatch-list-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.5rem 0;
+        font-size: 14px;
+        table-layout: fixed;
     }
-    /* 親コンテナの overflow: hidden や max-width 制約を完全に解除 */
-    div[data-testid="stDataFrame"] > div,
-    div[data-testid="stDataFrame"] > div > div,
-    div[data-testid="stDataFrame"] > div > div > div {
-        overflow: visible !important;
-        max-width: none !important;
+    .mismatch-list-table th {
+        background-color: #f0f2f6;
+        color: #262730;
+        font-weight: 600;
+        text-align: left;
+        padding: 10px 12px;
+        border: 1px solid #e0e0e0;
+        white-space: normal;
+        word-wrap: break-word;
     }
-    /* アンマッチリストテーブルの列幅調整 */
-    div[data-testid="stDataFrame"] table,
-    div[data-testid="stDataFrame"] .dataframe {
-        table-layout: fixed !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        border-collapse: collapse !important;
+    .mismatch-list-table td {
+        padding: 10px 12px;
+        border: 1px solid #e0e0e0;
+        white-space: normal;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        word-break: break-word;
     }
-    /* 区分列（1列目） */
-    div[data-testid="stDataFrame"] th:nth-child(1),
-    div[data-testid="stDataFrame"] td:nth-child(1) {
-        width: 15% !important;
-        min-width: 100px !important;
-        padding: 8px 12px !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        text-align: left !important;
+    /* 区分列（1列目）- 18% */
+    .mismatch-list-table th:nth-child(1),
+    .mismatch-list-table td:nth-child(1) {
+        width: 18%;
+        text-align: left;
     }
-    /* 対象商品コード件数列（2列目） */
-    div[data-testid="stDataFrame"] th:nth-child(2),
-    div[data-testid="stDataFrame"] td:nth-child(2) {
-        width: 10% !important;
-        min-width: 60px !important;
-        padding: 8px 12px !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        text-align: center !important;
+    /* 対象商品コード件数列（2列目）- 15%（最小限の幅） */
+    .mismatch-list-table th:nth-child(2),
+    .mismatch-list-table td:nth-child(2) {
+        width: 15%;
+        text-align: left;
+        white-space: nowrap;
+        padding: 10px 6px;
     }
-    /* 例列（3列目） */
-    div[data-testid="stDataFrame"] th:nth-child(3),
-    div[data-testid="stDataFrame"] td:nth-child(3) {
-        width: 15% !important;
-        min-width: 120px !important;
-        padding: 8px 12px !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        text-align: left !important;
+    /* 例列（3列目）- 15% */
+    .mismatch-list-table th:nth-child(3),
+    .mismatch-list-table td:nth-child(3) {
+        width: 15%;
+        text-align: left;
     }
-    /* 説明列（4列目）- 幅を65%に設定し、テキスト折り返しを強化 */
-    div[data-testid="stDataFrame"] th:nth-child(4),
-    div[data-testid="stDataFrame"] td:nth-child(4) {
-        width: 65% !important;
-        min-width: 300px !important;
-        white-space: normal !important;
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        word-break: break-word !important;
-        padding: 8px 12px !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-    }
-    /* テーブルセルのテキストが確実に折り返されるように */
-    div[data-testid="stDataFrame"] td {
-        overflow: visible !important;
-        text-overflow: clip !important;
-    }
-    /* テーブル全体の横スクロールを許容 */
-    div[data-testid="stDataFrame"] {
-        overflow-x: auto !important;
-    }
-    /* Streamlitのデフォルトスタイルを上書き */
-    .stDataFrame {
-        overflow-x: auto !important;
-    }
-    .stDataFrame table {
-        table-layout: fixed !important;
+    /* 説明列（4列目）- 52%（広く） */
+    .mismatch-list-table th:nth-child(4),
+    .mismatch-list-table td:nth-child(4) {
+        width: 52%;
+        text-align: left;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # サマリーデータを表示
-    st.dataframe(mismatch_summary_df, use_container_width=True, hide_index=True)
+    # DataFrameをHTMLテーブルに変換
+    html_table = '<table class="mismatch-list-table"><thead><tr>'
+    for col in mismatch_summary_df.columns:
+        html_table += f'<th>{col}</th>'
+    html_table += '</tr></thead><tbody>'
+    
+    for _, row in mismatch_summary_df.iterrows():
+        html_table += '<tr>'
+        for col in mismatch_summary_df.columns:
+            value = str(row[col])
+            # HTMLエスケープ処理
+            value = value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            html_table += f'<td>{value}</td>'
+        html_table += '</tr>'
+    
+    html_table += '</tbody></table>'
+    st.markdown(html_table, unsafe_allow_html=True)
+    
+    # 折り畳み式注釈「商品コードアンマッチリストの見方」を追加（テーブルの下に配置）
+    with st.expander("商品コードアンマッチリストの見方", expanded=False):
+        st.markdown("""
+        <style>
+        .mismatch-guide-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.5rem 0;
+            font-size: 14px;
+        }
+        .mismatch-guide-table th {
+            background-color: #f0f2f6;
+            color: #262730;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .mismatch-guide-table td {
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            vertical-align: top;
+        }
+        .mismatch-guide-table th:nth-child(1),
+        .mismatch-guide-table td:nth-child(1) {
+            width: 20%;
+        }
+        .mismatch-guide-table th:nth-child(2),
+        .mismatch-guide-table td:nth-child(2) {
+            width: 80%;
+        }
+        .mismatch-guide-note {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #555555;
+            line-height: 1.6;
+        }
+        .mismatch-guide-note p {
+            margin: 0.3rem 0;
+        }
+        </style>
+        <table class="mismatch-guide-table">
+            <thead>
+                <tr>
+                    <th>区分</th>
+                    <th>メッセージの詳細</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>計画のみ</td>
+                    <td>実績データが存在しないため、安全在庫を算出できません。原因を確認し、必要であれば実績データを整備した上で再度アップロードしてください。</td>
+                </tr>
+                <tr>
+                    <td>実績のみ</td>
+                    <td>実績は存在するものの、計画データが登録されていません。計画データを確認し、必要な場合は計画を追加した上で再度アップロードしてください。</td>
+                </tr>
+                <tr>
+                    <td>安全在庫なし（計画・実績あり）</td>
+                    <td>計画・実績の両方が存在しているにもかかわらず、安全在庫が未設定の状態です。安全在庫の新規設定候補となります。</td>
+                </tr>
+                <tr>
+                    <td>安全在庫あり（計画・実績なし）</td>
+                    <td>安全在庫は設定されていますが、計画データ・実績データともに存在しません。安全在庫設定の解除候補となります。</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="mismatch-guide-note">
+            <p>※ 「あり・なし」は、対象商品コードのレコードが存在するかどうかを指します。数値がゼロかどうかではありませんので注意してください。</p>
+            <p>※ 「計画・実績あり」は、計画データと実績データの両方にレコードが存在する状態です。</p>
+            <p>※ 「計画・実績なし」は、計画データと実績データの両方にレコードが存在しない状態です。</p>
+        </div>
+        """, unsafe_allow_html=True)
 
