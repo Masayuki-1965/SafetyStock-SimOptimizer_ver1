@@ -365,15 +365,18 @@ def display_step3():
         # CSVエクスポート（列順を指定）
         # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
         
-        # ========== 手順③：安全在庫を確定する（実績異常値処理・計画異常値処理・上限カット） ==========
+        # ========== 手順③：安全在庫を確定する（異常値処理） ==========
         st.divider()
         st.markdown("""
         <div class="step-middle-section">
-            <p>手順③：安全在庫を確定する（実績異常値処理・計画異常値処理・上限カット）</p>
+            <p>手順③：安全在庫を確定する（異常値処理）</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">全機種に実績異常値処理と計画異常値処理を適用し、ABC区分に応じた上限日数を設定して最終安全在庫を確定します。<br>実績異常値処理では需要データに含まれる統計的な上振れ異常値を検出・補正し、計画異常値処理では計画誤差率が大きい場合に安全在庫②を採用します。</div>
+        <div class="step-description">全機種に対して <strong>実績異常値処理</strong>・<strong>計画異常値処理</strong>・<strong>上限カット</strong> を順番に適用し、最終的な安全在庫を確定します。<br>
+        実績異常値処理では、需要データの統計的な上振れ異常値を検出して補正します。<br>
+        計画異常値処理では、計画誤差が大きい商品について <strong>安全在庫②を代替採用</strong> して精度を確保します。<br>
+        最後に、ABC区分ごとに設定した上限日数でカットし、過剰な安全在庫を抑制します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -719,7 +722,7 @@ def display_step3():
             
             st.markdown("""
             <div class="step-middle-section">
-                <p>安全在庫算出結果（実績異常値処理・計画異常値処理・上限カット後）サマリー</p>
+                <p>安全在庫算出結果（異常値処理後）サマリー</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -809,7 +812,7 @@ def display_step3():
                 # Before/Afterを1つのグラフに統合して表示
                 st.markdown("""
                 <div class="step-middle-section">
-                    <p>受注量の多い商品順 安全在庫 比較グラフ（実績異常値処理・計画異常値処理・上限カット後）</p>
+                    <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理後）</p>
                 </div>
                 """, unsafe_allow_html=True)
                 st.caption("安全在庫モデルを『現行設定』『安全在庫①』『安全在庫②』『安全在庫③』から選択してください。")
