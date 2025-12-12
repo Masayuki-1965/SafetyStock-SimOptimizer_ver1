@@ -146,12 +146,27 @@ def display_step3():
     
     # 実行ボタン
     if st.button("安全在庫を算出する", type="primary", use_container_width=True):
+        # STEP1のデータ整合性チェック結果から「計画のみ」の商品コードリストを取得
+        plan_only_codes = set()
+        mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+        if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+            plan_only_df = mismatch_detail_df[mismatch_detail_df['区分'] == '計画のみ']
+            if not plan_only_df.empty:
+                plan_only_codes = set(str(code) for code in plan_only_df['商品コード'].unique())
+        
         # 全機種の安全在庫を算出
         all_results = []
+        skipped_count = 0  # 「計画のみ」でスキップした件数
         progress_bar = st.progress(0)
         total_products = len(product_list)
         
         for idx, product_code in enumerate(product_list):
+            # 「計画のみ」の商品は安全在庫算出対象外としてスキップ
+            if str(product_code) in plan_only_codes:
+                skipped_count += 1
+                progress_bar.progress((idx + 1) / total_products)
+                continue
+            
             try:
                 # データ取得
                 plan_data = data_loader.get_daily_plan(product_code)
@@ -223,6 +238,15 @@ def display_step3():
             progress_bar.progress((idx + 1) / total_products)
         
         progress_bar.empty()
+        
+        # 「計画のみ」の商品が存在する場合、警告メッセージを1回だけ表示
+        if skipped_count > 0:
+            st.markdown(f"""
+            <div class="annotation-warning-box">
+                <span class="icon">⚠</span>
+                <div class="text">実績データが存在しない商品が {skipped_count}件 あるため、これらは安全在庫の算出対象外としました。<br>詳細は STEP1 のデータ整合性チェック結果サマリーにて、区分「計画のみ」をご確認ください。</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         # 結果をDataFrameに変換
         if all_results:
@@ -504,6 +528,14 @@ def display_step3():
             # ②で算出した結果を取得
             before_results_df = st.session_state.all_products_results.copy()
             
+            # STEP1のデータ整合性チェック結果から「計画のみ」の商品コードリストを取得
+            plan_only_codes = set()
+            mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+            if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+                plan_only_df = mismatch_detail_df[mismatch_detail_df['区分'] == '計画のみ']
+                if not plan_only_df.empty:
+                    plan_only_codes = set(str(code) for code in plan_only_df['商品コード'].unique())
+            
             # パラメータを取得
             lead_time = st.session_state.get("shared_lead_time", 45)
             lead_time_type = st.session_state.get("shared_lead_time_type", "working_days")
@@ -512,10 +544,17 @@ def display_step3():
             
             # 全機種に異常値処理を適用して最終安全在庫を算出
             final_results = []
+            skipped_count = 0  # 「計画のみ」でスキップした件数
             progress_bar = st.progress(0)
             total_products = len(product_list)
             
             for idx, product_code in enumerate(product_list):
+                # 「計画のみ」の商品は安全在庫算出対象外としてスキップ
+                if str(product_code) in plan_only_codes:
+                    skipped_count += 1
+                    progress_bar.progress((idx + 1) / total_products)
+                    continue
+                
                 try:
                     # データ取得
                     plan_data = data_loader.get_daily_plan(product_code)
@@ -701,6 +740,15 @@ def display_step3():
                 progress_bar.progress((idx + 1) / total_products)
             
             progress_bar.empty()
+            
+            # 「計画のみ」の商品が存在する場合、警告メッセージを1回だけ表示
+            if skipped_count > 0:
+                st.markdown(f"""
+                <div class="annotation-warning-box">
+                    <span class="icon">⚠</span>
+                    <div class="text">実績データが存在しない商品が {skipped_count}件 あるため、これらは安全在庫の算出対象外としました。<br>詳細は STEP1 のデータ整合性チェック結果サマリーにて、区分「計画のみ」をご確認ください。</div>
+                </div>
+                """, unsafe_allow_html=True)
             
             # 結果をDataFrameに変換
             if final_results:
