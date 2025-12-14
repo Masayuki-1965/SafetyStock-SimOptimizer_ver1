@@ -436,7 +436,7 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
         mismatch_list.append({
             '区分': '安全在庫あり（計画・実績なし）',
             '商品コード': code,
-            '説明': '安全在庫はありますが計画・実績がありません。設定解除の候補です。'
+            '説明': '安全在庫はありますが計画・実績がありません。設定を解除してください。'
         })
     
     # DataFrameに変換

@@ -160,26 +160,27 @@ class ABCAnalysis:
         # ABC区分を割り当て（連続したしきい値で範囲分割）
         products_df['abc_category'] = None
         
-        # 直前区分の下限値を上限として使用（Aは上限なし＝inf）
+        # 区分を下限値の高い順にソート（高い順から判定することで、該当する最初の区分に分類される）
+        sorted_categories = sorted(categories, key=lambda cat: float(lower_limits_total.get(cat, 0.0)), reverse=True)
+        
+        # 直前区分の下限値を上限として使用（最初の区分は上限なし＝inf）
         prev_lower = float('inf')
-        for i, cat in enumerate(categories):
+        for i, cat in enumerate(sorted_categories):
             current_lower = float(lower_limits_total.get(cat, 0.0))
-            if i == 0:
-                # A区分：current_lower より大きい全て（実績合計ベース）
-                mask = products_df['total_actual'] > current_lower
-            elif i == len(categories) - 1:
-                # 最終区分：current_lower 以下（0固定を想定）
-                mask = products_df['total_actual'] <= current_lower
+            if i == len(sorted_categories) - 1:
+                # 最終区分（下限値が最も低い区分）：current_lower 以上（未割り当ての商品すべて）
+                mask = (products_df['abc_category'].isna()) & (products_df['total_actual'] >= current_lower)
             else:
-                # 中間区分：current_lower < x <= prev_lower（実績合計ベース）
-                mask = (products_df['total_actual'] > current_lower) & (products_df['total_actual'] <= prev_lower)
+                # それ以外の区分：current_lower 以上、かつ prev_lower 未満（実績合計ベース）
+                # 「以上」を使用することで、画面表示の「下限値以上」と一致させる
+                mask = (products_df['abc_category'].isna()) & (products_df['total_actual'] >= current_lower) & (products_df['total_actual'] < prev_lower)
             
             products_df.loc[mask, 'abc_category'] = cat
             prev_lower = current_lower
         
         # 未割り当ての商品を最後の区分に割り当て（念のため）
         if categories:
-            last_cat = categories[-1]
+            last_cat = sorted_categories[-1]  # 下限値が最も低い区分
             products_df.loc[products_df['abc_category'].isna(), 'abc_category'] = last_cat
         
         return products_df[['product_code', 'abc_category', 'total_actual', 'monthly_avg_actual']]
