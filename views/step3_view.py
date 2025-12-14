@@ -370,21 +370,21 @@ def display_step3():
             else:
                 st.warning("グラフ表示に必要なデータがありません。")
         
-        # 詳細テーブル（表示オプション）
-        st.markdown('<div class="step-sub-section">詳細データ</div>', unsafe_allow_html=True)
-        # 月当たり実績で降順ソート
-        if '月当たり実績' in results_df.columns:
-            results_df = results_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
-        # 列順を指定して並び替え（ABC区分の右隣に月当たり実績を配置）
-        column_order = [
-            '商品コード', 'ABC区分', '月当たり実績', '現行設定_数量', '現行設定_日数', '安全在庫①_数量', '安全在庫②_数量', '安全在庫③_数量',
-            '安全在庫①_日数', '安全在庫②_日数', '安全在庫③_日数', '日当たり実績', '欠品許容率'
-        ]
-        # 存在する列のみを選択
-        available_columns = [col for col in column_order if col in results_df.columns]
-        results_df_display = results_df[available_columns]
-        # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
-        st.dataframe(results_df_display, use_container_width=True, hide_index=True)
+        # 詳細テーブル（折り畳み式、デフォルト：非表示）
+        with st.expander("詳細データを表示", expanded=False):
+            # 月当たり実績で降順ソート
+            if '月当たり実績' in results_df.columns:
+                results_df = results_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
+            # 列順を指定して並び替え（ABC区分の右隣に月当たり実績を配置）
+            column_order = [
+                '商品コード', 'ABC区分', '月当たり実績', '現行設定_数量', '現行設定_日数', '安全在庫①_数量', '安全在庫②_数量', '安全在庫③_数量',
+                '安全在庫①_日数', '安全在庫②_日数', '安全在庫③_日数', '日当たり実績', '欠品許容率'
+            ]
+            # 存在する列のみを選択
+            available_columns = [col for col in column_order if col in results_df.columns]
+            results_df_display = results_df[available_columns]
+            # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
+            st.dataframe(results_df_display, use_container_width=True, hide_index=True)
         
         # CSVエクスポート（列順を指定）
         # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
@@ -808,37 +808,37 @@ def display_step3():
             summary_df = pd.DataFrame(summary_rows)
             st.dataframe(summary_df, use_container_width=True, hide_index=True)
             
-            # 詳細データ
-            st.markdown('<div class="step-sub-section">詳細データ</div>', unsafe_allow_html=True)
-            # いずれかの処理が行われた商品のみを表示
-            processed_df = final_results_df[
-                (final_results_df['実績異常値処理']) |
-                (final_results_df['上限カット']) |
-                (final_results_df['計画異常値処理'])
-            ].copy()
-            
-            if not processed_df.empty:
-                # 表示用の列を選択
-                detail_columns = [
-                    '商品コード', 'ABC区分', '実績異常値処理', '上限カット', '計画異常値処理',
-                    '計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計'
-                ]
-                detail_df = processed_df[detail_columns].copy()
+            # 詳細データ（折り畳み式、デフォルト：非表示）
+            with st.expander("詳細データを表示", expanded=False):
+                # いずれかの処理が行われた商品のみを表示
+                processed_df = final_results_df[
+                    (final_results_df['実績異常値処理']) |
+                    (final_results_df['上限カット']) |
+                    (final_results_df['計画異常値処理'])
+                ].copy()
                 
-                # フラグ列を表示用に変換
-                detail_df['実績異常値処理'] = detail_df['実績異常値処理'].apply(lambda x: '実施' if x else '未実施')
-                detail_df['上限カット'] = detail_df['上限カット'].apply(lambda x: '実施' if x else '未実施')
-                detail_df['計画異常値処理'] = detail_df['計画異常値処理'].apply(lambda x: '実施' if x else '未実施')
-                detail_df['計画誤差率'] = detail_df['計画誤差率'].apply(lambda x: f"{x:.2f}%" if x is not None and not pd.isna(x) else "計算不可")
-                
-                # 数値列のフォーマット
-                detail_df['計画誤差率（実績合計 - 計画合計）'] = detail_df['計画誤差率（実績合計 - 計画合計）'].apply(lambda x: f"{x:,.2f}")
-                detail_df['実績合計'] = detail_df['実績合計'].apply(lambda x: f"{x:,.2f}")
-                detail_df['計画合計'] = detail_df['計画合計'].apply(lambda x: f"{x:,.2f}")
-                
-                st.dataframe(detail_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("実績異常値処理・計画異常値処理・上限カットが実施された商品はありません。")
+                if not processed_df.empty:
+                    # 表示用の列を選択
+                    detail_columns = [
+                        '商品コード', 'ABC区分', '実績異常値処理', '上限カット', '計画異常値処理',
+                        '計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計'
+                    ]
+                    detail_df = processed_df[detail_columns].copy()
+                    
+                    # フラグ列を表示用に変換
+                    detail_df['実績異常値処理'] = detail_df['実績異常値処理'].apply(lambda x: '実施' if x else '未実施')
+                    detail_df['上限カット'] = detail_df['上限カット'].apply(lambda x: '実施' if x else '未実施')
+                    detail_df['計画異常値処理'] = detail_df['計画異常値処理'].apply(lambda x: '実施' if x else '未実施')
+                    detail_df['計画誤差率'] = detail_df['計画誤差率'].apply(lambda x: f"{x:.2f}%" if x is not None and not pd.isna(x) else "計算不可")
+                    
+                    # 数値列のフォーマット
+                    detail_df['計画誤差率（実績合計 - 計画合計）'] = detail_df['計画誤差率（実績合計 - 計画合計）'].apply(lambda x: f"{x:,.2f}")
+                    detail_df['実績合計'] = detail_df['実績合計'].apply(lambda x: f"{x:,.2f}")
+                    detail_df['計画合計'] = detail_df['計画合計'].apply(lambda x: f"{x:,.2f}")
+                    
+                    st.dataframe(detail_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("実績異常値処理・計画異常値処理・上限カットが実施された商品はありません。")
             
             st.divider()
             
@@ -983,24 +983,24 @@ def display_step3():
                 else:
                     st.warning("グラフ表示に必要なデータがありません。")
             
-            # 詳細データ
-            st.markdown('<div class="step-sub-section">詳細データ</div>', unsafe_allow_html=True)
-            # 月当たり実績で降順ソート
-            if '月当たり実績' in final_results_df.columns:
-                final_results_df = final_results_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
-            # 列順を指定して並び替え（ABC区分の右隣に月当たり実績を配置）
-            column_order = [
-                '商品コード', 'ABC区分', '月当たり実績', '現行設定_数量', '現行設定_日数',
-                '安全在庫①_数量', '安全在庫②_数量', '安全在庫③_数量',  # 異常値処理前
-                '最終安全在庫①_数量', '最終安全在庫②_数量', '最終安全在庫③_数量',  # 異常値処理＋上限カット後
-                '安全在庫①_日数', '安全在庫②_日数', '安全在庫③_日数',  # 異常値処理前
-                '最終安全在庫①_日数', '最終安全在庫②_日数', '最終安全在庫③_日数',  # 異常値処理＋上限カット後
-                '日当たり実績', '欠品許容率'
-            ]
-            available_columns = [col for col in column_order if col in final_results_df.columns]
-            final_results_df_display = final_results_df[available_columns]
-            # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
-            st.dataframe(final_results_df_display, use_container_width=True, hide_index=True)
+            # 詳細データ（折り畳み式、デフォルト：非表示）
+            with st.expander("詳細データを表示", expanded=False):
+                # 月当たり実績で降順ソート
+                if '月当たり実績' in final_results_df.columns:
+                    final_results_df = final_results_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
+                # 列順を指定して並び替え（ABC区分の右隣に月当たり実績を配置）
+                column_order = [
+                    '商品コード', 'ABC区分', '月当たり実績', '現行設定_数量', '現行設定_日数',
+                    '安全在庫①_数量', '安全在庫②_数量', '安全在庫③_数量',  # 異常値処理前
+                    '最終安全在庫①_数量', '最終安全在庫②_数量', '最終安全在庫③_数量',  # 異常値処理＋上限カット後
+                    '安全在庫①_日数', '安全在庫②_日数', '安全在庫③_日数',  # 異常値処理前
+                    '最終安全在庫①_日数', '最終安全在庫②_日数', '最終安全在庫③_日数',  # 異常値処理＋上限カット後
+                    '日当たり実績', '欠品許容率'
+                ]
+                available_columns = [col for col in column_order if col in final_results_df.columns]
+                final_results_df_display = final_results_df[available_columns]
+                # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
+                st.dataframe(final_results_df_display, use_container_width=True, hide_index=True)
             
             # CSVエクスポート
             # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
