@@ -790,8 +790,8 @@ def display_step3():
                 summary_rows.append({
                     'ABC区分': category,
                     '実績異常値処理件数': int(outlier_count),
-                    '上限カット件数': int(cap_count),
-                    '計画異常値処理件数': int(plan_anomaly_count)
+                    '計画異常値処理件数': int(plan_anomaly_count),
+                    '上限カット件数': int(cap_count)
                 })
             
             # 合計行を追加
@@ -801,11 +801,13 @@ def display_step3():
             summary_rows.append({
                 'ABC区分': '合計',
                 '実績異常値処理件数': int(total_outlier),
-                '上限カット件数': int(total_cap),
-                '計画異常値処理件数': int(total_plan_anomaly)
+                '計画異常値処理件数': int(total_plan_anomaly),
+                '上限カット件数': int(total_cap)
             })
             
             summary_df = pd.DataFrame(summary_rows)
+            # 列順を処理順に統一（実績異常値処理 → 計画異常値処理 → 上限カット）
+            summary_df = summary_df[['ABC区分', '実績異常値処理件数', '計画異常値処理件数', '上限カット件数']]
             st.dataframe(summary_df, use_container_width=True, hide_index=True)
             
             # 詳細データ（折り畳み式、デフォルト：非表示）
@@ -818,25 +820,168 @@ def display_step3():
                 ].copy()
                 
                 if not processed_df.empty:
-                    # 表示用の列を選択
+                    # デフォルトソート：第1キー：ABC区分（A → B → C → … → Z）、第2キー：実績計（昇順）
+                    # ABC区分のソート順を定義（A, B, C, ..., Z, その他）
+                    def get_abc_sort_key(abc_value):
+                        """ABC区分のソートキーを取得"""
+                        if pd.isna(abc_value) or abc_value == '' or abc_value == '-':
+                            return (999, '')  # 未分類は最後
+                        abc_str = str(abc_value).strip()
+                        if len(abc_str) == 1 and abc_str.isalpha():
+                            return (ord(abc_str.upper()), abc_str)
+                        return (998, abc_str)  # その他の区分
+                    
+                    # ソート実行
+                    processed_df['_abc_sort_key'] = processed_df['ABC区分'].apply(get_abc_sort_key)
+                    processed_df = processed_df.sort_values(
+                        by=['_abc_sort_key', '実績合計'],
+                        ascending=[True, True]
+                    ).reset_index(drop=True)
+                    processed_df = processed_df.drop(columns=['_abc_sort_key'])
+                    
+                    # 表示用の列を選択（処理順に基づく順序）
                     detail_columns = [
-                        '商品コード', 'ABC区分', '実績異常値処理', '上限カット', '計画異常値処理',
-                        '計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計'
+                        '商品コード', 'ABC区分',  # 商品情報
+                        '実績異常値処理', '計画異常値処理',  # 処理状況（実績異常値、計画異常値）
+                        '計画誤差率', '計画誤差率（実績合計 - 計画合計）', '実績合計', '計画合計',  # 計画誤差
+                        '上限カット'  # 処理状況（上限カット）
                     ]
                     detail_df = processed_df[detail_columns].copy()
                     
-                    # フラグ列を表示用に変換
-                    detail_df['実績異常値処理'] = detail_df['実績異常値処理'].apply(lambda x: '実施' if x else '未実施')
-                    detail_df['上限カット'] = detail_df['上限カット'].apply(lambda x: '実施' if x else '未実施')
-                    detail_df['計画異常値処理'] = detail_df['計画異常値処理'].apply(lambda x: '実施' if x else '未実施')
-                    detail_df['計画誤差率'] = detail_df['計画誤差率'].apply(lambda x: f"{x:.2f}%" if x is not None and not pd.isna(x) else "計算不可")
+                    # 計画異常値処理のフラグを保存（強調表示用、列名変更前に保存）
+                    plan_anomaly_flags = detail_df['計画異常値処理'].copy().reset_index(drop=True)
+                    
+                    # フラグ列を表示用に変換（実施：✔ 実施、未実施：ー）
+                    def format_processing_flag(value):
+                        """処理フラグを表示用に変換"""
+                        if value:
+                            return '✔ 実施'
+                        else:
+                            return 'ー'
+                    
+                    detail_df['実績異常値処理'] = detail_df['実績異常値処理'].apply(format_processing_flag)
+                    detail_df['計画異常値処理'] = detail_df['計画異常値処理'].apply(format_processing_flag)
+                    detail_df['上限カット'] = detail_df['上限カット'].apply(format_processing_flag)
+                    
+                    # 計画誤差率のフォーマット
+                    detail_df['計画誤差率'] = detail_df['計画誤差率'].apply(
+                        lambda x: f"{x:.2f}%" if x is not None and not pd.isna(x) else "計算不可"
+                    )
                     
                     # 数値列のフォーマット
                     detail_df['計画誤差率（実績合計 - 計画合計）'] = detail_df['計画誤差率（実績合計 - 計画合計）'].apply(lambda x: f"{x:,.2f}")
                     detail_df['実績合計'] = detail_df['実績合計'].apply(lambda x: f"{x:,.2f}")
                     detail_df['計画合計'] = detail_df['計画合計'].apply(lambda x: f"{x:,.2f}")
                     
-                    st.dataframe(detail_df, use_container_width=True, hide_index=True)
+                    # 列名を2行ヘッダー（MultiIndex）用に変更
+                    # まず列名を変更（表示用の短い名前に）
+                    detail_df = detail_df.rename(columns={
+                        '計画誤差率（実績合計 - 計画合計）': '計画誤差',
+                        '実績合計': '実績計',
+                        '計画合計': '計画計'
+                    })
+                    
+                    # 列名を2行ヘッダー（MultiIndex）に変更
+                    # 上段：グループ名、下段：列名（処理順に基づく）
+                    column_mapping = [
+                        ('商品情報', '商品コード'),
+                        ('商品情報', 'ABC区分'),
+                        ('処理状況', '実績異常値'),
+                        ('処理状況', '計画異常値'),
+                        ('計画誤差', '計画誤差率'),
+                        ('計画誤差', '計画誤差'),
+                        ('計画誤差', '実績計'),
+                        ('計画誤差', '計画計'),
+                        ('処理状況', '上限カット')
+                    ]
+                    
+                    # 列名をMultiIndexに変換
+                    detail_df.columns = pd.MultiIndex.from_tuples(column_mapping)
+                    
+                    # スタイル設定：実施フラグに薄赤の背景色を適用
+                    def style_processing_cells(val):
+                        """処理状況列のスタイル設定"""
+                        if val == '✔ 実施':
+                            return 'background-color: #FFE0E0; color: #C62828;'  # 薄赤背景、濃い赤文字
+                        return ''
+                    
+                    # スタイルを適用（処理状況列）
+                    styled_df = detail_df.style.applymap(
+                        style_processing_cells,
+                        subset=[('処理状況', '実績異常値'), ('処理状況', '計画異常値'), ('処理状況', '上限カット')]
+                    )
+                    
+                    # 計画異常値が実施の場合、計画誤差関連の列を強調表示
+                    def style_plan_error_cells(row):
+                        """計画誤差列のスタイル設定（計画異常値が実施の場合）"""
+                        # 計画異常値が実施されているかチェック（元のフラグを使用）
+                        row_idx = row.name
+                        if row_idx is not None and row_idx < len(plan_anomaly_flags):
+                            if plan_anomaly_flags.iloc[row_idx]:
+                                return ['background-color: #FFE0E0; color: #C62828;'] * len(row)
+                        return [''] * len(row)
+                    
+                    # 計画誤差グループの列にスタイルを適用
+                    styled_df = styled_df.apply(
+                        style_plan_error_cells,
+                        axis=1,
+                        subset=[('計画誤差', '計画誤差率'), ('計画誤差', '計画誤差'), ('計画誤差', '実績計'), ('計画誤差', '計画計')]
+                    )
+                    
+                    # MultiIndexヘッダーのスタイル設定
+                    header_styles = [
+                        {
+                            'selector': 'thead th.level0',
+                            'props': [
+                                ('background-color', '#F5F5F5'),
+                                ('border', '1px solid #DDDDDD'),
+                                ('text-align', 'center'),
+                                ('font-weight', 'bold'),
+                                ('padding', '8px 4px')
+                            ]
+                        },
+                        {
+                            'selector': 'thead th.level1',
+                            'props': [
+                                ('background-color', '#FAFAFA'),
+                                ('border', '1px solid #DDDDDD'),
+                                ('text-align', 'center'),
+                                ('padding', '8px 4px')
+                            ]
+                        },
+                        {
+                            'selector': 'tbody td',
+                            'props': [
+                                ('border', '1px solid #DDDDDD'),
+                                ('padding', '8px 4px')
+                            ]
+                        },
+                        # グループ境界線：処理状況グループ（実績異常値・計画異常値）の先頭（3列目）
+                        {
+                            'selector': 'thead th.level0:nth-child(3), thead th.level1:nth-child(3), tbody td:nth-child(3)',
+                            'props': [
+                                ('border-left', '2px solid #BBBBBB')
+                            ]
+                        },
+                        # グループ境界線：計画誤差グループの先頭（5列目）
+                        {
+                            'selector': 'thead th.level0:nth-child(5), thead th.level1:nth-child(5), tbody td:nth-child(5)',
+                            'props': [
+                                ('border-left', '2px solid #BBBBBB')
+                            ]
+                        },
+                        # グループ境界線：処理状況グループ（上限カット）の先頭（9列目）
+                        {
+                            'selector': 'thead th.level0:nth-child(9), thead th.level1:nth-child(9), tbody td:nth-child(9)',
+                            'props': [
+                                ('border-left', '2px solid #BBBBBB')
+                            ]
+                        }
+                    ]
+                    
+                    styled_df = styled_df.set_table_styles(header_styles)
+                    
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
                 else:
                     st.info("実績異常値処理・計画異常値処理・上限カットが実施された商品はありません。")
             
