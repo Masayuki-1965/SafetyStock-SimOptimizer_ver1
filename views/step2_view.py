@@ -1367,13 +1367,23 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     plan_data = calculator.plan_data
     actual_data = calculator.actual_data
     
-    # 計画誤差率を計算
-    plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
+    # 計画誤差率を計算（合計値ベースで計算）
+    # 誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
+    # 実装では sum() を使用して合計値を計算している
+    actual_total = float(actual_data.sum())
+    plan_total = float(plan_data.sum())
+    plan_error = actual_total - plan_total
     
-    # 計画（単体）の統計情報（6項目に統一）
+    if actual_total == 0:
+        plan_error_rate = None
+    else:
+        plan_error_rate = (plan_error / actual_total) * 100.0
+    
+    # 計画（単体）の統計情報
     plan_stats = {
         '項目': '日次計画',
         '件数': len(plan_data),
+        '期間合計': plan_total,  # 期間全体で単純合計
         '平均': np.mean(plan_data),
         '標準偏差': np.std(plan_data),
         '最小値': np.min(plan_data),
@@ -1382,10 +1392,11 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         '計画誤差率': None  # 計画には計画誤差率は表示しない
     }
     
-    # 実績（単体）の統計情報（6項目に統一 + 計画誤差率）
+    # 実績（単体）の統計情報
     actual_stats = {
         '項目': '日次実績',
         '件数': len(actual_data),
+        '期間合計': actual_total,  # 期間全体で単純合計
         '平均': np.mean(actual_data),
         '標準偏差': np.std(actual_data),
         '最小値': np.min(actual_data),
@@ -1401,15 +1412,39 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     # 表示用コピーを作成（元のDataFrameは変更しない）
     display_df = stats_df.copy()
     
+    # 列の順序を指定（期間合計を平均の左側に配置）
+    column_order = ['項目', '件数', '期間合計', '平均', '標準偏差', '最小値', '中央値', '最大値', '計画誤差率']
+    display_df = display_df[column_order]
+    
     # 数値表示形式を統一（表示用コピーに対してのみ適用）
-    numeric_columns = ['平均', '標準偏差', '最小値', '中央値', '最大値']
+    numeric_columns = ['期間合計', '平均', '標準偏差', '最小値', '中央値', '最大値']
     
     # 件数は整数表示
     display_df['件数'] = display_df['件数'].apply(lambda x: f'{int(x):.0f}' if not pd.isna(x) else '')
     
-    # 小数値は小数第2位まで表示（-0.000000も0.00として表示される）
+    # 計画行と実績行で異なるフォーマットを適用
+    plan_row_mask = display_df['項目'] == '日次計画'
+    actual_row_mask = display_df['項目'] == '日次実績'
+    
+    # 計画行：小数第2位まで表示
     for col in numeric_columns:
-        display_df[col] = display_df[col].apply(lambda x: f'{x:.2f}' if not pd.isna(x) else '')
+        display_df.loc[plan_row_mask, col] = display_df.loc[plan_row_mask, col].apply(
+            lambda x: f'{x:.2f}' if not pd.isna(x) else ''
+        )
+    
+    # 実績行：期間合計、最小値、中央値、最大値は整数表示、平均と標準偏差は小数第2位
+    actual_integer_columns = ['期間合計', '最小値', '中央値', '最大値']
+    actual_decimal_columns = ['平均', '標準偏差']
+    
+    for col in actual_integer_columns:
+        display_df.loc[actual_row_mask, col] = display_df.loc[actual_row_mask, col].apply(
+            lambda x: f'{int(x):.0f}' if not pd.isna(x) else ''
+        )
+    
+    for col in actual_decimal_columns:
+        display_df.loc[actual_row_mask, col] = display_df.loc[actual_row_mask, col].apply(
+            lambda x: f'{x:.2f}' if not pd.isna(x) else ''
+        )
     
     # 計画誤差率はパーセント表示（例：-20.58%）
     display_df['計画誤差率'] = display_df['計画誤差率'].apply(
@@ -1432,6 +1467,14 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         subset=['計画誤差率']
     )
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    
+    # 誤差率の注記を表の下に追加
+    st.markdown("""
+    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
+    ※計画誤差率＝（実績合計ー計画合計）÷実績合計
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -1490,9 +1533,29 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     # 件数は整数表示
     display_df['件数'] = display_df['件数'].apply(lambda x: f'{int(x):.0f}' if not pd.isna(x) else '')
     
-    # 小数値は小数第2位まで表示（-0.000000も0.00として表示される）
+    # 計画行と実績行で異なるフォーマットを適用
+    plan_row_mask = display_df['項目'] == 'リードタイム期間の計画合計'
+    actual_row_mask = display_df['項目'] == 'リードタイム期間の実績合計'
+    
+    # 計画行：小数第2位まで表示
     for col in numeric_columns:
-        display_df[col] = display_df[col].apply(lambda x: f'{x:.2f}' if not pd.isna(x) else '')
+        display_df.loc[plan_row_mask, col] = display_df.loc[plan_row_mask, col].apply(
+            lambda x: f'{x:.2f}' if not pd.isna(x) else ''
+        )
+    
+    # 実績行：最小値、中央値、最大値は整数表示、平均と標準偏差は小数第2位
+    actual_integer_columns = ['最小値', '中央値', '最大値']
+    actual_decimal_columns = ['平均', '標準偏差']
+    
+    for col in actual_integer_columns:
+        display_df.loc[actual_row_mask, col] = display_df.loc[actual_row_mask, col].apply(
+            lambda x: f'{int(x):.0f}' if not pd.isna(x) else ''
+        )
+    
+    for col in actual_decimal_columns:
+        display_df.loc[actual_row_mask, col] = display_df.loc[actual_row_mask, col].apply(
+            lambda x: f'{x:.2f}' if not pd.isna(x) else ''
+        )
     
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
