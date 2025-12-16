@@ -2,8 +2,9 @@
 異常値検出・補正モジュール
 
 異常値検出方法：
-1. グローバル異常基準（上振れのみ）: threshold_global = mean(all>0) + sigma_k * std(all>0)
-   - 全区分共通で、ゼロ出荷日は異常値検出対象から除外
+1. グローバル異常基準（上振れのみ）: threshold_global = mean(all) + sigma_k * std(all)
+   - 平均・標準偏差は全データ（ゼロ含む）で計算（UIに表示される統計情報と整合）
+   - ゼロ出荷日は異常値検出対象から除外（検出時のみ除外）
    - 異常値は上側（上振れ）のみを検出対象
    - sigma_k（デフォルト6）: 6σを超えるような極端なスパイクだけを"異常値"として扱い、それ以外のばらつきはすべて実需として安全在庫に反映します。
 
@@ -106,6 +107,13 @@ class OutlierHandler:
         self.corrected_data = corrected_data
         
         # 処理情報をまとめる
+        # 上位カット割合（％）の場合、分母情報と上限値を追加
+        top_limit_denominator = None
+        top_limit_calculated_count = None
+        if self.top_limit_mode == 'percent':
+            top_limit_denominator = len(self.actual_data)  # 全観測日数（ゼロを含む）
+            top_limit_calculated_count = max(1, int(np.ceil(top_limit_denominator * self.top_limit_p / 100.0)))  # カット対象件数の上限値
+        
         self.processing_info = {
             'candidate_count': len(candidate_indices),
             'final_count': len(final_indices),
@@ -115,6 +123,8 @@ class OutlierHandler:
             'sigma_k': self.sigma_k,
             'top_limit_mode': self.top_limit_mode,
             'top_limit_value': self.top_limit_n if self.top_limit_mode == 'count' else self.top_limit_p,
+            'top_limit_denominator': top_limit_denominator,  # 上位カット割合の分母（全観測日数）
+            'top_limit_calculated_count': top_limit_calculated_count,  # カット対象件数の上限値（全観測日数×上位カット割合）
             'outlier_dates': [self.actual_data.index[i] for i in final_indices] if final_indices else [],
             'skipped': False
         }
@@ -136,18 +146,19 @@ class OutlierHandler:
         """
         グローバル異常基準で異常値を検出（上側のみ、ゼロ出荷日は除外）
         
+        平均・標準偏差は全データ（ゼロ含む）で計算し、UIに表示される統計情報と整合させる。
+        異常値検出時はゼロ出荷日を除外する。
+        
         Returns:
             List[int]: 異常値候補のインデックスリスト
         """
-        # ゼロ出荷日を除外したデータで平均と標準偏差を計算
-        non_zero_data = self.actual_data[self.actual_data > 0]
-        
-        if len(non_zero_data) == 0:
+        # 全データ（ゼロ含む）で平均と標準偏差を計算（UIに表示される統計情報と整合）
+        if len(self.actual_data) == 0:
             self.threshold_global = None
             return []
         
-        mean = non_zero_data.mean()
-        std = non_zero_data.std()
+        mean = self.actual_data.mean()
+        std = self.actual_data.std()
         
         if std == 0:
             self.threshold_global = None
@@ -159,7 +170,7 @@ class OutlierHandler:
         # 異常値検出（上側のみ）
         candidate_indices = []
         for i, value in enumerate(self.actual_data.values):
-            # ゼロ出荷日は除外
+            # ゼロ出荷日は異常値検出対象から除外
             if value == 0:
                 continue
             
@@ -172,6 +183,9 @@ class OutlierHandler:
     def _apply_top_limit(self, candidate_indices: List[int]) -> List[int]:
         """
         上位カットを適用（上位N件または上位p%）
+        
+        上位カット割合（％）の分母は全観測日数（ゼロを含む）を使用する。
+        ゼロ値そのものはカット対象にはしない（上位カットなので、上位側のみ対象）。
         
         Args:
             candidate_indices: 異常値候補のインデックスリスト
@@ -191,11 +205,13 @@ class OutlierHandler:
             limit_count = min(self.top_limit_n, len(candidate_values))
             final_values = candidate_values[:limit_count]
         else:
-            # 上位p%: 母数は全期間のデータ件数（ゼロ出荷日も含む）
-            N_all = len(self.actual_data)  # ゼロも含む全件数
-            max_outliers = max(1, int(np.ceil(N_all * self.top_limit_p / 100.0)))
-            # 候補の中から大きい順にmax_outliers件を選ぶ
-            limit_count = min(max_outliers, len(candidate_values))
+            # 上位p%: 分母は全観測日数（ゼロを含む全データ件数）
+            # 例：240日×2% = 4.8 → 5件（切り上げ）
+            N_all = len(self.actual_data)  # 全観測日数（ゼロを含む）
+            max_outliers = max(1, int(np.ceil(N_all * self.top_limit_p / 100.0)))  # カット対象件数の上限値
+            # 候補の中から大きい順にmax_outliers件を選ぶ（上限値と候補数の小さい方）
+            # ゼロ値は候補に含まれないため、自動的にカット対象外となる
+            limit_count = min(max_outliers, len(candidate_values))  # 実際のカット対象件数
             final_values = candidate_values[:limit_count]
         
         # 最終的な異常値インデックスを取得

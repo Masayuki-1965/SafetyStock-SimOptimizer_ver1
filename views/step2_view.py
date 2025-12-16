@@ -1413,7 +1413,7 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     
     # LT間差分（実績−計画）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差率',
+        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
         '件数': len(delta3),
         '平均': np.mean(delta3),
         '標準偏差': np.std(delta3),
@@ -1455,7 +1455,7 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
     
     # LT間差分（実績−計画）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差率',
+        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
         '件数': len(hist_data['model3_delta']),
         '平均': np.mean(hist_data['model3_delta']),
         '標準偏差': np.std(hist_data['model3_delta']),
@@ -1723,92 +1723,133 @@ def display_outlier_processing_results(product_code: str,
                 threshold_global = processing_info.get('threshold_global')
                 threshold_final = processing_info.get('threshold_final')
                 
-                # 異常値の見つけ方
+                # 異常値の判定式（上限値）
                 info_data.append([
-                    '異常値の見つけ方',
+                    '異常値の判定式（上限値）',
                     f'mean + σ × {sigma_coef:.2f}',
-                    f'ユーザー指定のσ係数（例：{sigma_coef:.2f}）に基づき、平均から許容範囲を外れる上振れ値を異常候補として抽出'
+                    f'平均と標準偏差から算出した上限値（mean + σ × {sigma_coef:.2f}）を超える上振れを検出します。'
                 ])
                 
-                # 怪しい値（候補）
+                # 上限値を超えた件数（補正候補）
                 info_data.append([
-                    '怪しい値（候補）',
+                    '上限値を超えた件数（補正候補）',
                     f'{candidate_count}件',
-                    f'基準値(mean + {sigma_coef:.0f}σ)を超過した件数'
+                    f'上限値（mean + σ × {sigma_coef:.2f}）を超えた実績の件数です。'
                 ])
                 
-                # 最終的に直した件数
+                # 補正した件数
                 info_data.append([
-                    '最終的に直した件数',
+                    '補正した件数',
                     f'{final_count}件',
-                    f'上位カット割合（例：{top_cut_ratio:.2f}%）の範囲へ収まるように補正対象を確定した件数'
+                    f'上位 {top_cut_ratio:.2f}% の範囲に収まるよう、実際に補正した件数です。'
                 ])
                 
-                # 異常とみなす基準（初期）
+                # 上限値（初期）
                 info_data.append([
-                    '異常とみなす基準（初期）',
+                    '上限値（初期）',
                     f'{threshold_global:.2f}' if threshold_global else '—',
-                    f'σ係数({sigma_coef:.2f})を反映した初期しきい値 (threshold_global)'
+                    f'係数 {sigma_coef:.2f} を反映して算出した初期の上限値です。'
                 ])
                 
-                # 異常とみなす基準（最終）
+                # 上限値（最終）
                 info_data.append([
-                    '異常とみなす基準（最終）',
+                    '上限値（最終）',
                     f'{threshold_final:.2f}' if threshold_final else '—',
-                    f'上位カット割合({top_cut_ratio:.2f}%)を適用し、最終的に採用された補正しきい値(threshold_final)'
+                    f'上位 {top_cut_ratio:.2f}% を適用して確定した最終の上限値です。'
                 ])
                 
-                # 補正する上限割合
+                # 補正対象の上位割合（%）
                 info_data.append([
-                    '補正する上限割合',
+                    '補正対象の上位割合（%）',
                     f'{top_cut_ratio:.2f}%',
-                    f'上位{top_cut_ratio:.2f}%のみを補正対象とし、極端値による安全在庫の過大化を防止'
+                    f'上振れ補正の対象とする上位 {top_cut_ratio:.2f}% です。'
                 ])
+                
+                # 全観測日数（分母：ゼロ日含む）
+                top_limit_denominator = processing_info.get('top_limit_denominator')
+                top_limit_calculated_count = processing_info.get('top_limit_calculated_count')
+                if top_limit_denominator is not None:
+                    info_data.append([
+                        '全観測日数（分母：ゼロ日含む）',
+                        f'{top_limit_denominator}日',
+                        f'上位 {top_cut_ratio:.2f}% の計算に使用する全観測日数です。'
+                    ])
+                    if top_limit_calculated_count is not None:
+                        info_data.append([
+                            '補正対象の上限件数',
+                            f'{top_limit_calculated_count}件',
+                            f'全観測日数 × {top_cut_ratio:.2f}% で算出した補正件数の上限です。'
+                        ])
             
             if info_data:
-                info_df = pd.DataFrame(info_data, columns=['項目', '値', '備考'])
-                
-                # CSSで列幅を調整（st.dataframe用）
+                # HTMLテーブルで表示（列幅を確実に制御するため）
                 st.markdown("""
                 <style>
-                /* 異常値処理詳細情報テーブルの列幅調整 */
-                div[data-testid="stDataFrame"] table,
-                div[data-testid="stDataFrame"] .dataframe {
-                    table-layout: fixed !important;
-                    width: 100% !important;
-                    border-collapse: collapse !important;
+                .outlier-info-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 0.5rem 0;
+                    font-size: 14px;
+                    table-layout: fixed;
                 }
-                /* 項目列 */
-                div[data-testid="stDataFrame"] th:nth-child(1),
-                div[data-testid="stDataFrame"] td:nth-child(1) {
-                    width: 20% !important;
-                    min-width: 120px !important;
-                    padding: 8px 12px !important;
+                .outlier-info-table th {
+                    background-color: #f0f2f6;
+                    color: #262730;
+                    font-weight: 600;
+                    text-align: left;
+                    padding: 10px 12px;
+                    border: 1px solid #e0e0e0;
+                    white-space: normal;
+                    word-wrap: break-word;
                 }
-                /* 値列 */
-                div[data-testid="stDataFrame"] th:nth-child(2),
-                div[data-testid="stDataFrame"] td:nth-child(2) {
-                    width: 15% !important;
-                    min-width: 100px !important;
-                    padding: 8px 12px !important;
+                .outlier-info-table td {
+                    padding: 10px 12px;
+                    border: 1px solid #e0e0e0;
+                    white-space: normal;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
                 }
-                /* 備考列 */
-                div[data-testid="stDataFrame"] th:nth-child(3),
-                div[data-testid="stDataFrame"] td:nth-child(3) {
-                    width: 65% !important;
-                    white-space: normal !important;
-                    word-wrap: break-word !important;
-                    overflow-wrap: break-word !important;
-                    padding: 8px 12px !important;
+                /* 項目列：20% */
+                .outlier-info-table th:nth-child(1),
+                .outlier-info-table td:nth-child(1) {
+                    width: 20%;
+                    min-width: 120px;
                 }
-                /* テーブル全体のスタイル */
-                div[data-testid="stDataFrame"] {
-                    overflow-x: auto !important;
+                /* 値列：20%（最小限） */
+                .outlier-info-table th:nth-child(2),
+                .outlier-info-table td:nth-child(2) {
+                    width: 20%;
+                    min-width: 120px;
+                    text-align: left;
+                }
+                /* 処理内容の説明列：70%（最大限） */
+                .outlier-info-table th:nth-child(3),
+                .outlier-info-table td:nth-child(3) {
+                    width: 60%;
+                    white-space: normal;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                 }
                 </style>
                 """, unsafe_allow_html=True)
                 
-                st.dataframe(info_df, use_container_width=True, hide_index=True)
+                # HTMLテーブルを構築
+                html_table = '<table class="outlier-info-table"><thead><tr>'
+                html_table += '<th>確認ポイント</th><th>結果</th><th>説明</th>'
+                html_table += '</tr></thead><tbody>'
+                
+                for row in info_data:
+                    html_table += '<tr>'
+                    for col in row:
+                        # HTMLエスケープ処理
+                        value = str(col)
+                        value = value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        html_table += f'<td>{value}</td>'
+                    html_table += '</tr>'
+                
+                html_table += '</tbody></table>'
+                st.markdown(html_table, unsafe_allow_html=True)
 
 
 def display_outlier_lt_delta_comparison(product_code: str,
