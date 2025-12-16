@@ -314,7 +314,7 @@ def calculate_plan_error_rate(actual_data: pd.Series, plan_data: pd.Series) -> T
     """
     計画誤差率を計算
     
-    計画誤差率 = (実績合計 - 計画合計) / 計画合計 × 100%
+    計画誤差率 = (実績合計 - 計画合計) / 実績合計 × 100%
     
     Args:
         actual_data: 日次実績データ（Series）
@@ -322,16 +322,16 @@ def calculate_plan_error_rate(actual_data: pd.Series, plan_data: pd.Series) -> T
     
     Returns:
         Tuple[float | None, float, float]: (計画誤差率（%）、計画誤差（実績合計 - 計画合計）、計画合計)
-           計画合計が0の場合は計画誤差率はNoneを返す
+           実績合計が0の場合は計画誤差率はNoneを返す
     """
     actual_total = float(actual_data.sum())
     plan_total = float(plan_data.sum())
     plan_error = actual_total - plan_total
     
-    if plan_total == 0:
+    if actual_total == 0:
         return None, plan_error, plan_total
     
-    plan_error_rate = (plan_error / plan_total) * 100.0
+    plan_error_rate = (plan_error / actual_total) * 100.0
     return plan_error_rate, plan_error, plan_total
 
 

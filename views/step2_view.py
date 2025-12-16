@@ -204,7 +204,7 @@ def display_step2():
             ].copy()
             st.markdown(f"""
             <div class="annotation-info-box">
-                <strong>計画誤差率が大きい（+{plan_plus_threshold:.1f}%以上）商品コードを選択できます。</strong><br><strong>計画プラス誤差率</strong> ＝（実績合計 − 計画合計）÷ 計画合計 × 100%（<strong>※実績合計 ＞ 計画合計</strong>：実績がどれだけ計画を上回ったか）
+                <strong>計画誤差率が大きい（+{plan_plus_threshold:.1f}%以上）商品コードを選択できます。</strong><br><strong>計画誤差率（プラス）</strong> ＝（実績合計 − 計画合計）÷ 実績合計 × 100%（<strong>※実績合計 ＞ 計画合計</strong>：実績がどれだけ計画を上回ったか）
             </div>
             """, unsafe_allow_html=True)
         elif selection_mode == "計画誤差率（マイナス）大":
@@ -215,7 +215,7 @@ def display_step2():
             ].copy()
             st.markdown(f"""
             <div class="annotation-info-box">
-                <strong>計画誤差率が大きい（{plan_minus_threshold:.1f}%以下）商品コードを選択できます。</strong><br><strong>計画マイナス誤差率</strong> ＝（実績合計 − 計画合計）÷ 計画合計 × 100%（<strong>※実績合計 ＜ 計画合計</strong>：実績がどれだけ計画を下回ったか）
+                <strong>計画誤差率が大きい（{plan_minus_threshold:.1f}%以下）商品コードを選択できます。</strong><br><strong>計画誤差率（マイナス）</strong> ＝（実績合計 − 計画合計）÷ 実績合計 × 100%（<strong>※実績合計 ＜ 計画合計</strong>：実績がどれだけ計画を下回ったか）
             </div>
             """, unsafe_allow_html=True)
         
@@ -404,35 +404,41 @@ def display_step2():
         total_count = st.session_state.get('step2_lt_delta_total_count')
         lead_time_days = lt_delta_data['lead_time_days']
         
-        # 計画と実績の時系列推移グラフ
+        # 1. 日次計画と日次実績の時系列推移
         st.markdown('<div class="step-sub-section">日次計画と日次実績の時系列推移</div>', unsafe_allow_html=True)
         fig = create_time_series_chart(product_code, calculator)
         st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}")
-        # 日次計画と日次実績の統計情報（グラフとの間隔を最小化するため、空行を削除）
+        
+        # 2. 日次計画と日次実績の統計情報（計画誤差率を追加）
         st.markdown('<div class="step-sub-section">日次計画と日次実績の統計情報</div>', unsafe_allow_html=True)
         display_plan_actual_statistics(product_code, calculator)
         
-        # リードタイム区間の総件数の表示
-        st.markdown('<div class="step-sub-section">リードタイム区間の総件数</div>', unsafe_allow_html=True)
+        # 3. リードタイム区間の総件数（スライド集計）
+        st.markdown('<div class="step-sub-section">リードタイム区間の総件数（スライド集計）</div>', unsafe_allow_html=True)
         st.markdown(
             f"""
             <div class="annotation-success-box">
                 <span class="icon">✅</span>
                 <div class="text">
                     <strong>リードタイム区間の総件数：{total_count}件</strong><br>
-                    リードタイム日数分の実績合計を1日ずつスライドしながら計算した「リードタイム区間」の総数です。　※ 総件数 ＝ 全期間の日数 − リードタイム ＋ 1
+                    リードタイム日数分の計画および実績データを1日ずつスライドしながら合計します。<br>
+                    この件数が、後続の「リードタイム期間合計（計画・実績）」や「リードタイム間差分」の分析単位になります。
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
         
-        # LT間差分の時系列推移グラフ（安全在庫ラインなし）
+        # 4. リードタイム期間合計（計画・実績）の統計情報（NEW）
+        st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の統計情報</div>', unsafe_allow_html=True)
+        display_lead_time_total_statistics(product_code, calculator)
+        
+        # 5. リードタイム間差分の時系列推移
         st.markdown('<div class="step-sub-section">リードタイム間差分の時系列推移</div>', unsafe_allow_html=True)
         fig = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
         st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}")
         
-        # リードタイム間差分の統計情報
+        # 6. リードタイム間差分の統計情報
         st.markdown('<div class="step-sub-section">リードタイム間差分の統計情報</div>', unsafe_allow_html=True)
         display_delta_statistics_from_data(product_code, lt_delta_data['delta2'], lt_delta_data['delta3'])
         
@@ -1361,6 +1367,9 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     plan_data = calculator.plan_data
     actual_data = calculator.actual_data
     
+    # 計画誤差率を計算
+    plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
+    
     # 計画（単体）の統計情報（6項目に統一）
     plan_stats = {
         '項目': '日次計画',
@@ -1369,10 +1378,11 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         '標準偏差': np.std(plan_data),
         '最小値': np.min(plan_data),
         '中央値': np.median(plan_data),
-        '最大値': np.max(plan_data)
+        '最大値': np.max(plan_data),
+        '計画誤差率': None  # 計画には計画誤差率は表示しない
     }
     
-    # 実績（単体）の統計情報（6項目に統一）
+    # 実績（単体）の統計情報（6項目に統一 + 計画誤差率）
     actual_stats = {
         '項目': '日次実績',
         '件数': len(actual_data),
@@ -1380,20 +1390,113 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         '標準偏差': np.std(actual_data),
         '最小値': np.min(actual_data),
         '中央値': np.median(actual_data),
-        '最大値': np.max(actual_data)
+        '最大値': np.max(actual_data),
+        '計画誤差率': plan_error_rate  # 計画誤差率を追加
     }
     
     # データフレーム作成（計画→実績の順）
+    # 計算ロジックは変更せず、元データを保持
     stats_df = pd.DataFrame([plan_stats, actual_stats])
     
-    # 数値を丸める
+    # 表示用コピーを作成（元のDataFrameは変更しない）
+    display_df = stats_df.copy()
+    
+    # 数値表示形式を統一（表示用コピーに対してのみ適用）
     numeric_columns = ['平均', '標準偏差', '最小値', '中央値', '最大値']
+    
+    # 件数は整数表示
+    display_df['件数'] = display_df['件数'].apply(lambda x: f'{int(x):.0f}' if not pd.isna(x) else '')
+    
+    # 小数値は小数第2位まで表示（-0.000000も0.00として表示される）
     for col in numeric_columns:
-        stats_df[col] = stats_df[col].round(2)
+        display_df[col] = display_df[col].apply(lambda x: f'{x:.2f}' if not pd.isna(x) else '')
+    
+    # 計画誤差率はパーセント表示（例：-20.58%）
+    display_df['計画誤差率'] = display_df['計画誤差率'].apply(
+        lambda x: f'{x:.2f}%' if x is not None and not pd.isna(x) else ''
+    )
     
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
-    st.dataframe(stats_df, use_container_width=True, hide_index=True)
+    
+    # 計画誤差率列にスタイルを適用（背景：薄い緑、文字色：緑）
+    def style_plan_error_rate(val):
+        """計画誤差率列のスタイル設定"""
+        if val is not None and str(val) != '' and '%' in str(val):
+            return 'background-color: #E8F5E9; color: #2E7D32;'  # 薄い緑背景、緑文字
+        return ''
+    
+    # スタイルを適用したDataFrameを表示
+    styled_df = display_df.style.applymap(
+        style_plan_error_rate,
+        subset=['計画誤差率']
+    )
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def display_lead_time_total_statistics(product_code: str, calculator: SafetyStockCalculator):
+    """リードタイム期間合計（計画・実績）の統計情報テーブルを表示"""
+    
+    # リードタイム日数を取得
+    lead_time_days = calculator._get_lead_time_in_working_days()
+    lead_time_days = int(np.ceil(lead_time_days))
+    
+    # データ取得
+    plan_data = calculator.plan_data
+    actual_data = calculator.actual_data
+    
+    # リードタイム期間の計画合計と実績合計を計算（1日ずつスライド）
+    plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+    actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+    
+    # 共通インデックスを取得
+    common_idx = plan_sums.index.intersection(actual_sums.index)
+    plan_sums_common = plan_sums.loc[common_idx]
+    actual_sums_common = actual_sums.loc[common_idx]
+    
+    # 計画合計の統計情報
+    plan_total_stats = {
+        '項目': 'リードタイム期間の計画合計',
+        '件数': len(plan_sums_common),
+        '平均': np.mean(plan_sums_common),
+        '標準偏差': np.std(plan_sums_common),
+        '最小値': np.min(plan_sums_common),
+        '中央値': np.median(plan_sums_common),
+        '最大値': np.max(plan_sums_common)
+    }
+    
+    # 実績合計の統計情報
+    actual_total_stats = {
+        '項目': 'リードタイム期間の実績合計',
+        '件数': len(actual_sums_common),
+        '平均': np.mean(actual_sums_common),
+        '標準偏差': np.std(actual_sums_common),
+        '最小値': np.min(actual_sums_common),
+        '中央値': np.median(actual_sums_common),
+        '最大値': np.max(actual_sums_common)
+    }
+    
+    # データフレーム作成
+    # 計算ロジックは変更せず、元データを保持
+    stats_df = pd.DataFrame([plan_total_stats, actual_total_stats])
+    
+    # 表示用コピーを作成（元のDataFrameは変更しない）
+    display_df = stats_df.copy()
+    
+    # 数値表示形式を統一（表示用コピーに対してのみ適用）
+    numeric_columns = ['平均', '標準偏差', '最小値', '中央値', '最大値']
+    
+    # 件数は整数表示
+    display_df['件数'] = display_df['件数'].apply(lambda x: f'{int(x):.0f}' if not pd.isna(x) else '')
+    
+    # 小数値は小数第2位まで表示（-0.000000も0.00として表示される）
+    for col in numeric_columns:
+        display_df[col] = display_df[col].apply(lambda x: f'{x:.2f}' if not pd.isna(x) else '')
+    
+    # グラフ直下に配置するためのスタイル適用
+    st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -1423,16 +1526,25 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     }
     
     # データフレーム作成
+    # 計算ロジックは変更せず、元データを保持
     stats_df = pd.DataFrame([model2_stats, model3_stats])
     
-    # 数値を丸める
+    # 表示用コピーを作成（元のDataFrameは変更しない）
+    display_df = stats_df.copy()
+    
+    # 数値表示形式を統一（表示用コピーに対してのみ適用）
     numeric_columns = ['平均', '標準偏差', '最小値', '中央値', '最大値']
+    
+    # 件数は整数表示
+    display_df['件数'] = display_df['件数'].apply(lambda x: f'{int(x):.0f}' if not pd.isna(x) else '')
+    
+    # 小数値は小数第2位まで表示（-0.000000も0.00として表示される）
     for col in numeric_columns:
-        stats_df[col] = stats_df[col].round(2)
+        display_df[col] = display_df[col].apply(lambda x: f'{x:.2f}' if not pd.isna(x) else '')
     
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
-    st.dataframe(stats_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -1465,16 +1577,25 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
     }
     
     # データフレーム作成
+    # 計算ロジックは変更せず、元データを保持
     stats_df = pd.DataFrame([model2_stats, model3_stats])
     
-    # 数値を丸める
+    # 表示用コピーを作成（元のDataFrameは変更しない）
+    display_df = stats_df.copy()
+    
+    # 数値表示形式を統一（表示用コピーに対してのみ適用）
     numeric_columns = ['平均', '標準偏差', '最小値', '中央値', '最大値']
+    
+    # 件数は整数表示
+    display_df['件数'] = display_df['件数'].apply(lambda x: f'{int(x):.0f}' if not pd.isna(x) else '')
+    
+    # 小数値は小数第2位まで表示（-0.000000も0.00として表示される）
     for col in numeric_columns:
-        stats_df[col] = stats_df[col].round(2)
+        display_df[col] = display_df[col].apply(lambda x: f'{x:.2f}' if not pd.isna(x) else '')
     
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
-    st.dataframe(stats_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -1795,7 +1916,7 @@ def display_outlier_processing_results(product_code: str,
                 .outlier-info-table th {
                     background-color: #f0f2f6;
                     color: #262730;
-                    font-weight: 600;
+                    font-weight: normal;
                     text-align: left;
                     padding: 10px 12px;
                     border: 1px solid #e0e0e0;
