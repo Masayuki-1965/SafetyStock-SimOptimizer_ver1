@@ -174,7 +174,7 @@ def display_step2():
     
     # 計画誤差率の閾値設定（詳細設定として折り畳み）
     with st.expander("計画誤差率（％）の設定（任意）", expanded=False):
-        st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±50%）のままで問題ない場合は、この設定を変更する必要はありません。慣れてきたユーザーが、より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
+        st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±10%）のままで問題ない場合は、この設定を変更する必要はありません。慣れてきたユーザーが、より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
         st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
@@ -182,7 +182,7 @@ def display_step2():
                 "計画誤差率（プラス）の閾値（%）",
                 min_value=0.0,
                 max_value=500.0,
-                value=st.session_state.get("step2_plan_plus_threshold", 50.0),
+                value=st.session_state.get("step2_plan_plus_threshold", 10.0),
                 step=5.0,
                 help="計画誤差率がこの値以上の場合、計画誤差率（プラス）大として扱います。",
                 key="step2_plan_plus_threshold"
@@ -192,7 +192,7 @@ def display_step2():
                 "計画誤差率（マイナス）の閾値（%）",
                 min_value=-500.0,
                 max_value=0.0,
-                value=st.session_state.get("step2_plan_minus_threshold", -50.0),
+                value=st.session_state.get("step2_plan_minus_threshold", -10.0),
                 step=5.0,
                 help="計画誤差率がこの値以下の場合、計画誤差率（マイナス）大として扱います。",
                 key="step2_plan_minus_threshold"
@@ -956,7 +956,7 @@ def display_step2():
                 "計画誤差率（プラス）の閾値（%）",
                 min_value=0.0,
                 max_value=500.0,
-                value=st.session_state.get("step2_plan_plus_threshold", 50.0),
+                value=st.session_state.get("step2_plan_plus_threshold_final", st.session_state.get("step2_plan_plus_threshold", 10.0)),
                 step=5.0,
                 help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
                 key="step2_plan_plus_threshold_final"
@@ -966,7 +966,7 @@ def display_step2():
                 "計画誤差率（マイナス）の閾値（%）",
                 min_value=-500.0,
                 max_value=0.0,
-                value=st.session_state.get("step2_plan_minus_threshold", -50.0),
+                value=st.session_state.get("step2_plan_minus_threshold_final", st.session_state.get("step2_plan_minus_threshold", -10.0)),
                 step=5.0,
                 help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
                 key="step2_plan_minus_threshold_final"

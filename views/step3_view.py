@@ -442,7 +442,7 @@ def display_step3():
                 "計画誤差率（プラス）の閾値（%）",
                 min_value=0.0,
                 max_value=500.0,
-                value=st.session_state.get("step3_plan_plus_threshold", 50.0),
+                value=st.session_state.get("step3_plan_plus_threshold", st.session_state.get("step2_plan_plus_threshold_final", 10.0)),
                 step=5.0,
                 help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
                 key="step3_plan_plus_threshold"
@@ -452,7 +452,7 @@ def display_step3():
                 "計画誤差率（マイナス）の閾値（%）",
                 min_value=-500.0,
                 max_value=0.0,
-                value=st.session_state.get("step3_plan_minus_threshold", -50.0),
+                value=st.session_state.get("step3_plan_minus_threshold", st.session_state.get("step2_plan_minus_threshold_final", -10.0)),
                 step=5.0,
                 help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
                 key="step3_plan_minus_threshold"
