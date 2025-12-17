@@ -20,6 +20,7 @@ from utils.common import (
 from views.step1_view import display_safety_stock_definitions
 from charts.safety_stock_charts import (
     create_time_series_chart,
+    create_lead_time_total_time_series_chart,
     create_time_series_delta_bar_chart,
     create_histogram_with_unified_range,
     create_outlier_processing_results_chart,
@@ -429,16 +430,21 @@ def display_step2():
             unsafe_allow_html=True
         )
         
-        # 4. リードタイム期間合計（計画・実績）の統計情報（NEW）
+        # 4. リードタイム期間合計（計画・実績）の時系列推移
+        st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の時系列推移</div>', unsafe_allow_html=True)
+        fig = create_lead_time_total_time_series_chart(product_code, calculator)
+        st.plotly_chart(fig, use_container_width=True, key=f"lead_time_total_time_series_step2_{product_code}")
+        
+        # 5. リードタイム期間合計（計画・実績）の統計情報（NEW）
         st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の統計情報</div>', unsafe_allow_html=True)
         display_lead_time_total_statistics(product_code, calculator)
         
-        # 5. リードタイム間差分の時系列推移
+        # 6. リードタイム間差分の時系列推移
         st.markdown('<div class="step-sub-section">リードタイム間差分の時系列推移</div>', unsafe_allow_html=True)
         fig = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
         st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}")
-        
-        # 6. リードタイム間差分の統計情報
+
+        # 7. リードタイム間差分の統計情報
         st.markdown('<div class="step-sub-section">リードタイム間差分の統計情報</div>', unsafe_allow_html=True)
         display_delta_statistics_from_data(product_code, lt_delta_data['delta2'], lt_delta_data['delta3'])
         

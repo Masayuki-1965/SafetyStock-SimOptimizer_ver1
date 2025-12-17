@@ -93,6 +93,101 @@ def create_time_series_chart(product_code: str, calculator: SafetyStockCalculato
     return fig
 
 
+def create_lead_time_total_time_series_chart(product_code: str, calculator: SafetyStockCalculator) -> go.Figure:
+    """
+    リードタイム期間合計（計画・実績）の時系列推移グラフを生成
+    
+    Args:
+        product_code: 商品コード
+        calculator: SafetyStockCalculatorインスタンス
+    
+    Returns:
+        Plotly Figureオブジェクト
+    """
+    # リードタイム日数を取得
+    lead_time_working_days = calculator._get_lead_time_in_working_days()
+    lead_time_days = int(np.ceil(lead_time_working_days))
+    
+    # データ取得
+    plan_data = calculator.plan_data
+    actual_data = calculator.actual_data
+    
+    # リードタイム期間の計画合計と実績合計を計算（1日ずつスライド）
+    plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+    actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+    
+    # 共通インデックスを取得
+    common_idx = plan_sums.index.intersection(actual_sums.index)
+    plan_sums_common = plan_sums.loc[common_idx]
+    actual_sums_common = actual_sums.loc[common_idx]
+    
+    # 日付を取得
+    dates = pd.to_datetime(common_idx)
+    
+    # Plotlyグラフを作成
+    fig = go.Figure()
+    
+    # リードタイム期間の計画合計（棒グラフ・緑色）
+    fig.add_trace(
+        go.Bar(
+            x=dates,
+            y=plan_sums_common.values,
+            name='リードタイム期間の計画合計',
+            marker_color='rgba(100, 200, 150, 0.8)',  # 緑色
+            hovertemplate="日付=%{x}<br>計画合計=%{y}<extra></extra>",
+            showlegend=True
+        )
+    )
+    
+    # リードタイム期間の実績合計（棒グラフ・グレー色）
+    fig.add_trace(
+        go.Bar(
+            x=dates,
+            y=actual_sums_common.values,
+            name='リードタイム期間の実績合計',
+            marker_color='rgba(128, 128, 128, 0.8)',  # グレー色
+            hovertemplate="日付=%{x}<br>実績合計=%{y}<extra></extra>",
+            showlegend=True
+        )
+    )
+    
+    # レイアウト設定
+    fig.update_layout(
+        title=f"{product_code} - リードタイム期間合計（計画・実績）の時系列推移",
+        xaxis=dict(
+            title="日付",
+            type="date",
+            tickformat="%Y-%m",
+            rangeslider=dict(
+                visible=True,
+                thickness=0.05,
+                bgcolor="rgba(0,0,0,0)",
+                borderwidth=0
+            )
+        ),
+        yaxis=dict(
+            title="数量",
+            showgrid=True
+        ),
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255,255,255,0)",
+            bordercolor="rgba(0,0,0,0)",
+            font=dict(size=12)
+        ),
+        barmode='group',  # 棒グラフをグループ化してペア表示
+        height=500,
+        margin=dict(l=80, r=80, t=100, b=100)
+    )
+    
+    return fig
+
+
 def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict], calculator: SafetyStockCalculator, show_safety_stock_lines: bool = True) -> go.Figure:
     """
     LT間差分の時系列棒グラフを生成（上下分割表示）
