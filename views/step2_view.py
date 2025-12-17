@@ -102,14 +102,33 @@ def display_step2():
         st.warning("⚠️ 機種を選定できませんでした。ABC分析結果を確認してください。")
         return
     
-    # 全ABC区分の商品を取得し、実績値（累計）の多い順にソート
-    # ABC区分ラベル付きで商品コードを表示
+    # 全ABC区分の商品を取得
     all_products_with_category = analysis_result[['product_code', 'abc_category', 'total_actual']].copy()
-    all_products_with_category = all_products_with_category.sort_values('total_actual', ascending=False).reset_index(drop=True)
     
-    # 表示用ラベルを作成（例：A | TT-XXXXX-AAAA、NaNの場合は「未分類」）
+    # 全商品コードに対して計画誤差率を計算
+    plan_error_rates = {}
+    for product_code in product_list:
+        try:
+            plan_data = data_loader.get_daily_plan(product_code)
+            actual_data = data_loader.get_daily_actual(product_code)
+            plan_error_rate, _, _ = calculate_plan_error_rate(actual_data, plan_data)
+            plan_error_rates[product_code] = plan_error_rate
+        except Exception:
+            plan_error_rates[product_code] = None
+    
+    # 計画誤差率をDataFrameに追加
+    all_products_with_category['plan_error_rate'] = all_products_with_category['product_code'].map(plan_error_rates)
+    
+    # 表示用ラベルを作成（例：A | +52.3% | TT-XXXXX-AAAA、NaNの場合は「未分類」）
+    def format_plan_error_rate(rate):
+        """計画誤差率を表示形式にフォーマット"""
+        if rate is None or (isinstance(rate, float) and pd.isna(rate)):
+            return "N/A"
+        sign = "+" if rate >= 0 else ""
+        return f"{sign}{rate:.1f}%"
+    
     all_products_with_category['display_label'] = all_products_with_category.apply(
-        lambda row: f"{format_abc_category_for_display(row['abc_category'])} | {row['product_code']}", axis=1
+        lambda row: f"{format_abc_category_for_display(row['abc_category'])} | {format_plan_error_rate(row['plan_error_rate'])} | {row['product_code']}", axis=1
     )
     
     # 商品コードとラベルのマッピングを作成
@@ -137,7 +156,9 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">分析対象の商品コードを選択します。<br><strong>「任意の商品コード」</strong>から選択するか、計画誤差率（％）の閾値を設定し、<strong>「計画誤差率（プラス）大」</strong>または<strong>「計画誤差率（マイナス）大」</strong>を選択してください。</div>
+    <div class="step-description">分析対象の商品コードを<strong>「任意の商品コード」</strong>から選択してください。<br>
+    または、<strong>「計画誤差率（％）の設定（任意）」</strong>で閾値を設定し、<strong>「計画誤差率（プラス）大」</strong>または<strong>「計画誤差率（マイナス）大」</strong>を選択してください。<br>
+    ※ 計画誤差率 ＝（実績合計 − 計画合計）÷ 実績合計</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -152,7 +173,7 @@ def display_step2():
     )
     
     # 計画誤差率の閾値設定（詳細設定として折り畳み）
-    with st.expander("詳細設定（任意）", expanded=False):
+    with st.expander("計画誤差率（％）の設定（任意）", expanded=False):
         st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±50%）のままで問題ない場合は、この設定を変更する必要はありません。慣れてきたユーザーが、より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
         st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
@@ -185,22 +206,11 @@ def display_step2():
         <div class="annotation-info-box">💡 <strong>任意の商品コードから選択できます。</strong>まずはここから選んで問題ありません。</div>
         """, unsafe_allow_html=True)
     else:
-        # 計画誤差率を計算
-        plan_error_rates = {}
-        for product_code in product_list:
-            try:
-                plan_data = data_loader.get_daily_plan(product_code)
-                actual_data = data_loader.get_daily_actual(product_code)
-                plan_error_rate, _, _ = calculate_plan_error_rate(actual_data, plan_data)
-                plan_error_rates[product_code] = plan_error_rate
-            except Exception:
-                plan_error_rates[product_code] = None
-        
-        # フィルタリング
+        # フィルタリング（計画誤差率は既に計算済み）
         if selection_mode == "計画誤差率（プラス）大":
             filtered_products = all_products_with_category[
-                all_products_with_category['product_code'].apply(
-                    lambda x: plan_error_rates.get(x) is not None and plan_error_rates.get(x) >= plan_plus_threshold
+                all_products_with_category['plan_error_rate'].apply(
+                    lambda x: x is not None and not (isinstance(x, float) and pd.isna(x)) and x >= plan_plus_threshold
                 )
             ].copy()
             st.markdown(f"""
@@ -210,8 +220,8 @@ def display_step2():
             """, unsafe_allow_html=True)
         elif selection_mode == "計画誤差率（マイナス）大":
             filtered_products = all_products_with_category[
-                all_products_with_category['product_code'].apply(
-                    lambda x: plan_error_rates.get(x) is not None and plan_error_rates.get(x) <= plan_minus_threshold
+                all_products_with_category['plan_error_rate'].apply(
+                    lambda x: x is not None and not (isinstance(x, float) and pd.isna(x)) and x <= plan_minus_threshold
                 )
             ].copy()
             st.markdown(f"""
@@ -226,7 +236,26 @@ def display_step2():
     
     # 商品コード選択プルダウン
     if not filtered_products.empty:
-        filtered_products = filtered_products.sort_values('total_actual', ascending=False).reset_index(drop=True)
+        # 選択モード別の並び順を適用
+        if selection_mode == "任意の商品コード":
+            # 実績合計の多い順（降順：大 → 小）
+            filtered_products = filtered_products.sort_values(
+                by=['total_actual', 'product_code'],
+                ascending=[False, True]
+            ).reset_index(drop=True)
+        elif selection_mode == "計画誤差率（プラス）大":
+            # プラス誤差率の大きい順（降順：大 → 小）
+            filtered_products = filtered_products.sort_values(
+                by=['plan_error_rate', 'product_code'],
+                ascending=[False, True]
+            ).reset_index(drop=True)
+        elif selection_mode == "計画誤差率（マイナス）大":
+            # マイナス誤差率の小さい順（昇順：小 → 大、より負の値が上に来る）
+            filtered_products = filtered_products.sort_values(
+                by=['plan_error_rate', 'product_code'],
+                ascending=[True, True]
+            ).reset_index(drop=True)
+        
         filtered_labels = filtered_products['display_label'].tolist()
         
         # デフォルト値の設定
@@ -244,6 +273,8 @@ def display_step2():
             key="step2_selected_product_label",
             help="分析対象の商品コードを選択してください。"
         )
+        
+        st.caption("※ 商品コードの選択リストは「ABC区分｜計画誤差率｜商品コード」の形式で表示されます。")
         
         selected_product = label_to_product_code.get(selected_label, default_product)
     else:
