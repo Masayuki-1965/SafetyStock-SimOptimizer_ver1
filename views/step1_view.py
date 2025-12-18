@@ -229,17 +229,15 @@ def display_file_upload_section():
     # ケースA：①・②のどちらか、または両方が欠けている場合
     if not has_required_12:
         st.markdown("""
-        <div class="annotation-warning-box">
-            <span class="icon">⚠</span>
-            <div class="text">dataフォルダ内に、必須データ（①〜③）がすべて揃っていません。<br>Browse filesでファイルを指定、またはCSVファイルをドラッグ&ドロップしてください。</div>
+        <div class="annotation-info-box">
+            CSVファイルをアップロードしてください。Browse filesでファイルを指定するか、CSVファイルをドラッグ＆ドロップできます。
         </div>
         """, unsafe_allow_html=True)
     # ケースB：①・②は揃っているが③が無い場合
     elif not has_safety_stock:
         st.markdown("""
-        <div class="annotation-warning-box">
-            <span class="icon">⚠</span>
-            <div class="text">dataフォルダ内に、必須データ（①〜③）がすべて揃っていません。<br>Browse filesでファイルを指定、またはCSVファイルをドラッグ&ドロップしてください。</div>
+        <div class="annotation-info-box">
+            CSVファイルをアップロードしてください。Browse filesでファイルを指定するか、CSVファイルをドラッグ＆ドロップできます。
         </div>
         """, unsafe_allow_html=True)
     elif all_required_files_exist:
