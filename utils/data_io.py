@@ -257,6 +257,21 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
         # セッション状態に保存
         st.session_state.uploaded_data_loader = data_loader
         
+        # 全体計画誤差率（加重平均）を計算してセッション状態に保存
+        # （ABC分析結果が存在する場合はそれを使用、存在しない場合は全商品コードを使用）
+        from utils.common import calculate_weighted_average_plan_error_rate
+        abc_analysis_result = st.session_state.get('abc_analysis_result')
+        analysis_result_df = None
+        if abc_analysis_result is not None and 'analysis' in abc_analysis_result:
+            analysis_result_df = abc_analysis_result['analysis']
+        weighted_avg_plan_error_rate = calculate_weighted_average_plan_error_rate(
+            data_loader,
+            analysis_result=analysis_result_df,
+            exclude_plan_only=True,
+            exclude_actual_only=True
+        )
+        st.session_state.weighted_average_plan_error_rate = weighted_avg_plan_error_rate
+        
         # アンマッチチェックを実行（①〜③が正常に読み込めた場合のみ）
         if (data_loader.plan_df is not None and 
             data_loader.actual_df is not None and 

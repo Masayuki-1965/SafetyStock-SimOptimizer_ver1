@@ -534,14 +534,14 @@ def display_abc_classification_section():
         if method == "ratio":
             st.markdown("""
             <div class="annotation-info-box">
-                <strong>構成比率で区分</strong>：商品コードを「実績値」の多い順にソートし、指定した累積構成比率に基づいてABC分析を行います。<br>
+                <strong>構成比率で区分</strong>：商品コードを「実績値」の多い順にソートし、指定した累積構成比率に基づいてABC分析を行います。
                 ※実績値＝全期間の実績値合計
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown("""
             <div class="annotation-info-box">
-                <strong>数量範囲で区分</strong>：商品コードを「月平均実績値」の多い順にソートし、指定した数量範囲に基づいてABC分析を行います。<br>
+                <strong>数量範囲で区分</strong>：商品コードを「月平均実績値」の多い順にソートし、指定した数量範囲に基づいてABC分析を行います。
                 ※月平均実績値＝全期間の実績値合計 ÷ 対象月数
             </div>
             """, unsafe_allow_html=True)
@@ -784,6 +784,16 @@ def execute_abc_analysis(data_loader):
         # ABC区分がNaNの商品が存在する場合のフラグを設定
         st.session_state.has_unclassified_products = check_has_unclassified_products(analysis_result)
         
+        # 全体計画誤差率（加重平均）を計算してセッション状態に保存
+        from utils.common import calculate_weighted_average_plan_error_rate
+        weighted_avg_plan_error_rate = calculate_weighted_average_plan_error_rate(
+            data_loader,
+            analysis_result=analysis_result_with_display,
+            exclude_plan_only=True,
+            exclude_actual_only=True
+        )
+        st.session_state.weighted_average_plan_error_rate = weighted_avg_plan_error_rate
+        
         st.markdown("""
         <div class="annotation-success-box">
             <span class="icon">✅</span>
@@ -856,6 +866,17 @@ def apply_existing_abc_results(data_loader):
     st.session_state.abc_analysis_result = results
     st.session_state.abc_analysis_source = 'existing'
     st.session_state.abc_existing_missing_codes = missing_codes
+    
+    # 全体計画誤差率（加重平均）を計算してセッション状態に保存
+    from utils.common import calculate_weighted_average_plan_error_rate
+    weighted_avg_plan_error_rate = calculate_weighted_average_plan_error_rate(
+        data_loader,
+        analysis_result=results['analysis'],
+        exclude_plan_only=True,
+        exclude_actual_only=True
+    )
+    st.session_state.weighted_average_plan_error_rate = weighted_avg_plan_error_rate
+    
     return True
 
 

@@ -335,6 +335,83 @@ def calculate_plan_error_rate(actual_data: pd.Series, plan_data: pd.Series) -> T
     return plan_error_rate, plan_error, plan_total
 
 
+def calculate_weighted_average_plan_error_rate(
+    data_loader: 'DataLoader',
+    analysis_result: pd.DataFrame | None = None,
+    exclude_plan_only: bool = True,
+    exclude_actual_only: bool = True
+) -> float | None:
+    """
+    全体計画誤差率（加重平均）を計算
+    
+    各商品コードの計画誤差率を、各商品コードの実績数量合計で加重平均した値
+    
+    Args:
+        data_loader: DataLoaderインスタンス
+        analysis_result: ABC分析結果のDataFrame（Noneの場合は全商品コードを使用）
+        exclude_plan_only: 「計画のみ」の商品コードを除外するかどうか（デフォルト: True）
+        exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
+    
+    Returns:
+        float | None: 全体計画誤差率（加重平均）（%）。計算できない場合はNone
+    """
+    # 対象商品コードリストを取得
+    if analysis_result is not None:
+        product_list = analysis_result['product_code'].tolist()
+    else:
+        product_list = data_loader.get_product_list()
+    
+    # 「計画のみ」「実績のみ」の商品コードを除外
+    if exclude_plan_only or exclude_actual_only:
+        mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+        if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+            excluded_codes = set()
+            if exclude_plan_only:
+                plan_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '計画のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(plan_only_codes)
+            if exclude_actual_only:
+                actual_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '実績のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(actual_only_codes)
+            product_list = [code for code in product_list if str(code) not in excluded_codes]
+    
+    if not product_list:
+        return None
+    
+    # 各商品コードの計画誤差率と実績数量合計を計算
+    weighted_sum = 0.0
+    total_weight = 0.0
+    
+    for product_code in product_list:
+        try:
+            plan_data = data_loader.get_daily_plan(product_code)
+            actual_data = data_loader.get_daily_actual(product_code)
+            
+            # 計画誤差率を計算
+            plan_error_rate, _, _ = calculate_plan_error_rate(actual_data, plan_data)
+            
+            # 実績数量合計を取得（重み）
+            actual_total = float(actual_data.sum())
+            
+            # 計画誤差率が計算可能で、実績数量が0より大きい場合のみ加算
+            if plan_error_rate is not None and actual_total > 0:
+                weighted_sum += plan_error_rate * actual_total
+                total_weight += actual_total
+        except Exception:
+            # エラーが発生した商品コードはスキップ
+            continue
+    
+    # 加重平均を計算
+    if total_weight == 0:
+        return None
+    
+    weighted_average = weighted_sum / total_weight
+    return weighted_average
+
+
 def is_plan_anomaly(
     plan_error_rate: float | None,
     plus_threshold: float,

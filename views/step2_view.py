@@ -452,9 +452,8 @@ def display_step2():
             <div class="annotation-success-box">
                 <span class="icon">✅</span>
                 <div class="text">
-                    <strong>リードタイム区間の総件数：{total_count}件</strong><br>
-                    リードタイム日数分の計画および実績データを1日ずつスライドしながら合計します。<br>
-                    この件数が、後続の「リードタイム期間合計（計画・実績）」や「リードタイム間差分」の分析単位になります。
+                    <strong>リードタイム区間の総件数：{total_count}件</strong> 
+                    （リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数）
                 </div>
             </div>
             """,
@@ -1404,6 +1403,57 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     plan_data = calculator.plan_data
     actual_data = calculator.actual_data
     
+    # 統計情報サマリーの情報を取得
+    # 1. 対象期間：日次計画と日次実績の時系列推移の表示期間（共通期間）
+    data_loader = st.session_state.get('uploaded_data_loader')
+    if data_loader is not None:
+        try:
+            common_start, common_end = data_loader.get_common_date_range()
+            # 日付をYYYY/MM/DD形式にフォーマット
+            if isinstance(common_start, str):
+                # YYYYMMDD形式の文字列の場合
+                if len(common_start) == 8:
+                    start_date_str = f"{common_start[:4]}/{common_start[4:6]}/{common_start[6:8]}"
+                else:
+                    start_date_str = str(common_start)
+            else:
+                # Timestampの場合
+                start_date_str = common_start.strftime("%Y/%m/%d")
+            
+            if isinstance(common_end, str):
+                # YYYYMMDD形式の文字列の場合
+                if len(common_end) == 8:
+                    end_date_str = f"{common_end[:4]}/{common_end[4:6]}/{common_end[6:8]}"
+                else:
+                    end_date_str = str(common_end)
+            else:
+                # Timestampの場合
+                end_date_str = common_end.strftime("%Y/%m/%d")
+            
+            target_period = f"{start_date_str} ～ {end_date_str}"
+        except Exception:
+            target_period = "取得できませんでした"
+    else:
+        target_period = "取得できませんでした"
+    
+    # 2. 対象商品コード数：STEP1のABC区分集計結果に含まれる商品コード数の合計（「計画のみ」「実績のみ」を除外）
+    abc_analysis_result = st.session_state.get('abc_analysis_result')
+    target_product_count = None
+    if abc_analysis_result is not None and 'aggregation' in abc_analysis_result:
+        aggregation_df = abc_analysis_result['aggregation']
+        # 「合計」行の商品コード数を取得
+        # aggregationの列名は'ABC区分', 'count', 'total_actual', 'composition_ratio'
+        total_row = aggregation_df[aggregation_df['ABC区分'] == '合計']
+        if not total_row.empty:
+            # 列名が'商品コード数（件数）'または'count'の場合を考慮
+            if '商品コード数（件数）' in total_row.columns:
+                target_product_count = int(total_row['商品コード数（件数）'].iloc[0])
+            elif 'count' in total_row.columns:
+                target_product_count = int(total_row['count'].iloc[0])
+    
+    # 3. 全体計画誤差率（加重平均）
+    weighted_avg_plan_error_rate = st.session_state.get('weighted_average_plan_error_rate')
+    
     # 計画誤差率を計算（合計値ベースで計算）
     # 誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
     # 実装では sum() を使用して合計値を計算している
@@ -1488,6 +1538,33 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         lambda x: f'{x:.2f}%' if x is not None and not pd.isna(x) else ''
     )
     
+    # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
+    # 項目名の最大文字数に合わせて全角スペースで調整（「対象商品コード数」が8文字）
+    summary_lines = []
+    
+    # 対象期間（4文字 + 全角スペース4文字で8文字に揃える）
+    summary_lines.append(f"対象期間　　　　： {target_period}")
+    
+    # 対象商品コード数（8文字）
+    if target_product_count is not None:
+        summary_lines.append(f"対象商品コード数： {target_product_count:,} 件")
+    else:
+        summary_lines.append("対象商品コード数： 取得できませんでした")
+    
+    # 全体計画誤差率（6文字 + 全角スペース2文字で8文字に揃える）
+    if weighted_avg_plan_error_rate is not None:
+        sign = "+" if weighted_avg_plan_error_rate >= 0 else ""
+        summary_lines.append(f"全体計画誤差率　： {sign}{weighted_avg_plan_error_rate:.2f} %（加重平均）")
+    else:
+        summary_lines.append("全体計画誤差率　： 計算できませんでした")
+    
+    summary_html = "<br>".join(summary_lines)
+    st.markdown(f"""
+    <div style="margin-bottom: 1rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+        {summary_html}
+    </div>
+    """, unsafe_allow_html=True)
+    
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
     
@@ -1513,6 +1590,29 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     """, unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 計画誤差率の比較結果注釈（緑の結果系テキストボックス）を表の下に追加
+    if plan_error_rate is not None and weighted_avg_plan_error_rate is not None:
+        # 絶対値で比較
+        abs_plan_error_rate = abs(plan_error_rate)
+        abs_weighted_avg = abs(weighted_avg_plan_error_rate)
+        
+        # 計画誤差率の符号を取得
+        sign = "+" if plan_error_rate >= 0 else ""
+        
+        if abs_plan_error_rate < abs_weighted_avg:
+            # 誤差が小さい場合
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_plan_error_rate:+.2f}％）と比較して、誤差が小さいです。"
+        else:
+            # 誤差が大きい場合
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_plan_error_rate:+.2f}％）と比較して、誤差が大きいです。"
+        
+        st.markdown(f"""
+        <div class="annotation-success-box" style="margin-top: 1rem;">
+            <span class="icon">{"✅" if abs_plan_error_rate < abs_weighted_avg else "⚠️"}</span>
+            <div class="text">{comparison_result}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def display_lead_time_total_statistics(product_code: str, calculator: SafetyStockCalculator):
