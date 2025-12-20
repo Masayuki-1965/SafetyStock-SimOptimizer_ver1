@@ -15,7 +15,9 @@ from utils.common import (
     get_representative_products_by_abc,
     get_abc_analysis_with_fallback,
     calculate_plan_error_rate,
-    is_plan_anomaly
+    is_plan_anomaly,
+    calculate_weighted_average_lead_time_plan_error_rate,
+    get_target_product_count
 )
 from views.step1_view import display_safety_stock_definitions
 from charts.safety_stock_charts import (
@@ -393,6 +395,15 @@ def display_step2():
             lead_time_working_days = temp_calculator._get_lead_time_in_working_days()
             lead_time_days = int(np.ceil(lead_time_working_days))
             
+            # リードタイムや欠品許容率が変更された場合、以前のリードタイム期間の全体計画誤差率（加重平均）をクリア
+            # リードタイム日数をキーにしているので、リードタイムが変更されると新しいキーで計算される
+            # 以前のキーの計算結果をクリアする必要はないが、念のため現在のリードタイム日数以外のキーをクリア
+            current_lead_time_key = f'weighted_average_lead_time_plan_error_rate_{lead_time_days}'
+            # セッション状態から、リードタイム期間の全体計画誤差率（加重平均）のキーを探してクリア
+            keys_to_remove = [key for key in st.session_state.keys() if key.startswith('weighted_average_lead_time_plan_error_rate_') and key != current_lead_time_key]
+            for key in keys_to_remove:
+                del st.session_state[key]
+            
             # LT間差分を計算
             actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
             delta2 = actual_sums - actual_sums.mean()
@@ -438,6 +449,42 @@ def display_step2():
         
         # 1. 日次計画と日次実績の時系列推移
         st.markdown('<div class="step-sub-section">日次計画と日次実績の時系列推移</div>', unsafe_allow_html=True)
+        
+        # 対象期間を表示
+        data_loader = st.session_state.get('uploaded_data_loader')
+        if data_loader is not None:
+            try:
+                common_start, common_end = data_loader.get_common_date_range()
+                # 日付をYYYY/MM/DD形式にフォーマット
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                start_date_str = format_date(common_start)
+                end_date_str = format_date(common_end)
+                
+                # 稼働日数を取得
+                working_dates = data_loader.get_working_dates()
+                if working_dates is not None and len(working_dates) > 0:
+                    working_dates_in_range = [d for d in working_dates if common_start <= d <= common_end]
+                    working_days_count = len(working_dates_in_range) if working_dates_in_range else len(calculator.plan_data)
+                else:
+                    working_days_count = len(calculator.plan_data)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                    対象期間： {start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
+                    対象商品： {product_code}
+                </div>
+                """, unsafe_allow_html=True)
+            except Exception:
+                pass
+        
         fig = create_time_series_chart(product_code, calculator)
         st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}")
         
@@ -462,6 +509,62 @@ def display_step2():
         
         # 4. リードタイム期間合計（計画・実績）の時系列推移
         st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の時系列推移</div>', unsafe_allow_html=True)
+        
+        # 対象期間を表示
+        plan_data = calculator.plan_data
+        actual_data = calculator.actual_data
+        plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+        actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+        common_idx = plan_sums.index.intersection(actual_sums.index)
+        
+        if len(common_idx) > 0:
+            first_end_date = common_idx[0]
+            last_end_date = common_idx[-1]
+            
+            try:
+                first_end_pos = plan_data.index.get_loc(first_end_date)
+                first_start_pos = first_end_pos - (lead_time_days - 1)
+                if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                    first_start_date = plan_data.index[first_start_pos]
+                else:
+                    first_start_date = first_end_date
+            except (KeyError, IndexError):
+                first_start_date = first_end_date
+            
+            try:
+                last_end_pos = plan_data.index.get_loc(last_end_date)
+                last_start_pos = last_end_pos - (lead_time_days - 1)
+                if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                    last_start_date = plan_data.index[last_start_pos]
+                else:
+                    last_start_date = last_end_date
+            except (KeyError, IndexError):
+                last_start_date = last_end_date
+            
+            def format_date(date):
+                if isinstance(date, str):
+                    if len(date) == 8:
+                        return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                    else:
+                        return str(date)
+                else:
+                    return pd.to_datetime(date).strftime("%Y/%m/%d")
+            
+            first_start_str = format_date(first_start_date)
+            first_end_str = format_date(first_end_date)
+            last_start_str = format_date(last_start_date)
+            last_end_str = format_date(last_end_date)
+            
+            target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+            total_count = len(common_idx)
+            
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                対象期間： {target_period}（総件数：{total_count:,} 件）<br>
+                対象商品： {product_code}
+            </div>
+            """, unsafe_allow_html=True)
+        
         fig = create_lead_time_total_time_series_chart(product_code, calculator)
         st.plotly_chart(fig, use_container_width=True, key=f"lead_time_total_time_series_step2_{product_code}")
         
@@ -471,6 +574,62 @@ def display_step2():
         
         # 6. リードタイム間差分の時系列推移
         st.markdown('<div class="step-sub-section">リードタイム間差分の時系列推移</div>', unsafe_allow_html=True)
+        
+        # 対象期間を表示
+        plan_data = calculator.plan_data
+        actual_data = calculator.actual_data
+        plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+        actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+        common_idx = plan_sums.index.intersection(actual_sums.index)
+        
+        if len(common_idx) > 0:
+            first_end_date = common_idx[0]
+            last_end_date = common_idx[-1]
+            
+            try:
+                first_end_pos = plan_data.index.get_loc(first_end_date)
+                first_start_pos = first_end_pos - (lead_time_days - 1)
+                if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                    first_start_date = plan_data.index[first_start_pos]
+                else:
+                    first_start_date = first_end_date
+            except (KeyError, IndexError):
+                first_start_date = first_end_date
+            
+            try:
+                last_end_pos = plan_data.index.get_loc(last_end_date)
+                last_start_pos = last_end_pos - (lead_time_days - 1)
+                if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                    last_start_date = plan_data.index[last_start_pos]
+                else:
+                    last_start_date = last_end_date
+            except (KeyError, IndexError):
+                last_start_date = last_end_date
+            
+            def format_date(date):
+                if isinstance(date, str):
+                    if len(date) == 8:
+                        return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                    else:
+                        return str(date)
+                else:
+                    return pd.to_datetime(date).strftime("%Y/%m/%d")
+            
+            first_start_str = format_date(first_start_date)
+            first_end_str = format_date(first_end_date)
+            last_start_str = format_date(last_start_date)
+            last_end_str = format_date(last_end_date)
+            
+            target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+            total_count = len(common_idx)
+            
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                対象期間： {target_period}（総件数：{total_count:,} 件）<br>
+                対象商品： {product_code}
+            </div>
+            """, unsafe_allow_html=True)
+        
         fig = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
         st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}")
 
@@ -565,11 +724,123 @@ def display_step2():
             # LT間差分の時系列推移グラフ（安全在庫ライン付きで再描画）
             # 手順③では別のキーを使用して、安全在庫ラインを追加したグラフを表示
             st.markdown('<div class="step-sub-section">リードタイム間差分の時系列推移</div>', unsafe_allow_html=True)
+            
+            # 対象期間を表示
+            plan_data = calculator.plan_data
+            lead_time_days = int(np.ceil(calculator._get_lead_time_in_working_days()))
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = plan_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                        first_start_date = plan_data.index[first_start_pos]
+                    else:
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = plan_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                        last_start_date = plan_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
+                
+                target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+                total_count = len(common_idx)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                    対象期間： {target_period}（総件数：{total_count:,} 件）<br>
+                    対象商品： {product_code}
+                </div>
+                """, unsafe_allow_html=True)
+            
             fig = create_time_series_delta_bar_chart(product_code, results, calculator, show_safety_stock_lines=True)
             st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step3_{product_code}")
             
             # ヒストグラム
             st.markdown('<div class="step-sub-section">リードタイム間差分の分布（ヒストグラム）</div>', unsafe_allow_html=True)
+            
+            # 対象期間を表示
+            plan_data = calculator.plan_data
+            lead_time_days = int(np.ceil(calculator._get_lead_time_in_working_days()))
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = plan_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                        first_start_date = plan_data.index[first_start_pos]
+                    else:
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = plan_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                        last_start_date = plan_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
+                
+                target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+                total_count = len(common_idx)
+                
+                st.markdown(f"""
+                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                    対象期間： {target_period}（総件数：{total_count:,} 件）<br>
+                    対象商品： {product_code}
+                </div>
+                """, unsafe_allow_html=True)
+            
             fig = create_histogram_with_unified_range(product_code, results, calculator)
             st.plotly_chart(fig, use_container_width=True, key=f"histogram_{product_code}")
             # 安全在庫算出メッセージを表示
@@ -597,6 +868,11 @@ def display_step2():
             
             # 安全在庫比較結果（棒グラフ＋表の一体化）
             st.markdown('<div class="step-sub-section">安全在庫比較結果</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                対象商品： {product_code}
+            </div>
+            """, unsafe_allow_html=True)
             display_safety_stock_comparison(product_code, results, calculator)
             
             st.divider()
@@ -721,6 +997,42 @@ def display_step2():
             
             st.markdown('<div class="step-sub-section">実績異常値処理後：実績データ比較結果（Before/After）</div>', unsafe_allow_html=True)
             
+            # 対象期間を表示
+            data_loader = st.session_state.get('uploaded_data_loader')
+            if data_loader is not None:
+                try:
+                    common_start, common_end = data_loader.get_common_date_range()
+                    def format_date(date):
+                        if isinstance(date, str):
+                            if len(date) == 8:
+                                return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                            else:
+                                return str(date)
+                        else:
+                            return pd.to_datetime(date).strftime("%Y/%m/%d")
+                    
+                    start_date_str = format_date(common_start)
+                    end_date_str = format_date(common_end)
+                    
+                    # 稼働日数を取得
+                    working_dates = data_loader.get_working_dates()
+                    if working_dates is not None and len(working_dates) > 0:
+                        working_dates_in_range = [d for d in working_dates if common_start <= d <= common_end]
+                        working_days_count = len(working_dates_in_range) if working_dates_in_range else None
+                    else:
+                        working_days_count = None
+                    
+                    if working_days_count is not None:
+                        product_code = st.session_state.get('step2_product_code')
+                        st.markdown(f"""
+                        <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                            対象期間： {start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
+                            対象商品： {product_code}
+                        </div>
+                        """, unsafe_allow_html=True)
+                except Exception:
+                    pass
+            
             # 詳細情報を表示（異常値が検出された場合のみ）
             # display_outlier_processing_results内でグラフも表示されるため、ここでは直接表示しない
             product_code = st.session_state.get('step2_product_code')
@@ -822,6 +1134,12 @@ def display_step2():
         # 再算出結果の表示（Before/After比較）
         if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
             st.markdown('<div class="step-sub-section">実績異常値処理後：安全在庫比較結果（Before/After）</div>', unsafe_allow_html=True)
+            product_code = st.session_state.get('step2_product_code')
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                対象商品： {product_code}
+            </div>
+            """, unsafe_allow_html=True)
             
             product_code = st.session_state.get('step2_product_code')
             before_results = st.session_state.get('step2_results')
@@ -840,6 +1158,61 @@ def display_step2():
             
             # LT間差分の分布（Before/After）
             st.markdown('<div class="step-sub-section">実績異常値処理後：リードタイム間差分の分布比較結果（Before/After）</div>', unsafe_allow_html=True)
+            
+            # 対象期間を表示
+            lead_time_days = int(np.ceil(before_results['common_params']['lead_time_days']))
+            before_sums = before_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = before_sums.index
+            
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = before_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(before_data.index):
+                        first_start_date = before_data.index[first_start_pos]
+                    else:
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = before_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(before_data.index):
+                        last_start_date = before_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
+                
+                target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+                total_count = len(common_idx)
+                
+                product_code = st.session_state.get('step2_product_code')
+                st.markdown(f"""
+                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                    対象期間： {target_period}（総件数：{total_count:,} 件）<br>
+                    対象商品： {product_code}
+                </div>
+                """, unsafe_allow_html=True)
+            
             lead_time_days = int(np.ceil(before_results['common_params']['lead_time_days']))
             stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
             before_data = st.session_state.get('step2_actual_data')
@@ -1059,6 +1432,12 @@ def display_step2():
                 adopted_safety_stock = st.session_state.get('step2_adopted_safety_stock')
                 
                 st.markdown('<div class="step-sub-section">計画異常値処理後：安全在庫比較結果（採用モデル含む）</div>', unsafe_allow_html=True)
+                product_code = st.session_state.get('step2_product_code')
+                st.markdown(f"""
+                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                    対象商品： {product_code}
+                </div>
+                """, unsafe_allow_html=True)
                 
                 # a) 採用モデル確定メッセージ（バナー）は削除し、統合メッセージに統合
                 daily_actual_mean = final_calculator.actual_data.mean()
@@ -1158,17 +1537,16 @@ def display_step2():
                 
                 # 採用モデル列をハイライト（安全在庫③と同じ薄い緑に統一）
                 # 安全在庫③の色: rgba(100, 200, 150, 0.8) をテーブルの背景色として使用
-                # 白色背景にrgba(100, 200, 150, 0.8)を重ねた場合の色を計算
-                # R: 100*0.8 + 255*0.2 = 80 + 51 = 131
-                # G: 200*0.8 + 255*0.2 = 160 + 51 = 211
-                # B: 150*0.8 + 255*0.2 = 120 + 51 = 171
-                # → rgb(131, 211, 171) → #83D3AB
-                # テーブルの背景色として使用する場合は、より薄い色を使用
-                adopted_model_bg_color = '#B4E6D1'  # 安全在庫③の色系統（rgba(100, 200, 150, 0.8)）に基づいた薄い緑
+                # 採用モデル列のスタイル：計画誤差率と同じトーンに統一
+                # 背景色：薄い緑系（計画誤差率と同じ #E8F5E9）
+                # フォント色：緑字（計画誤差率と同じ #2E7D32）
+                # 太字指定なし（通常フォント）
+                adopted_model_bg_color = '#E8F5E9'  # 計画誤差率と同じ薄い緑背景
+                adopted_model_text_color = '#2E7D32'  # 計画誤差率と同じ緑文字
                 
                 # 列名で採用モデル列を特定
                 styled_df = comparison_df.style.applymap(
-                    lambda x: f'background-color: {adopted_model_bg_color}; font-weight: bold;' if isinstance(x, str) and x != '' else '',
+                    lambda x: f'background-color: {adopted_model_bg_color}; color: {adopted_model_text_color};' if isinstance(x, str) and x != '' else '',
                     subset=['採用モデル']
                 )
                 # 行ラベルが切れないように、CSSで調整
@@ -1370,6 +1748,11 @@ def display_step2():
             
             # 上限カット適用前後の安全在庫比較結果
             st.markdown('<div class="step-sub-section">上限カット後：安全在庫比較結果（採用モデル含む）</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                対象商品： {product_code}
+            </div>
+            """, unsafe_allow_html=True)
             
             # 採用モデルを取得（手順⑦で決定されたモデル）
             adopted_model = st.session_state.get('step2_adopted_model', 'ss3')  # デフォルトはss3
@@ -1406,6 +1789,7 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     # 統計情報サマリーの情報を取得
     # 1. 対象期間：日次計画と日次実績の時系列推移の表示期間（共通期間）
     data_loader = st.session_state.get('uploaded_data_loader')
+    working_days_count = None
     if data_loader is not None:
         try:
             common_start, common_end = data_loader.get_common_date_range()
@@ -1430,26 +1814,27 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
                 # Timestampの場合
                 end_date_str = common_end.strftime("%Y/%m/%d")
             
-            target_period = f"{start_date_str} ～ {end_date_str}"
+            # 稼働日数を取得
+            working_dates = data_loader.get_working_dates()
+            if working_dates is not None and len(working_dates) > 0:
+                # 共通期間内の稼働日数を計算
+                working_dates_in_range = [d for d in working_dates if common_start <= d <= common_end]
+                working_days_count = len(working_dates_in_range) if working_dates_in_range else len(plan_data)
+            else:
+                working_days_count = len(plan_data)
+            
+            if working_days_count is not None:
+                target_period = f"{start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）"
+            else:
+                target_period = f"{start_date_str} ～ {end_date_str}"
         except Exception:
             target_period = "取得できませんでした"
     else:
         target_period = "取得できませんでした"
     
     # 2. 対象商品コード数：STEP1のABC区分集計結果に含まれる商品コード数の合計（「計画のみ」「実績のみ」を除外）
-    abc_analysis_result = st.session_state.get('abc_analysis_result')
-    target_product_count = None
-    if abc_analysis_result is not None and 'aggregation' in abc_analysis_result:
-        aggregation_df = abc_analysis_result['aggregation']
-        # 「合計」行の商品コード数を取得
-        # aggregationの列名は'ABC区分', 'count', 'total_actual', 'composition_ratio'
-        total_row = aggregation_df[aggregation_df['ABC区分'] == '合計']
-        if not total_row.empty:
-            # 列名が'商品コード数（件数）'または'count'の場合を考慮
-            if '商品コード数（件数）' in total_row.columns:
-                target_product_count = int(total_row['商品コード数（件数）'].iloc[0])
-            elif 'count' in total_row.columns:
-                target_product_count = int(total_row['count'].iloc[0])
+    # ABC区分がない場合でも取得可能
+    target_product_count = get_target_product_count(data_loader) if data_loader is not None else None
     
     # 3. 全体計画誤差率（加重平均）
     weighted_avg_plan_error_rate = st.session_state.get('weighted_average_plan_error_rate')
@@ -1539,24 +1924,31 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     )
     
     # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
-    # 項目名の最大文字数に合わせて全角スペースで調整（「対象商品コード数」が8文字）
+    # 項目名の最大文字数に合わせて全角スペースで調整（「全体計画誤差率」が6文字）
     summary_lines = []
     
-    # 対象期間（4文字 + 全角スペース4文字で8文字に揃える）
-    summary_lines.append(f"対象期間　　　　： {target_period}")
+    # 対象期間（4文字 + 全角スペース2文字で6文字に揃える）
+    summary_lines.append(f"対象期間　： {target_period}")
     
-    # 対象商品コード数（8文字）
-    if target_product_count is not None:
-        summary_lines.append(f"対象商品コード数： {target_product_count:,} 件")
+    # 対象商品（4文字 + 全角スペース2文字で6文字に揃える）
+    summary_lines.append(f"対象商品　： {product_code}")
+    
+    # 計画誤差率（5文字 + 全角スペース1文字で6文字に揃える）
+    if plan_error_rate is not None:
+        sign = "+" if plan_error_rate >= 0 else ""
+        summary_lines.append(f"計画誤差率： {sign}{plan_error_rate:.2f} %")
     else:
-        summary_lines.append("対象商品コード数： 取得できませんでした")
+        summary_lines.append("計画誤差率： 計算できませんでした")
     
-    # 全体計画誤差率（6文字 + 全角スペース2文字で8文字に揃える）
-    if weighted_avg_plan_error_rate is not None:
+    # 全体計画誤差率（6文字）
+    if weighted_avg_plan_error_rate is not None and target_product_count is not None:
         sign = "+" if weighted_avg_plan_error_rate >= 0 else ""
-        summary_lines.append(f"全体計画誤差率　： {sign}{weighted_avg_plan_error_rate:.2f} %（加重平均）")
+        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）")
+    elif weighted_avg_plan_error_rate is not None:
+        sign = "+" if weighted_avg_plan_error_rate >= 0 else ""
+        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_plan_error_rate:.2f} %（加重平均）")
     else:
-        summary_lines.append("全体計画誤差率　： 計算できませんでした")
+        summary_lines.append("全体計画誤差率： 計算できませんでした")
     
     summary_html = "<br>".join(summary_lines)
     st.markdown(f"""
@@ -1635,6 +2027,96 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     plan_sums_common = plan_sums.loc[common_idx]
     actual_sums_common = actual_sums.loc[common_idx]
     
+    # 計画誤差率を計算（リードタイム期間合計ベース）
+    # 計画誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
+    actual_total = float(actual_sums_common.sum())
+    plan_total = float(plan_sums_common.sum())
+    
+    if actual_total == 0:
+        plan_error_rate = None
+    else:
+        plan_error_rate = ((actual_total - plan_total) / actual_total) * 100.0
+    
+    # 統計情報サマリーの情報を取得
+    # 1. 対象期間：リードタイム区間において、実際に集計対象となった最初の期間から最後の期間まで
+    # common_idxはrollingの結果のインデックスで、各リードタイム区間の終了日を表している
+    if len(common_idx) > 0:
+        # 最初のリードタイム区間の終了日（common_idx[0]）
+        first_end_date = common_idx[0]
+        # 最後のリードタイム区間の終了日（common_idx[-1]）
+        last_end_date = common_idx[-1]
+        
+        # 最初のリードタイム区間の開始日（common_idx[0]からlead_time_days日前）
+        # plan_dataまたはactual_dataのインデックスから取得
+        try:
+            # インデックスの位置を取得
+            first_end_pos = plan_data.index.get_loc(first_end_date)
+            first_start_pos = first_end_pos - (lead_time_days - 1)
+            if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                first_start_date = plan_data.index[first_start_pos]
+            else:
+                first_start_date = first_end_date
+        except (KeyError, IndexError):
+            # インデックスが見つからない場合のフォールバック
+            first_start_date = first_end_date
+        
+        # 最後のリードタイム区間の開始日（common_idx[-1]からlead_time_days日前）
+        try:
+            last_end_pos = plan_data.index.get_loc(last_end_date)
+            last_start_pos = last_end_pos - (lead_time_days - 1)
+            if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                last_start_date = plan_data.index[last_start_pos]
+            else:
+                last_start_date = last_end_date
+        except (KeyError, IndexError):
+            # インデックスが見つからない場合のフォールバック
+            last_start_date = last_end_date
+        
+        # 日付をYYYY/MM/DD形式にフォーマットする関数
+        def format_date(date):
+            if isinstance(date, str):
+                if len(date) == 8:
+                    return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                else:
+                    return str(date)
+            else:
+                return pd.to_datetime(date).strftime("%Y/%m/%d")
+        
+        first_start_str = format_date(first_start_date)
+        first_end_str = format_date(first_end_date)
+        last_start_str = format_date(last_start_date)
+        last_end_str = format_date(last_end_date)
+        
+        # 表示形式：最初のリードタイム区間の開始日-終了日 ～ 最後のリードタイム区間の開始日-終了日
+        target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+    else:
+        target_period = "取得できませんでした"
+    
+    # 2. リードタイム区間の総件数
+    total_count = len(common_idx)
+    
+    # 3. リードタイム期間の全体計画誤差率（加重平均）
+    # STEP1でデータを取り込み、STEP2の手順②でリードタイムおよび欠品許容率を設定したタイミングで一度だけ計算
+    weighted_avg_lead_time_plan_error_rate_key = f'weighted_average_lead_time_plan_error_rate_{lead_time_days}'
+    weighted_avg_lead_time_plan_error_rate = st.session_state.get(weighted_avg_lead_time_plan_error_rate_key)
+    
+    # まだ計算されていない場合は計算してセッション状態に保存
+    if weighted_avg_lead_time_plan_error_rate is None:
+        data_loader = st.session_state.get('uploaded_data_loader')
+        abc_analysis_result = st.session_state.get('abc_analysis_result')
+        if data_loader is not None:
+            try:
+                weighted_avg_lead_time_plan_error_rate = calculate_weighted_average_lead_time_plan_error_rate(
+                    data_loader,
+                    lead_time_days,
+                    analysis_result=abc_analysis_result.get('analysis') if abc_analysis_result else None,
+                    exclude_plan_only=True,
+                    exclude_actual_only=True
+                )
+                st.session_state[weighted_avg_lead_time_plan_error_rate_key] = weighted_avg_lead_time_plan_error_rate
+            except Exception:
+                weighted_avg_lead_time_plan_error_rate = None
+    
     # 計画合計の統計情報
     plan_total_stats = {
         '項目': 'リードタイム期間の計画合計',
@@ -1643,7 +2125,8 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
         '標準偏差': np.std(plan_sums_common),
         '最小値': np.min(plan_sums_common),
         '中央値': np.median(plan_sums_common),
-        '最大値': np.max(plan_sums_common)
+        '最大値': np.max(plan_sums_common),
+        '計画誤差率': None  # 計画には計画誤差率は表示しない
     }
     
     # 実績合計の統計情報
@@ -1654,7 +2137,8 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
         '標準偏差': np.std(actual_sums_common),
         '最小値': np.min(actual_sums_common),
         '中央値': np.median(actual_sums_common),
-        '最大値': np.max(actual_sums_common)
+        '最大値': np.max(actual_sums_common),
+        '計画誤差率': plan_error_rate  # 計画誤差率を追加
     }
     
     # データフレーム作成
@@ -1663,6 +2147,10 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     
     # 表示用コピーを作成（元のDataFrameは変更しない）
     display_df = stats_df.copy()
+    
+    # 列の順序を指定（計画誤差率を最後に配置）
+    column_order = ['項目', '件数', '平均', '標準偏差', '最小値', '中央値', '最大値', '計画誤差率']
+    display_df = display_df[column_order]
     
     # 数値表示形式を統一（表示用コピーに対してのみ適用）
     numeric_columns = ['平均', '標準偏差', '最小値', '中央値', '最大値']
@@ -1694,14 +2182,177 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
             lambda x: f'{x:.2f}' if not pd.isna(x) else ''
         )
     
+    # 計画誤差率はパーセント表示（例：-20.58%）
+    display_df['計画誤差率'] = display_df['計画誤差率'].apply(
+        lambda x: f'{x:.2f}%' if x is not None and not pd.isna(x) else ''
+    )
+    
+    # 対象商品コード数を取得
+    data_loader = st.session_state.get('uploaded_data_loader')
+    target_product_count = get_target_product_count(data_loader) if data_loader is not None else None
+    
+    # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
+    # 日次計画と日次実績の統計情報のサマリー項目名の粒度・簡潔さと統一
+    # 項目名の最大文字数に合わせて全角スペースで調整（「全体計画誤差率」が6文字）
+    summary_lines = []
+    
+    # 対象期間（4文字 + 全角スペース2文字で6文字に揃える）+ 総件数を統合
+    summary_lines.append(f"対象期間　： {target_period}（総件数：{total_count:,} 件）")
+    
+    # 対象商品（4文字 + 全角スペース2文字で6文字に揃える）
+    summary_lines.append(f"対象商品　： {product_code}")
+    
+    # 計画誤差率（5文字 + 全角スペース1文字で6文字に揃える）
+    if plan_error_rate is not None:
+        sign = "+" if plan_error_rate >= 0 else ""
+        summary_lines.append(f"計画誤差率： {sign}{plan_error_rate:.2f} %")
+    else:
+        summary_lines.append("計画誤差率： 計算できませんでした")
+    
+    # 全体計画誤差率（6文字）
+    if weighted_avg_lead_time_plan_error_rate is not None and target_product_count is not None:
+        sign = "+" if weighted_avg_lead_time_plan_error_rate >= 0 else ""
+        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_lead_time_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）")
+    elif weighted_avg_lead_time_plan_error_rate is not None:
+        sign = "+" if weighted_avg_lead_time_plan_error_rate >= 0 else ""
+        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_lead_time_plan_error_rate:.2f} %（加重平均）")
+    else:
+        summary_lines.append("全体計画誤差率： 計算できませんでした")
+    
+    summary_html = "<br>".join(summary_lines)
+    st.markdown(f"""
+    <div style="margin-bottom: 1rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+        {summary_html}
+    </div>
+    """, unsafe_allow_html=True)
+    
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    # 計画誤差率列にスタイルを適用（背景：薄い緑、文字色：緑）
+    def style_plan_error_rate(val):
+        """計画誤差率列のスタイル設定"""
+        if val is not None and str(val) != '' and '%' in str(val):
+            return 'background-color: #E8F5E9; color: #2E7D32;'  # 薄い緑背景、緑文字
+        return ''
+    
+    # スタイルを適用したDataFrameを表示
+    styled_df = display_df.style.applymap(
+        style_plan_error_rate,
+        subset=['計画誤差率']
+    )
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    
+    # 誤差率の注記を表の下に追加
+    st.markdown("""
+    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
+    ※ 計画誤差率 ＝（実績合計 − 計画合計）÷ 実績合計
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 計画誤差率の比較結果注釈（緑の結果系テキストボックス）を表の下に追加
+    if plan_error_rate is not None and weighted_avg_lead_time_plan_error_rate is not None:
+        # 絶対値で比較
+        abs_plan_error_rate = abs(plan_error_rate)
+        abs_weighted_avg = abs(weighted_avg_lead_time_plan_error_rate)
+        
+        # 計画誤差率の符号を取得
+        sign = "+" if plan_error_rate >= 0 else ""
+        
+        if abs_plan_error_rate < abs_weighted_avg:
+            # 誤差が小さい場合
+            comparison_result = f"<strong>リードタイム期間の計画誤差率の比較結果：</strong> 対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_lead_time_plan_error_rate:+.2f}％）と比較して、誤差が小さいです。"
+            icon = "✅"
+        else:
+            # 誤差が大きい場合
+            comparison_result = f"<strong>リードタイム期間の計画誤差率の比較結果：</strong> 対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_lead_time_plan_error_rate:+.2f}％）と比較して、誤差が大きいです。"
+            icon = "⚠️"
+        
+        st.markdown(f"""
+        <div class="annotation-success-box" style="margin-top: 1rem;">
+            <span class="icon">{icon}</span>
+            <div class="text">{comparison_result}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, delta3: pd.Series):
     """LT間差分の統計情報テーブルを表示（データから直接）"""
+    
+    # リードタイム期間の情報を取得
+    lt_delta_data = st.session_state.get('step2_lt_delta_data')
+    calculator = st.session_state.get('step2_lt_delta_calculator')
+    total_count = len(delta3) if len(delta3) > 0 else len(delta2)
+    
+    # 対象期間を計算
+    target_period = "取得できませんでした"
+    if calculator is not None and lt_delta_data is not None:
+        plan_data = calculator.plan_data
+        lead_time_days = lt_delta_data.get('lead_time_days')
+        if lead_time_days is not None:
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = plan_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                        first_start_date = plan_data.index[first_start_pos]
+                    else:
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = plan_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                        last_start_date = plan_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
+                
+                target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+                total_count = len(common_idx)
+    
+    # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
+    # 項目名の最大文字数に合わせて全角スペースで調整（「対象期間」が4文字）
+    summary_lines = []
+    
+    # 対象期間（4文字）+ 総件数を統合
+    summary_lines.append(f"対象期間： {target_period}（総件数：{total_count:,} 件）")
+    
+    # 対象商品（4文字）
+    summary_lines.append(f"対象商品： {product_code}")
+    
+    summary_html = "<br>".join(summary_lines)
+    st.markdown(f"""
+    <div style="margin-bottom: 1rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+        {summary_html}
+    </div>
+    """, unsafe_allow_html=True)
     
     # LT間差分（実績−平均）の統計情報（6項目に統一）
     model2_stats = {
@@ -2741,13 +3392,16 @@ def display_after_cap_comparison(product_code: str,
     
     comparison_df = pd.DataFrame(comparison_data, index=['カット前_安全在庫数量（日数）', 'カット後_安全在庫数量（日数）', '現行比（カット後 ÷ 現行）'])
     
-    # 採用モデル列をハイライト（手順⑦と同じ色を使用）
-    # 安全在庫③の色系統（rgba(100, 200, 150, 0.8)）に基づいた薄い緑
-    adopted_model_bg_color = '#B4E6D1'  # 手順⑦と同じ色
+    # 採用モデル列のスタイル：計画誤差率と同じトーンに統一
+    # 背景色：薄い緑系（計画誤差率と同じ #E8F5E9）
+    # フォント色：緑字（計画誤差率と同じ #2E7D32）
+    # 太字指定なし（通常フォント）
+    adopted_model_bg_color = '#E8F5E9'  # 計画誤差率と同じ薄い緑背景
+    adopted_model_text_color = '#2E7D32'  # 計画誤差率と同じ緑文字
     
     # 列名で採用モデル列を特定
     styled_df = comparison_df.style.applymap(
-        lambda x: f'background-color: {adopted_model_bg_color}; font-weight: bold;' if isinstance(x, str) and x != '' else '',
+        lambda x: f'background-color: {adopted_model_bg_color}; color: {adopted_model_text_color};' if isinstance(x, str) and x != '' else '',
         subset=['採用モデル']
     )
     # 行ラベルが切れないように、CSSで調整

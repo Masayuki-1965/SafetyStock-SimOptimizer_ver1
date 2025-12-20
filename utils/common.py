@@ -190,6 +190,55 @@ def get_abc_analysis_with_fallback(
     return prepared_df, valid_categories, warning_needed
 
 
+def get_target_product_count(data_loader: 'DataLoader', exclude_plan_only: bool = True, exclude_actual_only: bool = True) -> int | None:
+    """
+    対象商品コード数を取得（ABC区分がない場合でも取得可能）
+    
+    Args:
+        data_loader: DataLoaderインスタンス
+        exclude_plan_only: 「計画のみ」の商品コードを除外するかどうか（デフォルト: True）
+        exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
+    
+    Returns:
+        int | None: 対象商品コード数。取得できない場合はNone
+    """
+    try:
+        # まずABC区分の集計結果から取得を試みる
+        abc_analysis_result = st.session_state.get('abc_analysis_result')
+        if abc_analysis_result is not None and 'aggregation' in abc_analysis_result:
+            aggregation_df = abc_analysis_result['aggregation']
+            total_row = aggregation_df[aggregation_df['ABC区分'] == '合計']
+            if not total_row.empty:
+                if '商品コード数（件数）' in total_row.columns:
+                    return int(total_row['商品コード数（件数）'].iloc[0])
+                elif 'count' in total_row.columns:
+                    return int(total_row['count'].iloc[0])
+        
+        # ABC区分がない場合、data_loaderから直接取得
+        product_list = data_loader.get_product_list()
+        
+        # 「計画のみ」「実績のみ」の商品コードを除外
+        if exclude_plan_only or exclude_actual_only:
+            mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+            if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+                excluded_codes = set()
+                if exclude_plan_only:
+                    plan_only_codes = mismatch_detail_df[
+                        mismatch_detail_df['区分'] == '計画のみ'
+                    ]['商品コード'].tolist()
+                    excluded_codes.update(plan_only_codes)
+                if exclude_actual_only:
+                    actual_only_codes = mismatch_detail_df[
+                        mismatch_detail_df['区分'] == '実績のみ'
+                    ]['商品コード'].tolist()
+                    excluded_codes.update(actual_only_codes)
+                product_list = [code for code in product_list if str(code) not in excluded_codes]
+        
+        return len(product_list) if product_list else None
+    except Exception:
+        return None
+
+
 def _build_fallback_analysis_df(data_loader: DataLoader, product_list: List[str]) -> pd.DataFrame:
     """ABC区分が付与できない場合のフォールバックデータを生成"""
     rows = []
@@ -398,6 +447,103 @@ def calculate_weighted_average_plan_error_rate(
             
             # 計画誤差率が計算可能で、実績数量が0より大きい場合のみ加算
             if plan_error_rate is not None and actual_total > 0:
+                weighted_sum += plan_error_rate * actual_total
+                total_weight += actual_total
+        except Exception:
+            # エラーが発生した商品コードはスキップ
+            continue
+    
+    # 加重平均を計算
+    if total_weight == 0:
+        return None
+    
+    weighted_average = weighted_sum / total_weight
+    return weighted_average
+
+
+def calculate_weighted_average_lead_time_plan_error_rate(
+    data_loader: 'DataLoader',
+    lead_time_days: int,
+    analysis_result: pd.DataFrame | None = None,
+    exclude_plan_only: bool = True,
+    exclude_actual_only: bool = True
+) -> float | None:
+    """
+    リードタイム期間の全体計画誤差率（加重平均）を計算
+    
+    各商品コードのリードタイム期間合計（計画・実績）に対する計画誤差率を、
+    各商品コードの実績合計で加重平均した値
+    
+    Args:
+        data_loader: DataLoaderインスタンス
+        lead_time_days: リードタイム日数（整数）
+        analysis_result: ABC分析結果のDataFrame（Noneの場合は全商品コードを使用）
+        exclude_plan_only: 「計画のみ」の商品コードを除外するかどうか（デフォルト: True）
+        exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
+    
+    Returns:
+        float | None: リードタイム期間の全体計画誤差率（加重平均）（%）。計算できない場合はNone
+    """
+    # 対象商品コードリストを取得
+    if analysis_result is not None:
+        product_list = analysis_result['product_code'].tolist()
+    else:
+        product_list = data_loader.get_product_list()
+    
+    # 「計画のみ」「実績のみ」の商品コードを除外
+    if exclude_plan_only or exclude_actual_only:
+        mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+        if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+            excluded_codes = set()
+            if exclude_plan_only:
+                plan_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '計画のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(plan_only_codes)
+            if exclude_actual_only:
+                actual_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '実績のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(actual_only_codes)
+            product_list = [code for code in product_list if str(code) not in excluded_codes]
+    
+    if not product_list:
+        return None
+    
+    # 各商品コードのリードタイム期間の計画誤差率と実績合計を計算
+    weighted_sum = 0.0
+    total_weight = 0.0
+    
+    for product_code in product_list:
+        try:
+            plan_data = data_loader.get_daily_plan(product_code)
+            actual_data = data_loader.get_daily_actual(product_code)
+            
+            # リードタイム期間の計画合計と実績合計を計算（1日ずつスライド）
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+            
+            # 共通インデックスを取得
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            if len(common_idx) == 0:
+                continue
+            
+            plan_sums_common = plan_sums.loc[common_idx]
+            actual_sums_common = actual_sums.loc[common_idx]
+            
+            # リードタイム期間の計画誤差率を計算
+            # 計画誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
+            actual_total = float(actual_sums_common.sum())
+            plan_total = float(plan_sums_common.sum())
+            
+            if actual_total == 0:
+                continue
+            
+            plan_error_rate = ((actual_total - plan_total) / actual_total) * 100.0
+            
+            # 実績合計を取得（重み）
+            # リードタイム期間の実績合計の合計を使用
+            if actual_total > 0:
                 weighted_sum += plan_error_rate * actual_total
                 total_weight += actual_total
         except Exception:
