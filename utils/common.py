@@ -391,9 +391,9 @@ def calculate_weighted_average_plan_error_rate(
     exclude_actual_only: bool = True
 ) -> float | None:
     """
-    全体計画誤差率（加重平均）を計算
+    全体計画誤差率（評価用：絶対値・加重平均）を計算
     
-    各商品コードの計画誤差率を、各商品コードの実績数量合計で加重平均した値
+    各商品コードの計画誤差率の絶対値を、各商品コードの実績数量合計で加重平均した値
     
     Args:
         data_loader: DataLoaderインスタンス
@@ -402,7 +402,7 @@ def calculate_weighted_average_plan_error_rate(
         exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
     
     Returns:
-        float | None: 全体計画誤差率（加重平均）（%）。計算できない場合はNone
+        float | None: 全体計画誤差率（評価用：絶対値・加重平均）（%）。計算できない場合はNone
     """
     # 対象商品コードリストを取得
     if analysis_result is not None:
@@ -430,7 +430,7 @@ def calculate_weighted_average_plan_error_rate(
     if not product_list:
         return None
     
-    # 各商品コードの計画誤差率と実績数量合計を計算
+    # 各商品コードの計画誤差率の絶対値と実績数量合計を計算
     weighted_sum = 0.0
     total_weight = 0.0
     
@@ -447,7 +447,8 @@ def calculate_weighted_average_plan_error_rate(
             
             # 計画誤差率が計算可能で、実績数量が0より大きい場合のみ加算
             if plan_error_rate is not None and actual_total > 0:
-                weighted_sum += plan_error_rate * actual_total
+                # 絶対値を使用して加重平均を計算
+                weighted_sum += abs(plan_error_rate) * actual_total
                 total_weight += actual_total
         except Exception:
             # エラーが発生した商品コードはスキップ
@@ -469,9 +470,9 @@ def calculate_weighted_average_lead_time_plan_error_rate(
     exclude_actual_only: bool = True
 ) -> float | None:
     """
-    リードタイム期間の全体計画誤差率（加重平均）を計算
+    リードタイム期間の全体計画誤差率（評価用：絶対値・加重平均）を計算
     
-    各商品コードのリードタイム期間合計（計画・実績）に対する計画誤差率を、
+    各商品コードのリードタイム期間合計（計画・実績）に対する計画誤差率の絶対値を、
     各商品コードの実績合計で加重平均した値
     
     Args:
@@ -482,7 +483,7 @@ def calculate_weighted_average_lead_time_plan_error_rate(
         exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
     
     Returns:
-        float | None: リードタイム期間の全体計画誤差率（加重平均）（%）。計算できない場合はNone
+        float | None: リードタイム期間の全体計画誤差率（評価用：絶対値・加重平均）（%）。計算できない場合はNone
     """
     # 対象商品コードリストを取得
     if analysis_result is not None:
@@ -510,7 +511,7 @@ def calculate_weighted_average_lead_time_plan_error_rate(
     if not product_list:
         return None
     
-    # 各商品コードのリードタイム期間の計画誤差率と実績合計を計算
+    # 各商品コードのリードタイム期間の計画誤差率の絶対値と実績合計を計算
     weighted_sum = 0.0
     total_weight = 0.0
     
@@ -543,8 +544,9 @@ def calculate_weighted_average_lead_time_plan_error_rate(
             
             # 実績合計を取得（重み）
             # リードタイム期間の実績合計の合計を使用
+            # 絶対値を使用して加重平均を計算
             if actual_total > 0:
-                weighted_sum += plan_error_rate * actual_total
+                weighted_sum += abs(plan_error_rate) * actual_total
                 total_weight += actual_total
         except Exception:
             # エラーが発生した商品コードはスキップ
@@ -556,6 +558,208 @@ def calculate_weighted_average_lead_time_plan_error_rate(
     
     weighted_average = weighted_sum / total_weight
     return weighted_average
+
+
+def calculate_weighted_average_plan_error_rate_by_abc_category(
+    data_loader: 'DataLoader',
+    abc_category: str,
+    analysis_result: pd.DataFrame | None = None,
+    exclude_plan_only: bool = True,
+    exclude_actual_only: bool = True
+) -> Tuple[float | None, int]:
+    """
+    指定されたABC区分の計画誤差率（評価用：絶対値・加重平均）を計算
+    
+    各商品コードの計画誤差率の絶対値を、各商品コードの実績数量合計で加重平均した値
+    
+    Args:
+        data_loader: DataLoaderインスタンス
+        abc_category: ABC区分（例：'A', 'B', 'C', 'D'）
+        analysis_result: ABC分析結果のDataFrame（Noneの場合は全商品コードを使用）
+        exclude_plan_only: 「計画のみ」の商品コードを除外するかどうか（デフォルト: True）
+        exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
+    
+    Returns:
+        Tuple[float | None, int]: (ABC区分の計画誤差率（評価用：絶対値・加重平均）（%）、対象商品コード数)
+            計算できない場合はNone、商品コード数は0
+    """
+    # ABC分析結果を取得
+    if analysis_result is None:
+        analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+    
+    if analysis_result is None or analysis_result.empty:
+        return None, 0
+    
+    # ABC区分でフィルタリング
+    category_df = analysis_result[analysis_result['abc_category'] == abc_category].copy()
+    
+    if category_df.empty:
+        return None, 0
+    
+    # 対象商品コードリストを取得
+    product_list = category_df['product_code'].tolist()
+    
+    # 「計画のみ」「実績のみ」の商品コードを除外
+    if exclude_plan_only or exclude_actual_only:
+        mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+        if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+            excluded_codes = set()
+            if exclude_plan_only:
+                plan_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '計画のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(plan_only_codes)
+            if exclude_actual_only:
+                actual_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '実績のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(actual_only_codes)
+            product_list = [code for code in product_list if str(code) not in excluded_codes]
+    
+    if not product_list:
+        return None, 0
+    
+    # 各商品コードの計画誤差率の絶対値と実績数量合計を計算
+    weighted_sum = 0.0
+    total_weight = 0.0
+    
+    for product_code in product_list:
+        try:
+            plan_data = data_loader.get_daily_plan(product_code)
+            actual_data = data_loader.get_daily_actual(product_code)
+            
+            # 計画誤差率を計算
+            plan_error_rate, _, _ = calculate_plan_error_rate(actual_data, plan_data)
+            
+            # 実績数量合計を取得（重み）
+            actual_total = float(actual_data.sum())
+            
+            # 計画誤差率が計算可能で、実績数量が0より大きい場合のみ加算
+            if plan_error_rate is not None and actual_total > 0:
+                # 絶対値を使用して加重平均を計算
+                weighted_sum += abs(plan_error_rate) * actual_total
+                total_weight += actual_total
+        except Exception:
+            # エラーが発生した商品コードはスキップ
+            continue
+    
+    # 加重平均を計算
+    if total_weight == 0:
+        return None, len(product_list)
+    
+    weighted_average = weighted_sum / total_weight
+    return weighted_average, len(product_list)
+
+
+def calculate_weighted_average_lead_time_plan_error_rate_by_abc_category(
+    data_loader: 'DataLoader',
+    abc_category: str,
+    lead_time_days: int,
+    analysis_result: pd.DataFrame | None = None,
+    exclude_plan_only: bool = True,
+    exclude_actual_only: bool = True
+) -> Tuple[float | None, int]:
+    """
+    指定されたABC区分のリードタイム期間の計画誤差率（評価用：絶対値・加重平均）を計算
+    
+    各商品コードのリードタイム期間合計（計画・実績）に対する計画誤差率の絶対値を、
+    各商品コードの実績合計で加重平均した値
+    
+    Args:
+        data_loader: DataLoaderインスタンス
+        abc_category: ABC区分（例：'A', 'B', 'C', 'D'）
+        lead_time_days: リードタイム日数（整数）
+        analysis_result: ABC分析結果のDataFrame（Noneの場合は全商品コードを使用）
+        exclude_plan_only: 「計画のみ」の商品コードを除外するかどうか（デフォルト: True）
+        exclude_actual_only: 「実績のみ」の商品コードを除外するかどうか（デフォルト: True）
+    
+    Returns:
+        Tuple[float | None, int]: (ABC区分のリードタイム期間の計画誤差率（評価用：絶対値・加重平均）（%）、対象商品コード数)
+            計算できない場合はNone、商品コード数は0
+    """
+    # ABC分析結果を取得
+    if analysis_result is None:
+        analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+    
+    if analysis_result is None or analysis_result.empty:
+        return None, 0
+    
+    # ABC区分でフィルタリング
+    category_df = analysis_result[analysis_result['abc_category'] == abc_category].copy()
+    
+    if category_df.empty:
+        return None, 0
+    
+    # 対象商品コードリストを取得
+    product_list = category_df['product_code'].tolist()
+    
+    # 「計画のみ」「実績のみ」の商品コードを除外
+    if exclude_plan_only or exclude_actual_only:
+        mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
+        if mismatch_detail_df is not None and not mismatch_detail_df.empty:
+            excluded_codes = set()
+            if exclude_plan_only:
+                plan_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '計画のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(plan_only_codes)
+            if exclude_actual_only:
+                actual_only_codes = mismatch_detail_df[
+                    mismatch_detail_df['区分'] == '実績のみ'
+                ]['商品コード'].tolist()
+                excluded_codes.update(actual_only_codes)
+            product_list = [code for code in product_list if str(code) not in excluded_codes]
+    
+    if not product_list:
+        return None, 0
+    
+    # 各商品コードのリードタイム期間の計画誤差率の絶対値と実績合計を計算
+    weighted_sum = 0.0
+    total_weight = 0.0
+    
+    for product_code in product_list:
+        try:
+            plan_data = data_loader.get_daily_plan(product_code)
+            actual_data = data_loader.get_daily_actual(product_code)
+            
+            # リードタイム期間の計画合計と実績合計を計算（1日ずつスライド）
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+            
+            # 共通インデックスを取得
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            if len(common_idx) == 0:
+                continue
+            
+            plan_sums_common = plan_sums.loc[common_idx]
+            actual_sums_common = actual_sums.loc[common_idx]
+            
+            # リードタイム期間の計画誤差率を計算
+            # 計画誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
+            actual_total = float(actual_sums_common.sum())
+            plan_total = float(plan_sums_common.sum())
+            
+            if actual_total == 0:
+                continue
+            
+            plan_error_rate = ((actual_total - plan_total) / actual_total) * 100.0
+            
+            # 実績合計を取得（重み）
+            # リードタイム期間の実績合計の合計を使用
+            # 絶対値を使用して加重平均を計算
+            if actual_total > 0:
+                weighted_sum += abs(plan_error_rate) * actual_total
+                total_weight += actual_total
+        except Exception:
+            # エラーが発生した商品コードはスキップ
+            continue
+    
+    # 加重平均を計算
+    if total_weight == 0:
+        return None, len(product_list)
+    
+    weighted_average = weighted_sum / total_weight
+    return weighted_average, len(product_list)
 
 
 def is_plan_anomaly(

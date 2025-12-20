@@ -17,7 +17,10 @@ from utils.common import (
     calculate_plan_error_rate,
     is_plan_anomaly,
     calculate_weighted_average_lead_time_plan_error_rate,
-    get_target_product_count
+    get_target_product_count,
+    calculate_weighted_average_plan_error_rate_by_abc_category,
+    calculate_weighted_average_lead_time_plan_error_rate_by_abc_category,
+    format_abc_category_for_display
 )
 from views.step1_view import display_safety_stock_definitions
 from charts.safety_stock_charts import (
@@ -1839,6 +1842,36 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     # 3. 全体計画誤差率（加重平均）
     weighted_avg_plan_error_rate = st.session_state.get('weighted_average_plan_error_rate')
     
+    # 4. 対象商品のABC区分を取得
+    abc_category = None
+    abc_category_display = None
+    if data_loader is not None:
+        try:
+            analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+            if analysis_result is not None and not analysis_result.empty:
+                product_row = analysis_result[analysis_result['product_code'] == product_code]
+                if not product_row.empty:
+                    abc_category = product_row.iloc[0]['abc_category']
+                    abc_category_display = format_abc_category_for_display(abc_category)
+        except Exception:
+            pass
+    
+    # 5. 同一ABC区分の計画誤差率（加重平均）を計算
+    abc_category_plan_error_rate = None
+    abc_category_product_count = 0
+    if abc_category is not None and data_loader is not None:
+        try:
+            analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+            abc_category_plan_error_rate, abc_category_product_count = calculate_weighted_average_plan_error_rate_by_abc_category(
+                data_loader,
+                abc_category,
+                analysis_result=analysis_result,
+                exclude_plan_only=True,
+                exclude_actual_only=True
+            )
+        except Exception:
+            pass
+    
     # 計画誤差率を計算（合計値ベースで計算）
     # 誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
     # 実装では sum() を使用して合計値を計算している
@@ -1924,33 +1957,48 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     )
     
     # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
-    # 項目名の最大文字数に合わせて全角スペースで調整（「全体計画誤差率」が6文字）
+    # CSSのinline-blockと固定幅を使用して「：」の位置を揃える
     summary_lines = []
     
-    # 対象期間（4文字 + 全角スペース2文字で6文字に揃える）
-    summary_lines.append(f"対象期間　： {target_period}")
+    # 項目名の最大文字数（14文字）に合わせて固定幅を設定
+    label_width = "14em"  # 最大項目名「A区分の計画誤差率（絶対値）」に合わせた幅
     
-    # 対象商品（4文字 + 全角スペース2文字で6文字に揃える）
-    summary_lines.append(f"対象商品　： {product_code}")
+    # 対象期間
+    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間</span>： {target_period}</div>")
     
-    # 計画誤差率（5文字 + 全角スペース1文字で6文字に揃える）
+    # 対象商品
+    if abc_category_display is not None:
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {abc_category_display}区分 | {product_code}</div>")
+    else:
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {product_code}</div>")
+    
+    # 計画誤差率（絶対値）
     if plan_error_rate is not None:
-        sign = "+" if plan_error_rate >= 0 else ""
-        summary_lines.append(f"計画誤差率： {sign}{plan_error_rate:.2f} %")
+        abs_plan_error_rate = abs(plan_error_rate)
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： {abs_plan_error_rate:.2f} %</div>")
     else:
-        summary_lines.append("計画誤差率： 計算できませんでした")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： 計算できませんでした</div>")
     
-    # 全体計画誤差率（6文字）
+    # 全体計画誤差率（絶対値）
     if weighted_avg_plan_error_rate is not None and target_product_count is not None:
-        sign = "+" if weighted_avg_plan_error_rate >= 0 else ""
-        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）</div>")
     elif weighted_avg_plan_error_rate is not None:
-        sign = "+" if weighted_avg_plan_error_rate >= 0 else ""
-        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_plan_error_rate:.2f} %（加重平均）")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_plan_error_rate:.2f} %（加重平均）</div>")
     else:
-        summary_lines.append("全体計画誤差率： 計算できませんでした")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： 計算できませんでした</div>")
     
-    summary_html = "<br>".join(summary_lines)
+    # ABC区分の計画誤差率（絶対値）
+    if abc_category_display is not None and abc_category_plan_error_rate is not None and abc_category_product_count > 0:
+        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_plan_error_rate:.2f} %（{abc_category_display}区分コード数 {abc_category_product_count:,} 件の加重平均）</div>")
+    elif abc_category_display is not None and abc_category_plan_error_rate is not None:
+        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_plan_error_rate:.2f} %（加重平均）</div>")
+    elif abc_category_display is not None:
+        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： 計算できませんでした</div>")
+    
+    summary_html = "".join(summary_lines)
     st.markdown(f"""
     <div style="margin-bottom: 1rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
         {summary_html}
@@ -1984,24 +2032,25 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     st.markdown('</div>', unsafe_allow_html=True)
     
     # 計画誤差率の比較結果注釈（緑の結果系テキストボックス）を表の下に追加
-    if plan_error_rate is not None and weighted_avg_plan_error_rate is not None:
+    # 比較対象を同一ABC区分の計画誤差率（絶対値）に変更
+    if plan_error_rate is not None and abc_category_plan_error_rate is not None:
         # 絶対値で比較
         abs_plan_error_rate = abs(plan_error_rate)
-        abs_weighted_avg = abs(weighted_avg_plan_error_rate)
+        # abc_category_plan_error_rateは既に絶対値ベースで計算されているため、そのまま使用
+        abs_abc_category_avg = abc_category_plan_error_rate
         
-        # 計画誤差率の符号を取得
-        sign = "+" if plan_error_rate >= 0 else ""
-        
-        if abs_plan_error_rate < abs_weighted_avg:
+        if abs_plan_error_rate < abs_abc_category_avg:
             # 誤差が小さい場合
-            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_plan_error_rate:+.2f}％）と比較して、誤差が小さいです。"
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が小さいです。"
+            icon = "✅"
         else:
             # 誤差が大きい場合
-            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_plan_error_rate:+.2f}％）と比較して、誤差が大きいです。"
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が大きいです。"
+            icon = "⚠️"
         
         st.markdown(f"""
         <div class="annotation-success-box" style="margin-top: 1rem;">
-            <span class="icon">{"✅" if abs_plan_error_rate < abs_weighted_avg else "⚠️"}</span>
+            <span class="icon">{icon}</span>
             <div class="text">{comparison_result}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -2191,35 +2240,79 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     data_loader = st.session_state.get('uploaded_data_loader')
     target_product_count = get_target_product_count(data_loader) if data_loader is not None else None
     
-    # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
-    # 日次計画と日次実績の統計情報のサマリー項目名の粒度・簡潔さと統一
-    # 項目名の最大文字数に合わせて全角スペースで調整（「全体計画誤差率」が6文字）
+    # 4. 対象商品のABC区分を取得
+    abc_category = None
+    abc_category_display = None
+    if data_loader is not None:
+        try:
+            analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+            if analysis_result is not None and not analysis_result.empty:
+                product_row = analysis_result[analysis_result['product_code'] == product_code]
+                if not product_row.empty:
+                    abc_category = product_row.iloc[0]['abc_category']
+                    abc_category_display = format_abc_category_for_display(abc_category)
+        except Exception:
+            pass
+    
+    # 5. 同一ABC区分のリードタイム期間の計画誤差率（加重平均）を計算
+    abc_category_lead_time_plan_error_rate = None
+    abc_category_product_count = 0
+    if abc_category is not None and data_loader is not None:
+        try:
+            analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+            abc_category_lead_time_plan_error_rate, abc_category_product_count = calculate_weighted_average_lead_time_plan_error_rate_by_abc_category(
+                data_loader,
+                abc_category,
+                lead_time_days,
+                analysis_result=analysis_result,
+                exclude_plan_only=True,
+                exclude_actual_only=True
+            )
+        except Exception:
+            pass
+    
+    # CSSのinline-blockと固定幅を使用して「：」の位置を揃える
     summary_lines = []
     
-    # 対象期間（4文字 + 全角スペース2文字で6文字に揃える）+ 総件数を統合
-    summary_lines.append(f"対象期間　： {target_period}（総件数：{total_count:,} 件）")
+    # 項目名の最大文字数（14文字）に合わせて固定幅を設定
+    label_width = "14em"  # 最大項目名「A区分の計画誤差率（絶対値）」に合わせた幅
     
-    # 対象商品（4文字 + 全角スペース2文字で6文字に揃える）
-    summary_lines.append(f"対象商品　： {product_code}")
+    # 対象期間 + 総件数を統合
+    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間</span>： {target_period}（総件数：{total_count:,} 件）</div>")
     
-    # 計画誤差率（5文字 + 全角スペース1文字で6文字に揃える）
+    # 対象商品
+    if abc_category_display is not None:
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {abc_category_display}区分 | {product_code}</div>")
+    else:
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {product_code}</div>")
+    
+    # 計画誤差率（絶対値）
     if plan_error_rate is not None:
-        sign = "+" if plan_error_rate >= 0 else ""
-        summary_lines.append(f"計画誤差率： {sign}{plan_error_rate:.2f} %")
+        abs_plan_error_rate = abs(plan_error_rate)
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： {abs_plan_error_rate:.2f} %</div>")
     else:
-        summary_lines.append("計画誤差率： 計算できませんでした")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： 計算できませんでした</div>")
     
-    # 全体計画誤差率（6文字）
+    # 全体計画誤差率（絶対値）
     if weighted_avg_lead_time_plan_error_rate is not None and target_product_count is not None:
-        sign = "+" if weighted_avg_lead_time_plan_error_rate >= 0 else ""
-        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_lead_time_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_lead_time_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）</div>")
     elif weighted_avg_lead_time_plan_error_rate is not None:
-        sign = "+" if weighted_avg_lead_time_plan_error_rate >= 0 else ""
-        summary_lines.append(f"全体計画誤差率： {sign}{weighted_avg_lead_time_plan_error_rate:.2f} %（加重平均）")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_lead_time_plan_error_rate:.2f} %（加重平均）</div>")
     else:
-        summary_lines.append("全体計画誤差率： 計算できませんでした")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： 計算できませんでした</div>")
     
-    summary_html = "<br>".join(summary_lines)
+    # ABC区分の計画誤差率（絶対値）
+    if abc_category_display is not None and abc_category_lead_time_plan_error_rate is not None and abc_category_product_count > 0:
+        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_lead_time_plan_error_rate:.2f} %（{abc_category_display}区分コード数 {abc_category_product_count:,} 件の加重平均）</div>")
+    elif abc_category_display is not None and abc_category_lead_time_plan_error_rate is not None:
+        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_lead_time_plan_error_rate:.2f} %（加重平均）</div>")
+    elif abc_category_display is not None:
+        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： 計算できませんでした</div>")
+    
+    summary_html = "".join(summary_lines)
     st.markdown(f"""
     <div style="margin-bottom: 1rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
         {summary_html}
@@ -2253,21 +2346,20 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     st.markdown('</div>', unsafe_allow_html=True)
     
     # 計画誤差率の比較結果注釈（緑の結果系テキストボックス）を表の下に追加
-    if plan_error_rate is not None and weighted_avg_lead_time_plan_error_rate is not None:
+    # 比較対象を同一ABC区分の計画誤差率（絶対値）に変更
+    if plan_error_rate is not None and abc_category_lead_time_plan_error_rate is not None:
         # 絶対値で比較
         abs_plan_error_rate = abs(plan_error_rate)
-        abs_weighted_avg = abs(weighted_avg_lead_time_plan_error_rate)
+        # abc_category_lead_time_plan_error_rateは既に絶対値ベースで計算されているため、そのまま使用
+        abs_abc_category_avg = abc_category_lead_time_plan_error_rate
         
-        # 計画誤差率の符号を取得
-        sign = "+" if plan_error_rate >= 0 else ""
-        
-        if abs_plan_error_rate < abs_weighted_avg:
+        if abs_plan_error_rate < abs_abc_category_avg:
             # 誤差が小さい場合
-            comparison_result = f"<strong>リードタイム期間の計画誤差率の比較結果：</strong> 対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_lead_time_plan_error_rate:+.2f}％）と比較して、誤差が小さいです。"
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が小さいです。"
             icon = "✅"
         else:
             # 誤差が大きい場合
-            comparison_result = f"<strong>リードタイム期間の計画誤差率の比較結果：</strong> 対象商品コード（{product_code}）の計画誤差率は {sign}{plan_error_rate:.2f}％です。 全体計画誤差率（{weighted_avg_lead_time_plan_error_rate:+.2f}％）と比較して、誤差が大きいです。"
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が大きいです。"
             icon = "⚠️"
         
         st.markdown(f"""
