@@ -4,7 +4,7 @@
 
 import pandas as pd
 import streamlit as st
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from modules.data_loader import DataLoader
 
 
@@ -790,3 +790,147 @@ def is_plan_anomaly(
     
     return False, f"計画誤差率は{plan_error_rate:.1f}%で許容範囲内"
 
+
+def calculate_abc_category_ratio_r(
+    data_loader: DataLoader,
+    lead_time: int,
+    lead_time_type: str,
+    stockout_tolerance_pct: float,
+    sigma_k: float,
+    top_limit_mode: str,
+    top_limit_n: int,
+    top_limit_p: float,
+    category_cap_days: Dict[str, Optional[int]] = None
+) -> Dict[str, float]:
+    """
+    ABC区分別の比率rを算出
+    
+    比率r = (ABC区分の安全在庫③合計) / (ABC区分の安全在庫②合計)
+    
+    Args:
+        data_loader: DataLoaderインスタンス
+        lead_time: リードタイム
+        lead_time_type: 'calendar' or 'working_days'
+        stockout_tolerance_pct: 欠品許容率（%）
+        sigma_k: グローバル異常基準の係数
+        top_limit_mode: 上位制限方式（'count' or 'percent'）
+        top_limit_n: 上位カット件数
+        top_limit_p: 上位カット割合（%）
+        category_cap_days: 区分別日数上限の辞書
+    
+    Returns:
+        Dict[str, float]: ABC区分をキー、比率rを値とする辞書
+                         安全在庫②合計が0の区分は含まれない
+    """
+    from modules.safety_stock_models import SafetyStockCalculator
+    from modules.outlier_handler import OutlierHandler
+    
+    # ABC分析結果を取得（同じファイル内の関数なので直接呼び出し）
+    analysis_result, categories, _ = get_abc_analysis_with_fallback(data_loader)
+    
+    # 全商品の安全在庫②・③を計算
+    product_list = data_loader.get_product_list()
+    working_dates = data_loader.get_working_dates()
+    
+    # ABC区分別の安全在庫②・③合計を格納
+    ss2_by_category = {}
+    ss3_by_category = {}
+    
+    for product_code in product_list:
+        try:
+            # データ取得
+            plan_data = data_loader.get_daily_plan(product_code)
+            actual_data = data_loader.get_daily_actual(product_code)
+            
+            # ABC区分を取得
+            product_row = analysis_result[analysis_result['product_code'] == product_code]
+            if product_row.empty:
+                abc_category = None
+                abc_category_display = '未分類'
+            else:
+                abc_category = product_row.iloc[0]['abc_category']
+                # NaNや空文字の場合はNoneに変換
+                if pd.isna(abc_category) or str(abc_category).strip() == '':
+                    abc_category = None
+                    abc_category_display = '未分類'
+                else:
+                    abc_category_display = format_abc_category_for_display(abc_category)
+            
+            # 実績異常値処理を適用
+            outlier_handler = OutlierHandler(
+                actual_data=actual_data,
+                working_dates=working_dates,
+                sigma_k=sigma_k,
+                top_limit_mode=top_limit_mode,
+                top_limit_n=top_limit_n,
+                top_limit_p=top_limit_p,
+                abc_category=abc_category
+            )
+            
+            processing_result = outlier_handler.detect_and_correct()
+            corrected_data = processing_result['corrected_data']
+            
+            # 安全在庫を計算
+            calculator = SafetyStockCalculator(
+                plan_data=plan_data,
+                actual_data=corrected_data,
+                working_dates=working_dates,
+                lead_time=lead_time,
+                lead_time_type=lead_time_type,
+                stockout_tolerance_pct=stockout_tolerance_pct,
+                std_calculation_method='population',
+                data_loader=data_loader,
+                product_code=product_code,
+                abc_category=abc_category,
+                category_cap_days=category_cap_days or {},
+                original_actual_data=actual_data
+            )
+            
+            results = calculator.calculate_all_models()
+            
+            # 安全在庫②・③を取得
+            ss2 = results['model2_empirical_actual']['safety_stock']
+            ss3 = results['model3_empirical_plan']['safety_stock']
+            
+            # NoneやNaNの場合は0として扱う
+            if ss2 is None or pd.isna(ss2):
+                ss2 = 0.0
+            if ss3 is None or pd.isna(ss3):
+                ss3 = 0.0
+            
+            # ABC区分別に集計（表示用の区分名を使用）
+            category_key = abc_category_display
+            if category_key not in ss2_by_category:
+                ss2_by_category[category_key] = 0.0
+                ss3_by_category[category_key] = 0.0
+            
+            ss2_by_category[category_key] += ss2
+            ss3_by_category[category_key] += ss3
+            
+        except Exception as e:
+            # エラーが発生した商品はスキップ
+            continue
+    
+    # 比率rを算出
+    ratio_r_by_category = {}
+    ss2_total_by_category = {}
+    ss3_total_by_category = {}
+    
+    for category in ss2_by_category.keys():
+        ss2_total = ss2_by_category[category]
+        ss3_total = ss3_by_category[category]
+        
+        # ABC区分別の合計を保存
+        ss2_total_by_category[category] = ss2_total
+        ss3_total_by_category[category] = ss3_total
+        
+        # ゼロ割を回避
+        if ss2_total > 0:
+            ratio_r = ss3_total / ss2_total
+            ratio_r_by_category[category] = ratio_r
+    
+    return {
+        'ratio_r': ratio_r_by_category,
+        'ss2_total': ss2_total_by_category,
+        'ss3_total': ss3_total_by_category
+    }
