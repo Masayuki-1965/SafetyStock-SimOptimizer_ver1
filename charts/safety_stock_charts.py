@@ -1907,8 +1907,11 @@ def create_adopted_model_comparison_charts(
     ss1_days: Optional[float],
     ss2_days: float,
     ss3_days: float,
-    adopted_model: str,  # "ss2" or "ss3"
-    is_ss1_undefined: bool = False
+    adopted_model: str,  # "ss2", "ss3", or "ss2_corrected"
+    is_ss1_undefined: bool = False,
+    ss2_corrected_days: Optional[float] = None,  # 安全在庫②'の日数
+    ratio_r: Optional[float] = None,  # 比率r（補正係数）
+    daily_actual_mean: Optional[float] = None  # 日当たり実績平均（計画誤差分の数量計算用）
 ) -> Tuple[go.Figure, go.Figure]:
     """
     採用モデル比較用の左右2つのグラフを生成（手順⑦用）
@@ -1919,8 +1922,11 @@ def create_adopted_model_comparison_charts(
         ss1_days: 安全在庫①の安全在庫日数
         ss2_days: 安全在庫②の安全在庫日数
         ss3_days: 安全在庫③の安全在庫日数
-        adopted_model: 採用されたモデル（"ss2"または"ss3"）
+        adopted_model: 採用されたモデル（"ss2", "ss3", または"ss2_corrected"）
         is_ss1_undefined: 安全在庫①が未定義かどうか
+        ss2_corrected_days: 安全在庫②'の日数（adopted_model="ss2_corrected"の場合に使用）
+        ratio_r: 比率r（補正係数、adopted_model="ss2_corrected"の場合に使用）
+        daily_actual_mean: 日当たり実績平均（計画誤差分の数量計算用）
     
     Returns:
         (左側グラフ, 右側グラフ)のタプル
@@ -2013,24 +2019,129 @@ def create_adopted_model_comparison_charts(
         adopted_value = ss2_days
         adopted_color = COLOR_SS2_BEFORE  # 手順④・⑥と同じベースカラーに統一
         adopted_label = "安全在庫②（採用）"
+        # 通常の棒グラフ
+        fig_right.add_trace(
+            go.Bar(
+                x=[adopted_label],
+                y=[adopted_value],
+                name=adopted_label,
+                marker_color=adopted_color,
+                marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
+                width=bar_width_right,  # 右グラフの幅が狭くなる分、棒の幅も比例して細くする
+                showlegend=False
+            )
+        )
+    elif adopted_model == "ss2_corrected":
+        # 安全在庫②'（補正後モデル）の場合：積み上げ棒グラフ
+        # ベース部分：安全在庫②（グレー色）
+        # 上乗せ部分：(r - 1) × 安全在庫②（やや濃いグレー色）
+        ss2_base = ss2_days
+        ss2_additional = ss2_corrected_days - ss2_base if ss2_corrected_days is not None else 0
+        
+        # ベース部分（安全在庫②）
+        fig_right.add_trace(
+            go.Bar(
+                x=["安全在庫②'（採用）"],
+                y=[ss2_base],
+                name="安全在庫②（ベース）",
+                marker_color=COLOR_SS2_BEFORE,  # グレー色
+                marker_line=dict(color='#666666', width=1.0),
+                width=bar_width_right,
+                showlegend=False,
+                base=0  # ベースは0から開始
+            )
+        )
+        
+        # 上乗せ部分（計画誤差分）
+        if ss2_additional > 0:
+            # やや濃いグレー色（rgba(128, 128, 128, 0.8)より濃く）
+            # COLOR_SS2_BEFOREは'rgba(128, 128, 128, 0.8)'なので、より濃い色として'rgba(96, 96, 96, 0.9)'を使用
+            darker_gray = 'rgba(96, 96, 96, 0.9)'  # やや濃いグレー色
+            
+            # 計画誤差分の数量を計算（ホバー表示用）
+            ss2_additional_quantity = ss2_additional * daily_actual_mean if daily_actual_mean and daily_actual_mean > 0 else None
+            
+            # ホバーテンプレートを作成（4行固定フォーマット）
+            # 数量・日数は上乗せ分なので、正の場合は+を付ける（負の場合は-が自動で付く）
+            hover_lines = ["計画誤差分"]
+            
+            # 数量（小数2桁、+:+.2fで正の値には+が付き、負の値には-が付く）
+            if ss2_additional_quantity is not None:
+                hover_lines.append(f"数量: {ss2_additional_quantity:+.2f}")
+            else:
+                hover_lines.append("数量: —")
+            
+            # 日数（小数1桁、+:+.1fで正の値には+が付き、負の値には-が付く）
+            hover_lines.append(f"日数: {ss2_additional:+.1f}")
+            
+            # 比率 r（小数3桁）
+            if ratio_r is not None:
+                hover_lines.append(f"比率 r: {ratio_r:.3f}")
+            else:
+                hover_lines.append("比率 r: —")
+            
+            hover_template = "<br>".join(hover_lines) + "<extra></extra>"
+            
+            # 計画誤差分の中央Y座標を計算（annotation用）
+            ss2_additional_center_y = ss2_base + ss2_additional / 2
+            
+            fig_right.add_trace(
+                go.Bar(
+                    x=["安全在庫②'（採用）"],
+                    y=[ss2_additional],
+                    name="計画誤差分",
+                    marker_color=darker_gray,  # やや濃いグレー色
+                    marker_line=dict(color='#666666', width=1.0),
+                    width=bar_width_right,
+                    showlegend=False,
+                    base=ss2_base,  # ベースの上に積み上げ
+                    text=None,  # テキストはannotationで表示するため、ここでは非表示
+                    hovertemplate=hover_template  # ホバー時の表示内容を明示的に制御
+                )
+            )
+            
+            # 白字ラベルを上段エリアの縦方向中央に配置（annotation使用）
+            fig_right.add_annotation(
+                x="安全在庫②'（採用）",
+                y=ss2_additional_center_y,
+                text="計画誤差分",
+                showarrow=False,
+                font=dict(color='white', size=12),
+                xref="x",
+                yref="y",
+                xanchor="center",
+                yanchor="middle",
+                bgcolor="rgba(0,0,0,0)",  # 背景なし
+                bordercolor="rgba(0,0,0,0)"  # 枠線なし
+            )
+        
+        # Y軸の範囲を更新（安全在庫②'を含める）
+        if ss2_corrected_days is not None:
+            y_max = max(y_max, ss2_corrected_days * 1.1)
     else:  # ss3
         adopted_value = ss3_days
         adopted_color = COLOR_SS3_BEFORE  # 手順④・⑥と同じベースカラーに統一
         adopted_label = "安全在庫③（採用）"
-    
-    # 右グラフの棒の幅は、右側のグラフの幅が狭くなる分、比例して細くする
-    # 右側のグラフの幅比率: 1.1/1.3 ≈ 0.846 に基づいて、棒の幅も比例して小さくする
-    fig_right.add_trace(
-        go.Bar(
-            x=[adopted_label],
-            y=[adopted_value],
-            name=adopted_label,
-            marker_color=adopted_color,
-            marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
-            width=bar_width_right,  # 右グラフの幅が狭くなる分、棒の幅も比例して細くする
-            showlegend=False
+        # 通常の棒グラフ
+        fig_right.add_trace(
+            go.Bar(
+                x=[adopted_label],
+                y=[adopted_value],
+                name=adopted_label,
+                marker_color=adopted_color,
+                marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
+                width=bar_width_right,  # 右グラフの幅が狭くなる分、棒の幅も比例して細くする
+                showlegend=False
+            )
         )
-    )
+    
+    # adopted_labelを決定（安全在庫②'の場合は特別なラベルを使用）
+    if adopted_model == "ss2_corrected":
+        adopted_label_for_xaxis = "安全在庫②'（採用）"
+    elif adopted_model == "ss2":
+        adopted_label_for_xaxis = "安全在庫②（採用）"
+    else:  # ss3
+        adopted_label_for_xaxis = "安全在庫③（採用）"
     
     fig_right.update_layout(
         title="▶▶▶▶▶　【採用モデル】",  # 商品コードなしで採用モデルのみ表示
@@ -2040,13 +2151,13 @@ def create_adopted_model_comparison_charts(
             # カテゴリの幅を調整して、棒が左グラフと同じ太さに見えるようにする
             type='category',
             categoryorder='array',
-            categoryarray=[adopted_label],
+            categoryarray=[adopted_label_for_xaxis],
             # 棒をさらに3ミリ狭くするため、domainを調整して左右に余白を広げる
             domain=[0.04, 0.96]  # 左右に4%ずつ余白を作って棒をさらに3ミリ狭くする
         ),
         yaxis=dict(title="", range=[y_min, y_max], showticklabels=False),  # Y軸ラベル非表示
-        barmode='group',
-        bargap=0.25,  # 棒グループ間の間隔をさらに広げて、棒をさらに3ミリ狭くする
+        barmode='stack' if adopted_model == "ss2_corrected" else 'group',  # 安全在庫②'の場合は積み上げモード
+        bargap=0.25 if adopted_model != "ss2_corrected" else 0.2,  # 安全在庫②'の場合は積み上げモードなのでbargapを調整
         height=500,
         showlegend=False,
         # 上下のグラフと表の列を視覚的に同期させるため、マージンを調整

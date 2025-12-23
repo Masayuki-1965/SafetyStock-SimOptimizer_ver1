@@ -1446,7 +1446,7 @@ def display_step2():
                 st.markdown(f"""
                 <div class="annotation-warning-box">
                     <span class="icon">⚠</span>
-                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率が {plan_error_rate:.1f}% で、閾値（{plan_plus_threshold_final:.1f}% / {plan_minus_threshold_final:.1f}%）を外れています。安全在庫②をベースに、ABC区分別に算出した比率 r を用いて補正した安全在庫②'（補正後モデル）を採用します。</div>
+                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率が {plan_error_rate:.1f}% で閾値を外れているため、安全在庫②をベースに計画誤差を加味したモデル（安全在庫②'）を採用します。</div>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -1598,6 +1598,14 @@ def display_step2():
                             ss2_days = 0
                             ss3_days = 0
                         
+                        # 安全在庫②'の情報を取得
+                        ss2_corrected_days = None
+                        ratio_r = None
+                        if adopted_model == "ss2_corrected":
+                            ss2_corrected_days = adopted_safety_stock_days
+                            # 比率rを取得
+                            ratio_r = ratio_r_by_category['ratio_r'].get(abc_category) if ratio_r_by_category.get('ratio_r') else None
+                        
                         fig_left, fig_right = create_adopted_model_comparison_charts(
                             product_code=product_code,
                             current_days=final_results['current_safety_stock']['safety_stock_days'],
@@ -1605,7 +1613,10 @@ def display_step2():
                             ss2_days=ss2_days,
                             ss3_days=ss3_days,
                             adopted_model=adopted_model,
-                            is_ss1_undefined=final_results['model1_theoretical'].get('is_undefined', False)
+                            is_ss1_undefined=final_results['model1_theoretical'].get('is_undefined', False),
+                            ss2_corrected_days=ss2_corrected_days,
+                            ratio_r=ratio_r,
+                            daily_actual_mean=daily_actual_mean  # 計画誤差分の数量計算用
                         )
                         st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}")
                     
@@ -1698,88 +1709,39 @@ def display_step2():
                 """, unsafe_allow_html=True)
                 st.dataframe(styled_df, use_container_width=True)
                 
-                # c-2) 採用モデルの算出根拠（折り畳み式注釈）
-                # 計画誤差率と閾値を取得
-                plan_error_rate_for_display = st.session_state.get('step2_plan_error_rate')
-                plan_plus_threshold = st.session_state.get('step2_plan_plus_threshold_final', 10.0)
-                plan_minus_threshold = st.session_state.get('step2_plan_minus_threshold_final', -10.0)
-                
-                # 折り畳みの表示条件
+                # c-2) 安全在庫②'の算出根拠（補正内訳）- 計画誤差率が閾値外の場合のみ表示
                 if adopted_model == "ss2_corrected":
-                    # 安全在庫②'採用時：詳細を表示
-                    with st.expander("▼ 採用モデルの算出根拠（安全在庫②'補正の内訳）", expanded=True):
-                        # 表を作成
-                        ratio_r_value = ratio_r_by_category['ratio_r'].get(abc_category) if ratio_r_by_category.get('ratio_r') else None
-                        ss2_total_category = ratio_r_by_category['ss2_total'].get(abc_category, 0.0) if ratio_r_by_category.get('ss2_total') else 0.0
-                        ss3_total_category = ratio_r_by_category['ss3_total'].get(abc_category, 0.0) if ratio_r_by_category.get('ss3_total') else 0.0
-                        
-                        ss2_value = final_results['model2_empirical_actual']['safety_stock']
-                        ss3_value = final_results['model3_empirical_plan']['safety_stock']
-                        ss2_corrected_value = st.session_state.get('step2_ss2_corrected', ss2_value * ratio_r_value if ratio_r_value else ss2_value)
-                        
-                        ss2_days_display = empirical_actual_days
-                        ss3_days_display = empirical_plan_days
-                        ss2_corrected_days_display = st.session_state.get('step2_ss2_corrected_days', ss2_days_display * ratio_r_value if ratio_r_value else ss2_days_display)
-                        
-                        rationale_data = {
+                    # データを取得
+                    ratio_r_value = ratio_r_by_category['ratio_r'].get(abc_category) if ratio_r_by_category.get('ratio_r') else None
+                    ss2_total_category = ratio_r_by_category['ss2_total'].get(abc_category, 0.0) if ratio_r_by_category.get('ss2_total') else 0.0
+                    ss3_total_category = ratio_r_by_category['ss3_total'].get(abc_category, 0.0) if ratio_r_by_category.get('ss3_total') else 0.0
+                    
+                    # 折り畳み：安全在庫②'の算出根拠（補正内訳）
+                    with st.expander("▶ 安全在庫②'の算出根拠（補正内訳）", expanded=False):
+                        # 最小構成のテーブル
+                        detail_data = {
                             '項目名': [
                                 '対象ABC区分',
-                                '計画誤差率',
-                                '閾値',
-                                '安全在庫②（本商品）',
-                                '安全在庫③（本商品）',
-                                '安全在庫②（ABC区分合計）',
-                                '安全在庫③（ABC区分合計）',
-                                'r（ABC区分別比率）',
-                                '安全在庫②\'（補正後）',
-                                '採用モデル'
+                                '安全在庫②（対象ABC区分 合計）',
+                                '安全在庫③（対象ABC区分 合計）',
+                                '補正比率 r（計画誤差分比率）'
                             ],
                             '値': [
                                 abc_category,
-                                f"{plan_error_rate_for_display:.1f}%" if plan_error_rate_for_display is not None else "計算不可",
-                                f"+{plan_plus_threshold:.1f}% / {plan_minus_threshold:.1f}%",
-                                f"{ss2_value:.2f}（{ss2_days_display:.1f}日）",
-                                f"{ss3_value:.2f}（{ss3_days_display:.1f}日）",
                                 f"{ss2_total_category:,.2f}",
                                 f"{ss3_total_category:,.2f}",
-                                f"{ratio_r_value:.3f}" if ratio_r_value else "算出不可",
-                                f"{ss2_corrected_value:.2f}（{ss2_corrected_days_display:.1f}日）",
-                                "安全在庫②'（補正後モデル）"
+                                f"{ratio_r_value:.3f}" if ratio_r_value else "算出不可"
                             ],
                             '備考': [
-                                '本商品のABC区分',
-                                '計画誤差率の判定に使用',
-                                'プラス/マイナスの閾値',
-                                '実績異常値処理後の値',
-                                '実績異常値処理後の値',
-                                'ABC区分内の全商品の合計',
-                                'ABC区分内の全商品の合計',
-                                '安全在庫③合計 ÷ 安全在庫②合計（ABC区分の集計単位で算出）',
-                                '安全在庫② × r',
-                                '計画誤差率が閾値外のため採用'
+                                '',
+                                '',
+                                '',
+                                'r = 安全在庫③合計 ÷ 安全在庫②合計（ABC区分単位で算出）'
                             ]
                         }
                         
-                        rationale_df = pd.DataFrame(rationale_data)
-                        st.dataframe(rationale_df, use_container_width=True, hide_index=True)
-                        
-                        # 補足文
-                        st.markdown("""
-                        <div style="margin-top: 1rem; padding: 0.75rem; background-color: #f5f5f5; border-radius: 4px; font-size: 0.9rem; color: #666;">
-                            <strong>※ 補足：</strong><br>
-                            • r は実績異常値処理後の全商品データから、ABC区分別に1回だけ算出した固定値です。<br>
-                            • 本画面の表示だけで再計算はしません（性能負荷対策）。
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                elif adopted_model == "ss3":
-                    # 安全在庫③採用時：簡素に表示
-                    with st.expander("▼ 採用モデルの算出根拠"):
-                        st.markdown("""
-                        <div style="padding: 0.5rem;">
-                            <p>計画誤差率が許容範囲内のため、計画誤差を考慮した推奨モデルである<strong>安全在庫③</strong>をそのまま採用しています（補正なし）。</p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        detail_df = pd.DataFrame(detail_data)
+                        st.dataframe(detail_df, use_container_width=True, hide_index=True)
                 
                 # d) 統合された結論メッセージ（注釈）
                 if adopted_safety_stock_days is not None and current_days > 0:
