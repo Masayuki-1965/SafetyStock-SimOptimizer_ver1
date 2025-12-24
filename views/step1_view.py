@@ -619,7 +619,11 @@ def display_abc_ratio_settings():
                 prev_end = st.session_state.abc_ratio_settings.get(prev_cat, {}).get('end', 0)
                 st.number_input("開始％", min_value=0, max_value=100, value=int(prev_end), 
                                key=f"abc_ratio_start_{cat}", disabled=True)
-                st.session_state.abc_ratio_settings[cat]['start'] = prev_end
+                # catがabc_ratio_settingsに存在しない場合は初期化
+                if cat not in st.session_state.abc_ratio_settings:
+                    st.session_state.abc_ratio_settings[cat] = {'start': prev_end, 'end': 100}
+                else:
+                    st.session_state.abc_ratio_settings[cat]['start'] = prev_end
         
         with col3:
             end_val = st.session_state.abc_ratio_settings.get(cat, {}).get('end', 100)
@@ -627,11 +631,19 @@ def display_abc_ratio_settings():
                 # 最終区分は100%固定
                 st.number_input("終了％", min_value=0, max_value=100, value=100, 
                                key=f"abc_ratio_end_{cat}", disabled=True)
-                st.session_state.abc_ratio_settings[cat]['end'] = 100
+                # catがabc_ratio_settingsに存在しない場合は初期化
+                if cat not in st.session_state.abc_ratio_settings:
+                    st.session_state.abc_ratio_settings[cat] = {'start': start_val if i == 0 else st.session_state.abc_ratio_settings.get(st.session_state.abc_categories[i-1], {}).get('end', 0), 'end': 100}
+                else:
+                    st.session_state.abc_ratio_settings[cat]['end'] = 100
             else:
                 new_end = st.number_input("終了％", min_value=0, max_value=100, value=int(end_val), 
                                          key=f"abc_ratio_end_{cat}")
-                st.session_state.abc_ratio_settings[cat]['end'] = new_end
+                # catがabc_ratio_settingsに存在しない場合は初期化
+                if cat not in st.session_state.abc_ratio_settings:
+                    st.session_state.abc_ratio_settings[cat] = {'start': start_val if i == 0 else st.session_state.abc_ratio_settings.get(st.session_state.abc_categories[i-1], {}).get('end', 0), 'end': new_end}
+                else:
+                    st.session_state.abc_ratio_settings[cat]['end'] = new_end
         
         with col4:
             st.markdown("<br>", unsafe_allow_html=True)
