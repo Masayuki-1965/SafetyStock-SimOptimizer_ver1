@@ -1956,10 +1956,14 @@ def create_adopted_model_comparison_charts(
     values.append(ss3_days)
     colors.append(COLOR_SS3_BEFORE)  # 手順④・⑥と同じベースカラーに統一
     
-    # Y軸の範囲を決定（MIN=0に固定）
+    # Y軸の範囲を決定（負の値も扱えるようにする）
     all_values = [v for v in values if v is not None]
-    y_min = 0  # ゼロから表示
-    y_max = max(all_values) * 1.1 if all_values else 100
+    if all_values:
+        y_min = min(all_values) * 1.1 if min(all_values) < 0 else 0  # 負の値がある場合は1.1倍、ない場合は0
+        y_max = max(all_values) * 1.1
+    else:
+        y_min = 0
+        y_max = 100
     
     # 左側グラフ：候補モデル比較
     fig_left = go.Figure()
@@ -2118,22 +2122,184 @@ def create_adopted_model_comparison_charts(
         # Y軸の範囲を更新（安全在庫②'を含める）
         if ss2_corrected_days is not None:
             y_max = max(y_max, ss2_corrected_days * 1.1)
-    else:  # ss3
-        adopted_value = ss3_days
-        adopted_color = COLOR_SS3_BEFORE  # 手順④・⑥と同じベースカラーに統一
-        adopted_label = "安全在庫③（採用）"
-        # 通常の棒グラフ
+    elif adopted_model == "ss2":
+        # 安全在庫②の場合：計画誤差分を積み上げ表示
+        # ベース部分：安全在庫②（グレー色）
+        # 上乗せ部分：計画誤差分 = 安全在庫③ − 安全在庫②（やや濃いグレー色）
+        ss2_base = ss2_days
+        plan_error_delta = ss3_days - ss2_days
+        
+        # ベース部分（安全在庫②）
         fig_right.add_trace(
             go.Bar(
-                x=[adopted_label],
-                y=[adopted_value],
-                name=adopted_label,
-                marker_color=adopted_color,
-                marker_line=dict(color='#666666', width=1.0),  # 他セクションと同等に細く
-                width=bar_width_right,  # 右グラフの幅が狭くなる分、棒の幅も比例して細くする
-                showlegend=False
+                x=["安全在庫②（採用）"],
+                y=[ss2_base],
+                name="安全在庫②（ベース）",
+                marker_color=COLOR_SS2_BEFORE,  # グレー色
+                marker_line=dict(color='#666666', width=1.0),
+                width=bar_width_right,
+                showlegend=False,
+                base=0  # ベースは0から開始
             )
         )
+        
+        # 上乗せ部分（計画誤差分）
+        if plan_error_delta != 0:
+            # 計画誤差分の数量を計算（ホバー表示用）
+            plan_error_delta_quantity = plan_error_delta * daily_actual_mean if daily_actual_mean and daily_actual_mean > 0 else None
+            
+            # ホバーテンプレートを作成（4行固定フォーマット）
+            hover_lines = ["計画誤差分"]
+            
+            # 数量（小数2桁、+:+.2fで正の値には+が付き、負の値には-が付く）
+            if plan_error_delta_quantity is not None:
+                hover_lines.append(f"数量: {plan_error_delta_quantity:+.2f}")
+            else:
+                hover_lines.append("数量: —")
+            
+            # 日数（小数1桁、+:+.1fで正の値には+が付き、負の値には-が付く）
+            hover_lines.append(f"日数: {plan_error_delta:+.1f}")
+            
+            # 計算式
+            hover_lines.append(f"計算: 安全在庫③ − 安全在庫②")
+            
+            hover_template = "<br>".join(hover_lines) + "<extra></extra>"
+            
+            # 計画誤差分の中央Y座標を計算（annotation用）
+            plan_error_delta_center_y = ss2_base + plan_error_delta / 2
+            
+            # 色を決定（正の場合はやや濃いグレー、負の場合は赤系）
+            if plan_error_delta > 0:
+                delta_color = 'rgba(96, 96, 96, 0.9)'  # やや濃いグレー色
+            else:
+                delta_color = 'rgba(200, 100, 100, 0.9)'  # 赤系（負の値の場合）
+            
+            fig_right.add_trace(
+                go.Bar(
+                    x=["安全在庫②（採用）"],
+                    y=[plan_error_delta],
+                    name="計画誤差分",
+                    marker_color=delta_color,
+                    marker_line=dict(color='#666666', width=1.0),
+                    width=bar_width_right,
+                    showlegend=False,
+                    base=ss2_base,  # ベースの上に積み上げ
+                    text=None,  # テキストはannotationで表示するため、ここでは非表示
+                    hovertemplate=hover_template  # ホバー時の表示内容を明示的に制御
+                )
+            )
+            
+            # 白字ラベルを上段エリアの縦方向中央に配置（annotation使用）
+            fig_right.add_annotation(
+                x="安全在庫②（採用）",
+                y=plan_error_delta_center_y,
+                text="計画誤差分",
+                showarrow=False,
+                font=dict(color='white', size=12),
+                xref="x",
+                yref="y",
+                xanchor="center",
+                yanchor="middle",
+                bgcolor="rgba(0,0,0,0)",  # 背景なし
+                bordercolor="rgba(0,0,0,0)"  # 枠線なし
+            )
+        
+        # Y軸の範囲を更新（安全在庫②を含める）
+        y_max = max(y_max, ss2_days * 1.1)
+        if plan_error_delta != 0:
+            total_value = ss2_base + plan_error_delta if plan_error_delta > 0 else ss2_base
+            y_max = max(y_max, total_value * 1.1)
+            if plan_error_delta < 0:
+                y_min = min(y_min, (ss2_base + plan_error_delta) * 1.1)
+    else:  # ss3
+        # 安全在庫③の場合：計画誤差分を積み上げ表示
+        # ベース部分：安全在庫②（グレー色）
+        # 上乗せ部分：計画誤差分 = 安全在庫③ − 安全在庫②（やや濃いグレー色）
+        ss2_base = ss2_days
+        plan_error_delta = ss3_days - ss2_days
+        
+        # ベース部分（安全在庫②）
+        fig_right.add_trace(
+            go.Bar(
+                x=["安全在庫③（採用）"],
+                y=[ss2_base],
+                name="安全在庫②（ベース）",
+                marker_color=COLOR_SS2_BEFORE,  # グレー色
+                marker_line=dict(color='#666666', width=1.0),
+                width=bar_width_right,
+                showlegend=False,
+                base=0  # ベースは0から開始
+            )
+        )
+        
+        # 上乗せ部分（計画誤差分）
+        if plan_error_delta != 0:
+            # 計画誤差分の数量を計算（ホバー表示用）
+            plan_error_delta_quantity = plan_error_delta * daily_actual_mean if daily_actual_mean and daily_actual_mean > 0 else None
+            
+            # ホバーテンプレートを作成（4行固定フォーマット）
+            hover_lines = ["計画誤差分"]
+            
+            # 数量（小数2桁、+:+.2fで正の値には+が付き、負の値には-が付く）
+            if plan_error_delta_quantity is not None:
+                hover_lines.append(f"数量: {plan_error_delta_quantity:+.2f}")
+            else:
+                hover_lines.append("数量: —")
+            
+            # 日数（小数1桁、+:+.1fで正の値には+が付き、負の値には-が付く）
+            hover_lines.append(f"日数: {plan_error_delta:+.1f}")
+            
+            # 計算式
+            hover_lines.append(f"計算: 安全在庫③ − 安全在庫②")
+            
+            hover_template = "<br>".join(hover_lines) + "<extra></extra>"
+            
+            # 計画誤差分の中央Y座標を計算（annotation用）
+            plan_error_delta_center_y = ss2_base + plan_error_delta / 2
+            
+            # 色を決定（正の場合はやや濃いグレー、負の場合は赤系）
+            if plan_error_delta > 0:
+                delta_color = 'rgba(96, 96, 96, 0.9)'  # やや濃いグレー色
+            else:
+                delta_color = 'rgba(200, 100, 100, 0.9)'  # 赤系（負の値の場合）
+            
+            fig_right.add_trace(
+                go.Bar(
+                    x=["安全在庫③（採用）"],
+                    y=[plan_error_delta],
+                    name="計画誤差分",
+                    marker_color=delta_color,
+                    marker_line=dict(color='#666666', width=1.0),
+                    width=bar_width_right,
+                    showlegend=False,
+                    base=ss2_base,  # ベースの上に積み上げ
+                    text=None,  # テキストはannotationで表示するため、ここでは非表示
+                    hovertemplate=hover_template  # ホバー時の表示内容を明示的に制御
+                )
+            )
+            
+            # 白字ラベルを上段エリアの縦方向中央に配置（annotation使用）
+            fig_right.add_annotation(
+                x="安全在庫③（採用）",
+                y=plan_error_delta_center_y,
+                text="計画誤差分",
+                showarrow=False,
+                font=dict(color='white', size=12),
+                xref="x",
+                yref="y",
+                xanchor="center",
+                yanchor="middle",
+                bgcolor="rgba(0,0,0,0)",  # 背景なし
+                bordercolor="rgba(0,0,0,0)"  # 枠線なし
+            )
+        
+        # Y軸の範囲を更新（安全在庫③を含める）
+        y_max = max(y_max, ss3_days * 1.1)
+        if plan_error_delta != 0:
+            total_value = ss2_base + plan_error_delta if plan_error_delta > 0 else ss2_base
+            y_max = max(y_max, total_value * 1.1)
+            if plan_error_delta < 0:
+                y_min = min(y_min, (ss2_base + plan_error_delta) * 1.1)
     
     # adopted_labelを決定（安全在庫②'の場合は特別なラベルを使用）
     if adopted_model == "ss2_corrected":
@@ -2156,8 +2322,8 @@ def create_adopted_model_comparison_charts(
             domain=[0.04, 0.96]  # 左右に4%ずつ余白を作って棒をさらに3ミリ狭くする
         ),
         yaxis=dict(title="", range=[y_min, y_max], showticklabels=False),  # Y軸ラベル非表示
-        barmode='stack' if adopted_model == "ss2_corrected" else 'group',  # 安全在庫②'の場合は積み上げモード
-        bargap=0.25 if adopted_model != "ss2_corrected" else 0.2,  # 安全在庫②'の場合は積み上げモードなのでbargapを調整
+        barmode='stack',  # すべてのモデルで積み上げモード（計画誤差分を表示するため）
+        bargap=0.2,  # 積み上げモードなのでbargapを調整
         height=500,
         showlegend=False,
         # 上下のグラフと表の列を視覚的に同期させるため、マージンを調整

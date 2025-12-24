@@ -1318,9 +1318,11 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">計画誤差率を算出し、その判定結果に基づいて、安全在庫として採用するモデルを決定します。<br>
-        計画誤差率が許容範囲内の場合は、計画誤差を考慮した推奨モデルである安全在庫③を採用します。<br>
-        計画誤差率が許容範囲を超える場合は、安全在庫②をベースに、実績異常値処理後の安全在庫②・③から算出したABC区分別の比率で補正した安全在庫②'を採用します。</div>
+        <div class="step-description">計画誤差率を算出し、その判定結果に基づいて 安全在庫算出モデルを決定します。<br>
+        計画誤差率が<strong> 許容範囲内 </strong>の場合は、計画誤差を考慮した<strong> 安全在庫③（推奨モデル）</strong>を採用します。<br>
+        計画誤差率が<strong> 許容範囲超過 </strong>の場合は、安全在庫②をベースに、安全在庫②・③から算出した ABC区分別<strong> 補正比率 r </strong>で補正した<strong> 安全在庫②' </strong>を採用します。<br>
+        ※ 補正比率 r の詳細は「補正比率 r とは」を参照してください。
+</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -1420,8 +1422,12 @@ def display_step2():
                 ratio_r = ratio_r_by_category['ratio_r'].get(abc_category) if ratio_r_by_category.get('ratio_r') else None
                 
                 if ratio_r is not None and ratio_r > 0:
-                    # 安全在庫②' = 安全在庫② × 比率r
-                    ss2_corrected = ss2_value * ratio_r
+                    # r >= 1 の場合：安全在庫②' = 安全在庫② × 比率r
+                    # r < 1 の場合：安全在庫②' = 安全在庫②（補正なし）
+                    if ratio_r >= 1.0:
+                        ss2_corrected = ss2_value * ratio_r
+                    else:
+                        ss2_corrected = ss2_value  # r < 1 の場合は補正を適用しない
                     daily_actual_mean = final_calculator.actual_data.mean()
                     ss2_corrected_days = ss2_corrected / daily_actual_mean if daily_actual_mean > 0 else 0
                     adopted_model = "ss2_corrected"
@@ -1531,7 +1537,12 @@ def display_step2():
                     ratio_r = ratio_r_by_category['ratio_r'].get(abc_category) if ratio_r_by_category.get('ratio_r') else None
                     if ratio_r is not None and ratio_r > 0:
                         ss2_value = final_results['model2_empirical_actual']['safety_stock']
-                        ss2_corrected = ss2_value * ratio_r
+                        # r >= 1 の場合：安全在庫②' = 安全在庫② × 比率r
+                        # r < 1 の場合：安全在庫②' = 安全在庫②（補正なし）
+                        if ratio_r >= 1.0:
+                            ss2_corrected = ss2_value * ratio_r
+                        else:
+                            ss2_corrected = ss2_value  # r < 1 の場合は補正を適用しない
                         daily_actual_mean = final_calculator.actual_data.mean()
                         ss2_corrected_days = ss2_corrected / daily_actual_mean if daily_actual_mean > 0 else 0
                         adopted_model = "ss2_corrected"
@@ -1716,32 +1727,53 @@ def display_step2():
                     ss2_total_category = ratio_r_by_category['ss2_total'].get(abc_category, 0.0) if ratio_r_by_category.get('ss2_total') else 0.0
                     ss3_total_category = ratio_r_by_category['ss3_total'].get(abc_category, 0.0) if ratio_r_by_category.get('ss3_total') else 0.0
                     
-                    # 折り畳み：安全在庫②'の算出根拠（補正内訳）
-                    with st.expander("▶ 安全在庫②'の算出根拠（補正内訳）", expanded=False):
-                        # 最小構成のテーブル
+                    # 折り畳み：補正比率 r とは
+                    with st.expander("補正比率 r とは", expanded=False):
+                        # 説明文
+                        st.markdown("""
+                        <div style="margin-bottom: 16px;">
+                            <p style="margin-bottom: 0;">r は 安全在庫②・③（実績異常値処理後）をもとに、ABC区分別に「<strong>r = 安全在庫③合計 ÷ 安全在庫②合計</strong>」で算出した比率で、<br>
+                            この比率 r を、実績のバラつきを反映した安全在庫②に乗じることで、計画誤差を考慮した安全在庫②'（補正後モデル）を生成します。</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # マトリクス表
+                        ratio_r_display = f"{ratio_r_value:.3f}" if ratio_r_value else "算出不可"
+                        if ratio_r_value and ss2_total_category > 0:
+                            calculation_note = f"（= {ss3_total_category:,.2f} ÷ {ss2_total_category:,.2f}）"
+                        else:
+                            calculation_note = ""
+                        
                         detail_data = {
                             '項目名': [
                                 '対象ABC区分',
-                                '安全在庫②（対象ABC区分 合計）',
-                                '安全在庫③（対象ABC区分 合計）',
-                                '補正比率 r（計画誤差分比率）'
+                                f'安全在庫②合計（{abc_category}区分）',
+                                f'安全在庫③合計（{abc_category}区分）',
+                                '補正比率 r'
                             ],
                             '値': [
-                                abc_category,
+                                f"{abc_category}区分",
                                 f"{ss2_total_category:,.2f}",
                                 f"{ss3_total_category:,.2f}",
-                                f"{ratio_r_value:.3f}" if ratio_r_value else "算出不可"
+                                f"{ratio_r_display}{calculation_note}" if calculation_note else ratio_r_display
                             ],
-                            '備考': [
+                            '役割': [
                                 '',
-                                '',
-                                '',
-                                'r = 安全在庫③合計 ÷ 安全在庫②合計（ABC区分単位で算出）'
+                                '実績変動のみ反映（異常値処理後）',
+                                '計画誤差を考慮（異常値処理後）',
+                                'ABC区分別 補正比率（補正強度）'
                             ]
                         }
                         
                         detail_df = pd.DataFrame(detail_data)
                         st.dataframe(detail_df, use_container_width=True, hide_index=True)
+                        
+                        # 表の下に※を表示（表の補足として自然に読めるレイアウト）
+                        st.markdown("""
+                        <div style="margin-top: 4px; margin-bottom: 8px;">
+                            <p style="margin-bottom: 0; font-size: 0.95em; color: #555555; line-height: 1.5;">※ r < 1 の場合は、実績のバラつきがすでに計画誤差を包括しているため、安全在庫②をそのまま採用し、補正は行いません。</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 # d) 統合された結論メッセージ（注釈）
                 if adopted_safety_stock_days is not None and current_days > 0:
