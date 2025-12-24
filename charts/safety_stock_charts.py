@@ -2385,15 +2385,36 @@ def create_cap_adopted_model_comparison_charts(
     
     # 上限カットラインを追加（オレンジの破線）
     if cap_days is not None:
+        # 水平線を追加（ラベルなし）
         fig_left.add_hline(
             y=cap_days,
             line_dash="dash",
             line_color="orange",
             line_width=2,
-            annotation_text="上限カットライン",
-            annotation_position="top right",
+            annotation_text="",  # ラベルは別途annotationで表示
             row=None,
             col=None
+        )
+        
+        # 上限カットラインのラベルを「安全在庫③」（右端）のX位置に固定
+        # 理由：ユーザーが迷わず理解できるよう、X位置を統一するため
+        target_model = '安全在庫③' if '安全在庫③' in models else (models[-1] if models else '安全在庫③')
+        
+        # ラベルを棒グラフの中央付近に配置（X座標はモデル名、Y座標は上限カットラインの位置）
+        fig_left.add_annotation(
+            x=target_model,
+            y=cap_days,
+            text="上限カットライン",
+            showarrow=False,
+            font=dict(color='orange', size=12),  # オレンジ色、手順⑦の計画誤差分と同じサイズ
+            xref="x",
+            yref="y",
+            xanchor="center",
+            yanchor="middle",
+            bgcolor="rgba(255, 255, 255, 0.8)",  # 白背景（半透明）で視認性を向上
+            bordercolor="orange",  # オレンジの枠線
+            borderwidth=1,
+            borderpad=4  # 手順⑦の計画誤差分と同じ余白
         )
     
     fig_left.update_layout(
@@ -2430,10 +2451,16 @@ def create_cap_adopted_model_comparison_charts(
         adopted_label = "安全在庫③（採用）"
     
     # 安全在庫②'の場合の特別処理
+    # 【描画ルール】安全在庫②'が採用された場合のみ、積み上げ棒グラフ（stacked bar）で表示
+    # 分岐条件：adopted_model == "ss2_corrected" の場合のみ適用
+    # テーブル側の採用モデル変数（adopted_model）をそのまま使用して分岐している
     if adopted_model == "ss2_corrected":
         # カット前の安全在庫②'を積み上げ棒グラフで表示
+        # 【計算式】計画誤差分 = 安全在庫②' - 安全在庫②
+        # before_ss2_base: カット前の安全在庫②の日数（ベース部分）
+        # before_adopted_value: カット前の安全在庫②'の日数（= before_adopted_model_days）
         before_ss2_base = before_ss2_days
-        before_ss2_additional = before_adopted_value - before_ss2_base
+        before_ss2_additional = before_adopted_value - before_ss2_base  # 計画誤差分（カット前）
         
         # カット前のベース部分（安全在庫②）
         before_base_color = COLOR_SS2_BEFORE
@@ -2471,7 +2498,9 @@ def create_cap_adopted_model_comparison_charts(
             )
         )
         
-        # カット前の計画誤差分
+        # カット前の計画誤差分を表示
+        # 【描画条件】計画誤差分が正の値（> 0）の場合のみ表示
+        # 計画誤差分が0以下の場合は、安全在庫②'が安全在庫②以下になるため、積み上げ表示しない
         if before_ss2_additional > 0:
             darker_gray = 'rgba(96, 96, 96, 0.6)'  # やや濃いグレー色（半透明）
             fig_right.add_trace(
@@ -2493,11 +2522,10 @@ def create_cap_adopted_model_comparison_charts(
                 )
             )
         
-        # カット後の安全在庫②'を積み上げ棒グラフで表示
-        after_ss2_base = after_ss2_days
-        after_ss2_additional = after_adopted_value - after_ss2_base
-        
-        # カット後のベース部分（安全在庫②）
+        # カット後の安全在庫②'を表示
+        # 【重要】上限カットが適用された後は、計画誤差分を載せない
+        # 手順⑦で算出された②'の最終値（before_adopted_model_days）をそのまま上限でカットした値（after_adopted_value）を単色バーで表示
+        # 安全在庫③が採用されたときと同じ見た目（単色バー）で統一
         after_base_marker = dict(
             color=COLOR_SS2_BEFORE,
             line=dict(color='#666666', width=1.0),
@@ -2506,7 +2534,7 @@ def create_cap_adopted_model_comparison_charts(
         fig_right.add_trace(
             go.Bar(
                 x=[adopted_label],
-                y=[after_ss2_base],
+                y=[after_adopted_value],  # 手順⑦で算出された②'の最終値を上限でカットした値（計画誤差分なし）
                 name="カット後（After）",
                 marker=after_base_marker,
                 opacity=1.0,
@@ -2516,27 +2544,6 @@ def create_cap_adopted_model_comparison_charts(
                 base=0
             )
         )
-        
-        # カット後の計画誤差分
-        if after_ss2_additional > 0:
-            darker_gray_after = 'rgba(96, 96, 96, 0.9)'  # やや濃いグレー色（不透明）
-            fig_right.add_trace(
-                go.Bar(
-                    x=[adopted_label],
-                    y=[after_ss2_additional],
-                    name="カット後（After）",
-                    marker=dict(
-                        color=darker_gray_after,
-                        line=dict(color='#666666', width=1.0),
-                        pattern=dict(shape="")
-                    ),
-                    opacity=1.0,
-                    legendgroup='after',
-                    showlegend=False,
-                    width=bar_width_right,
-                    base=after_ss2_base
-                )
-            )
     else:
         # 通常のモデル（ss2, ss3）の場合：手順⑦と同じ処理
         # カット前（Before）を追加（斜線パターン、後面に表示、透明感あり）
@@ -2600,15 +2607,32 @@ def create_cap_adopted_model_comparison_charts(
     
     # 上限カットラインを追加（オレンジの破線）
     if cap_days is not None:
+        # 水平線を追加（ラベルなし）
         fig_right.add_hline(
             y=cap_days,
             line_dash="dash",
             line_color="orange",
             line_width=2,
-            annotation_text="上限カットライン",
-            annotation_position="top right",
+            annotation_text="",  # ラベルは別途annotationで表示
             row=None,
             col=None
+        )
+        
+        # 採用モデルの中央にラベルを配置
+        fig_right.add_annotation(
+            x=adopted_label,
+            y=cap_days,
+            text="上限カットライン",
+            showarrow=False,
+            font=dict(color='orange', size=12),  # オレンジ色、手順⑦の計画誤差分と同じサイズ
+            xref="x",
+            yref="y",
+            xanchor="center",
+            yanchor="middle",
+            bgcolor="rgba(255, 255, 255, 0.8)",  # 白背景（半透明）で視認性を向上
+            bordercolor="orange",  # オレンジの枠線
+            borderwidth=1,
+            borderpad=4  # 手順⑦の計画誤差分と同じ余白
         )
     
     fig_right.update_layout(

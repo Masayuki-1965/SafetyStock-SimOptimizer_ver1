@@ -3692,19 +3692,23 @@ def display_after_cap_comparison(product_code: str,
         before_adopted_model_days = before_ss3_days
     
     # カット後の採用モデルの日数を計算
+    # 【重要】上限カットは、すべてのモデルで手順⑦の最終値の大きさをそのまま使い、その値を上限でカットして終了
     if adopted_model == "ss2":
         after_adopted_model_days = after_ss2_days
     elif adopted_model == "ss2_corrected":
-        # 安全在庫②'の場合：カット後の安全在庫②に比率rを掛ける
-        if ratio_r is not None and ratio_r > 0:
-            if ratio_r >= 1.0:
-                after_ss2_corrected_value = after_results['model2_empirical_actual']['safety_stock'] * ratio_r
-            else:
-                after_ss2_corrected_value = after_results['model2_empirical_actual']['safety_stock']  # r < 1 の場合は補正なし
-            after_adopted_model_days = after_ss2_corrected_value / before_mean_demand if before_mean_demand > 0 else 0
+        # 安全在庫②'の場合：手順⑦で算出された②'の最終値（before_adopted_model_days）をそのまま上限でカット
+        # 上限カット日数を取得
+        cap_days_for_calc = None
+        if before_calculator and before_calculator.abc_category:
+            abc_category_for_calc = before_calculator.abc_category.upper()
+            category_cap_days_for_calc = st.session_state.get('category_cap_days', {})
+            cap_days_for_calc = category_cap_days_for_calc.get(abc_category_for_calc)
+        
+        # 手順⑦で算出された②'の最終値を上限でカット
+        if cap_days_for_calc is not None and before_adopted_model_days > cap_days_for_calc:
+            after_adopted_model_days = cap_days_for_calc
         else:
-            # 比率rが取得できない場合は安全在庫②の値をそのまま使用
-            after_adopted_model_days = after_ss2_days
+            after_adopted_model_days = before_adopted_model_days
     else:  # ss3
         after_adopted_model_days = after_ss3_days
     
