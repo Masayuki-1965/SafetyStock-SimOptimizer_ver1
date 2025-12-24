@@ -2203,11 +2203,14 @@ def create_cap_adopted_model_comparison_charts(
     after_ss1_days: Optional[float],
     after_ss2_days: float,
     after_ss3_days: float,
-    adopted_model: str,  # "ss2" or "ss3"
-    adopted_model_days: float,
+    adopted_model: str,  # "ss2", "ss3", or "ss2_corrected"
+    before_adopted_model_days: float,
+    after_adopted_model_days: float,
     cap_days: Optional[int] = None,
     is_before_ss1_undefined: bool = False,
-    is_after_ss1_undefined: bool = False
+    is_after_ss1_undefined: bool = False,
+    ratio_r: Optional[float] = None,  # 比率r（安全在庫②'の計算用）
+    daily_actual_mean: Optional[float] = None  # 日当たり実績平均（計画誤差分の数量計算用）
 ) -> Tuple[go.Figure, go.Figure]:
     """
     上限カット適用前後の採用モデル比較用の左右2つのグラフを生成（手順⑧用）
@@ -2222,11 +2225,14 @@ def create_cap_adopted_model_comparison_charts(
         after_ss1_days: カット後の安全在庫①の安全在庫日数
         after_ss2_days: カット後の安全在庫②の安全在庫日数
         after_ss3_days: カット後の安全在庫③の安全在庫日数
-        adopted_model: 採用されたモデル（"ss2"または"ss3"）
-        adopted_model_days: 採用モデルの安全在庫日数
+        adopted_model: 採用されたモデル（"ss2", "ss3", または"ss2_corrected"）
+        before_adopted_model_days: カット前の採用モデルの安全在庫日数
+        after_adopted_model_days: カット後の採用モデルの安全在庫日数
         cap_days: 上限カット日数（Noneの場合は上限カットラインを表示しない）
         is_before_ss1_undefined: カット前の安全在庫①が未定義かどうか
         is_after_ss1_undefined: カット後の安全在庫①が未定義かどうか
+        ratio_r: 比率r（安全在庫②'の計算用）
+        daily_actual_mean: 日当たり実績平均（計画誤差分の数量計算用）
     
     Returns:
         (左側グラフ, 右側グラフ)のタプル
@@ -2262,6 +2268,11 @@ def create_cap_adopted_model_comparison_charts(
     # Y軸の範囲を決定（MIN=0に固定）
     all_values = before_values + after_values
     all_values = [v for v in all_values if v is not None]
+    # 採用モデルの値を含める
+    if before_adopted_model_days is not None:
+        all_values.append(before_adopted_model_days)
+    if after_adopted_model_days is not None:
+        all_values.append(after_adopted_model_days)
     y_min = 0  # ゼロから表示
     y_max = max(all_values) * 1.1 if all_values else 100
     
@@ -2402,74 +2413,190 @@ def create_cap_adopted_model_comparison_charts(
     fig_right = go.Figure()
     
     if adopted_model == "ss2":
-        before_adopted_value = before_ss2_days
-        after_adopted_value = after_ss2_days
+        before_adopted_value = before_adopted_model_days
+        after_adopted_value = after_adopted_model_days
         adopted_color = COLOR_SS2_BEFORE  # 手順⑦と同じベースカラー
         adopted_label = "安全在庫②（採用）"
+    elif adopted_model == "ss2_corrected":
+        # 安全在庫②'の場合：カット前後の値をそのまま使用
+        before_adopted_value = before_adopted_model_days
+        after_adopted_value = after_adopted_model_days
+        adopted_color = COLOR_SS2_BEFORE  # 手順⑦と同じベースカラー
+        adopted_label = "安全在庫②'（採用）"
     else:  # ss3
-        before_adopted_value = before_ss3_days
-        after_adopted_value = after_ss3_days
+        before_adopted_value = before_adopted_model_days
+        after_adopted_value = after_adopted_model_days
         adopted_color = COLOR_SS3_BEFORE  # 手順⑦と同じベースカラー
         adopted_label = "安全在庫③（採用）"
     
-    # カット前（Before）を追加（斜線パターン、後面に表示、透明感あり）
-    # 色をrgba形式に変換して透明度を0.6に設定（後面表示のため）
-    if isinstance(adopted_color, str) and adopted_color.startswith('rgba'):
-        # rgba形式の色の透明度部分を0.6に変更
-        match = re.match(r'rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)', adopted_color)
-        if match:
-            r, g, b = match.groups()
+    # 安全在庫②'の場合の特別処理
+    if adopted_model == "ss2_corrected":
+        # カット前の安全在庫②'を積み上げ棒グラフで表示
+        before_ss2_base = before_ss2_days
+        before_ss2_additional = before_adopted_value - before_ss2_base
+        
+        # カット前のベース部分（安全在庫②）
+        before_base_color = COLOR_SS2_BEFORE
+        if isinstance(before_base_color, str) and before_base_color.startswith('rgba'):
+            match = re.match(r'rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)', before_base_color)
+            if match:
+                r, g, b = match.groups()
+                before_base_color_rgba = f'rgba({r}, {g}, {b}, 0.6)'
+            else:
+                before_base_color_rgba = before_base_color
+        elif isinstance(before_base_color, str) and before_base_color.startswith('#'):
+            r = int(before_base_color[1:3], 16)
+            g = int(before_base_color[3:5], 16)
+            b = int(before_base_color[5:7], 16)
+            before_base_color_rgba = f'rgba({r}, {g}, {b}, 0.6)'
+        else:
+            before_base_color_rgba = before_base_color
+        
+        fig_right.add_trace(
+            go.Bar(
+                x=[adopted_label],
+                y=[before_ss2_base],
+                name="カット前（Before）",
+                marker=dict(
+                    color=before_base_color_rgba,
+                    line=dict(color='#666666', width=1.0),
+                    pattern_shape='/',
+                    pattern_fgcolor=before_base_color_rgba,
+                    opacity=0.6
+                ),
+                legendgroup='before',
+                showlegend=False,
+                width=bar_width_right,
+                base=0
+            )
+        )
+        
+        # カット前の計画誤差分
+        if before_ss2_additional > 0:
+            darker_gray = 'rgba(96, 96, 96, 0.6)'  # やや濃いグレー色（半透明）
+            fig_right.add_trace(
+                go.Bar(
+                    x=[adopted_label],
+                    y=[before_ss2_additional],
+                    name="カット前（Before）",
+                    marker=dict(
+                        color=darker_gray,
+                        line=dict(color='#666666', width=1.0),
+                        pattern_shape='/',
+                        pattern_fgcolor=darker_gray,
+                        opacity=0.6
+                    ),
+                    legendgroup='before',
+                    showlegend=False,
+                    width=bar_width_right,
+                    base=before_ss2_base
+                )
+            )
+        
+        # カット後の安全在庫②'を積み上げ棒グラフで表示
+        after_ss2_base = after_ss2_days
+        after_ss2_additional = after_adopted_value - after_ss2_base
+        
+        # カット後のベース部分（安全在庫②）
+        after_base_marker = dict(
+            color=COLOR_SS2_BEFORE,
+            line=dict(color='#666666', width=1.0),
+            pattern=dict(shape="")
+        )
+        fig_right.add_trace(
+            go.Bar(
+                x=[adopted_label],
+                y=[after_ss2_base],
+                name="カット後（After）",
+                marker=after_base_marker,
+                opacity=1.0,
+                legendgroup='after',
+                showlegend=False,
+                width=bar_width_right,
+                base=0
+            )
+        )
+        
+        # カット後の計画誤差分
+        if after_ss2_additional > 0:
+            darker_gray_after = 'rgba(96, 96, 96, 0.9)'  # やや濃いグレー色（不透明）
+            fig_right.add_trace(
+                go.Bar(
+                    x=[adopted_label],
+                    y=[after_ss2_additional],
+                    name="カット後（After）",
+                    marker=dict(
+                        color=darker_gray_after,
+                        line=dict(color='#666666', width=1.0),
+                        pattern=dict(shape="")
+                    ),
+                    opacity=1.0,
+                    legendgroup='after',
+                    showlegend=False,
+                    width=bar_width_right,
+                    base=after_ss2_base
+                )
+            )
+    else:
+        # 通常のモデル（ss2, ss3）の場合：手順⑦と同じ処理
+        # カット前（Before）を追加（斜線パターン、後面に表示、透明感あり）
+        # 色をrgba形式に変換して透明度を0.6に設定（後面表示のため）
+        if isinstance(adopted_color, str) and adopted_color.startswith('rgba'):
+            # rgba形式の色の透明度部分を0.6に変更
+            match = re.match(r'rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)', adopted_color)
+            if match:
+                r, g, b = match.groups()
+                before_adopted_color = f'rgba({r}, {g}, {b}, 0.6)'
+            else:
+                before_adopted_color = adopted_color
+        elif isinstance(adopted_color, str) and adopted_color.startswith('#'):
+            # 16進数カラーをrgbaに変換（透明度0.6で透明感を出す）
+            r = int(adopted_color[1:3], 16)
+            g = int(adopted_color[3:5], 16)
+            b = int(adopted_color[5:7], 16)
             before_adopted_color = f'rgba({r}, {g}, {b}, 0.6)'
         else:
             before_adopted_color = adopted_color
-    elif isinstance(adopted_color, str) and adopted_color.startswith('#'):
-        # 16進数カラーをrgbaに変換（透明度0.6で透明感を出す）
-        r = int(adopted_color[1:3], 16)
-        g = int(adopted_color[3:5], 16)
-        b = int(adopted_color[5:7], 16)
-        before_adopted_color = f'rgba({r}, {g}, {b}, 0.6)'
-    else:
-        before_adopted_color = adopted_color
-    
-    fig_right.add_trace(
-        go.Bar(
-            x=[adopted_label],
-            y=[before_adopted_value],
-            name="カット前（Before）",
-            marker=dict(
-                color=before_adopted_color,
-                line=dict(color='#666666', width=1.0),
-                pattern_shape='/',  # 斜線パターン
-                pattern_fgcolor=before_adopted_color,
-                opacity=0.6  # 半透明を明示
-            ),
-            legendgroup='before',
-            showlegend=False,
-            width=bar_width_right  # 手順⑦と同じ
+        
+        fig_right.add_trace(
+            go.Bar(
+                x=[adopted_label],
+                y=[before_adopted_value],
+                name="カット前（Before）",
+                marker=dict(
+                    color=before_adopted_color,
+                    line=dict(color='#666666', width=1.0),
+                    pattern_shape='/',  # 斜線パターン
+                    pattern_fgcolor=before_adopted_color,
+                    opacity=0.6  # 半透明を明示
+                ),
+                legendgroup='before',
+                showlegend=False,
+                width=bar_width_right  # 手順⑦と同じ
+            )
         )
-    )
-    
-    # カット後（After）を追加（単色塗りつぶし、前面に表示、不透明）
-    # 【重要】After用のmarker dictはBeforeをコピーせず、完全に新規作成する
-    # これにより、Beforeのmarker設定（斜線パターンなど）がAfterに影響しないことを保証
-    after_adopted_marker = dict(
-        color=adopted_color,
-        line=dict(color='#666666', width=1.0),
-        pattern=dict(shape="")  # 空文字で斜線パターンを完全無効化（上限カット未適用領域で斜線が見えないようにする）
-    )
-    
-    fig_right.add_trace(
-        go.Bar(
-            x=[adopted_label],  # Beforeと同じx座標（完全一致）
-            y=[after_adopted_value],
-            name="カット後（After）",
-            marker=after_adopted_marker,  # 新規作成したmarker dictを使用（Beforeとは独立）
-            opacity=1.0,  # traceレベルで不透明を明示（上限カット未適用領域でBeforeの斜線が透けて見えないようにする）
-            legendgroup='after',
-            showlegend=False,
-            width=bar_width_right  # Beforeと同じwidth（完全一致）
+        
+        # カット後（After）を追加（単色塗りつぶし、前面に表示、不透明）
+        # 【重要】After用のmarker dictはBeforeをコピーせず、完全に新規作成する
+        # これにより、Beforeのmarker設定（斜線パターンなど）がAfterに影響しないことを保証
+        after_adopted_marker = dict(
+            color=adopted_color,
+            line=dict(color='#666666', width=1.0),
+            pattern=dict(shape="")  # 空文字で斜線パターンを完全無効化（上限カット未適用領域で斜線が見えないようにする）
         )
-    )
+        
+        fig_right.add_trace(
+            go.Bar(
+                x=[adopted_label],  # Beforeと同じx座標（完全一致）
+                y=[after_adopted_value],
+                name="カット後（After）",
+                marker=after_adopted_marker,  # 新規作成したmarker dictを使用（Beforeとは独立）
+                opacity=1.0,  # traceレベルで不透明を明示（上限カット未適用領域でBeforeの斜線が透けて見えないようにする）
+                legendgroup='after',
+                showlegend=False,
+                width=bar_width_right  # Beforeと同じwidth（完全一致）
+            )
+        )
     
     # 上限カットラインを追加（オレンジの破線）
     if cap_days is not None:
@@ -2494,8 +2621,8 @@ def create_cap_adopted_model_comparison_charts(
             domain=[0.04, 0.96]  # 手順⑦と同じ
         ),
         yaxis=dict(title="", range=[y_min, y_max], showticklabels=False),  # 手順⑦と同じ
-        barmode='overlay',  # 重ね表示
-        bargap=0.25,  # 手順⑦と同じ
+        barmode='stack' if adopted_model == "ss2_corrected" else 'overlay',  # 安全在庫②'の場合は積み上げモード
+        bargap=0.2 if adopted_model == "ss2_corrected" else 0.25,  # 安全在庫②'の場合は積み上げモードなのでbargapを調整
         height=500,  # 手順⑦と同じ
         showlegend=False,  # 手順⑦と同じ
         margin=dict(l=0, r=0, t=100, b=80)  # 手順⑦と同じ

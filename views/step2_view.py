@@ -2103,7 +2103,25 @@ def display_step2():
             adopted_model = st.session_state.get('step2_adopted_model', 'ss3')  # デフォルトはss3
             if adopted_model == "ss2":
                 adopted_model_days = final_results['model2_empirical_actual']['safety_stock'] / final_calculator.actual_data.mean() if final_calculator.actual_data.mean() > 0 else 0
-            else:
+            elif adopted_model == "ss2_corrected":
+                # 安全在庫②'の場合：上限カット後の安全在庫②に比率rを掛ける
+                ss2_after_cap = final_results['model2_empirical_actual']['safety_stock']
+                # 比率rを取得
+                abc_category = final_calculator.abc_category.upper() if final_calculator.abc_category else None
+                ratio_r_by_category = st.session_state.get('step2_ratio_r_by_category', {})
+                ratio_r = ratio_r_by_category.get(abc_category) if abc_category and ratio_r_by_category else None
+                if ratio_r is not None and ratio_r > 0:
+                    # r >= 1 の場合：安全在庫②' = 安全在庫② × 比率r
+                    # r < 1 の場合：安全在庫②' = 安全在庫②（補正なし）
+                    if ratio_r >= 1.0:
+                        ss2_corrected_after_cap = ss2_after_cap * ratio_r
+                    else:
+                        ss2_corrected_after_cap = ss2_after_cap  # r < 1 の場合は補正を適用しない
+                    adopted_model_days = ss2_corrected_after_cap / final_calculator.actual_data.mean() if final_calculator.actual_data.mean() > 0 else 0
+                else:
+                    # 比率rが取得できない場合は安全在庫②の値をそのまま使用
+                    adopted_model_days = final_results['model2_empirical_actual']['safety_stock'] / final_calculator.actual_data.mean() if final_calculator.actual_data.mean() > 0 else 0
+            else:  # ss3
                 adopted_model_days = final_results['model3_empirical_plan']['safety_stock'] / final_calculator.actual_data.mean() if final_calculator.actual_data.mean() > 0 else 0
             
             # 上限カット適用前後の安全在庫比較テーブル
@@ -3651,15 +3669,42 @@ def display_after_cap_comparison(product_code: str,
     # 採用モデルを取得（手順⑦で決定されたモデル）
     adopted_model = st.session_state.get('step2_adopted_model', 'ss3')  # デフォルトはss3
     
+    # 比率rを取得（安全在庫②'の計算用）
+    abc_category = before_calculator.abc_category.upper() if before_calculator and before_calculator.abc_category else None
+    ratio_r_by_category = st.session_state.get('step2_ratio_r_by_category', {})
+    ratio_r = ratio_r_by_category.get(abc_category) if abc_category and ratio_r_by_category else None
+    
     # カット前の採用モデルの日数を計算
     if adopted_model == "ss2":
         before_adopted_model_days = before_ss2_days
+    elif adopted_model == "ss2_corrected":
+        # 安全在庫②'の場合：カット前の安全在庫②に比率rを掛ける
+        if ratio_r is not None and ratio_r > 0:
+            if ratio_r >= 1.0:
+                before_ss2_corrected_value = before_results['model2_empirical_actual']['safety_stock'] * ratio_r
+            else:
+                before_ss2_corrected_value = before_results['model2_empirical_actual']['safety_stock']  # r < 1 の場合は補正なし
+            before_adopted_model_days = before_ss2_corrected_value / before_mean_demand if before_mean_demand > 0 else 0
+        else:
+            # 比率rが取得できない場合は安全在庫②の値をそのまま使用
+            before_adopted_model_days = before_ss2_days
     else:  # ss3
         before_adopted_model_days = before_ss3_days
     
     # カット後の採用モデルの日数を計算
     if adopted_model == "ss2":
         after_adopted_model_days = after_ss2_days
+    elif adopted_model == "ss2_corrected":
+        # 安全在庫②'の場合：カット後の安全在庫②に比率rを掛ける
+        if ratio_r is not None and ratio_r > 0:
+            if ratio_r >= 1.0:
+                after_ss2_corrected_value = after_results['model2_empirical_actual']['safety_stock'] * ratio_r
+            else:
+                after_ss2_corrected_value = after_results['model2_empirical_actual']['safety_stock']  # r < 1 の場合は補正なし
+            after_adopted_model_days = after_ss2_corrected_value / before_mean_demand if before_mean_demand > 0 else 0
+        else:
+            # 比率rが取得できない場合は安全在庫②の値をそのまま使用
+            after_adopted_model_days = after_ss2_days
     else:  # ss3
         after_adopted_model_days = after_ss3_days
     
@@ -3689,17 +3734,10 @@ def display_after_cap_comparison(product_code: str,
         
         with col_left:
             # 左側グラフ：候補モデル比較
-            # カット前の採用モデルの日数を計算
-            if adopted_model == "ss2":
-                before_adopted_model_days = before_ss2_days
-            else:  # ss3
-                before_adopted_model_days = before_ss3_days
-            
-            # カット後の採用モデルの日数を計算
-            if adopted_model == "ss2":
-                after_adopted_model_days = after_ss2_days
-            else:  # ss3
-                after_adopted_model_days = after_ss3_days
+            # カット前後の採用モデルの日数は既に計算済み（3654-3689行目で計算）
+            # 比率rを取得（グラフ表示用）
+            ratio_r_for_chart = ratio_r_by_category.get(abc_category) if abc_category and ratio_r_by_category else None
+            daily_actual_mean_for_chart = before_mean_demand
             
             fig_left, fig_right = create_cap_adopted_model_comparison_charts(
                 product_code=product_code,
@@ -3711,10 +3749,13 @@ def display_after_cap_comparison(product_code: str,
                 after_ss2_days=after_ss2_days,
                 after_ss3_days=after_ss3_days,
                 adopted_model=adopted_model,
-                adopted_model_days=after_adopted_model_days,  # カット後の値を渡す
+                before_adopted_model_days=before_adopted_model_days,
+                after_adopted_model_days=after_adopted_model_days,
                 cap_days=cap_days,
                 is_before_ss1_undefined=is_before_ss1_undefined,
-                is_after_ss1_undefined=is_after_ss1_undefined
+                is_after_ss1_undefined=is_after_ss1_undefined,
+                ratio_r=ratio_r_for_chart,
+                daily_actual_mean=daily_actual_mean_for_chart
             )
             st.plotly_chart(fig_left, use_container_width=True, key=f"cap_adopted_model_left_{product_code}")
         
@@ -3795,6 +3836,17 @@ def display_after_cap_comparison(product_code: str,
     current_display_after = "同上"  # カット前と同じなので「同上」
     current_ratio_display = "1.00"
     
+    # 採用モデルのカット前後の表示を作成
+    before_adopted_display = f"{before_adopted_model_days * before_mean_demand:.2f}（{before_adopted_model_days:.1f}日）" if before_adopted_model_days is not None else "—"
+    # カット前とカット後が同じ場合は「同上」を表示
+    if after_adopted_model_days is not None and before_adopted_model_days is not None and abs(after_adopted_model_days - before_adopted_model_days) < 0.01:
+        after_adopted_display = "同上"
+    else:
+        after_adopted_display = f"{after_adopted_model_days * before_mean_demand:.2f}（{after_adopted_model_days:.1f}日）" if after_adopted_model_days is not None else "—"
+    
+    # 採用モデルの現行比を計算（カット後の値を使用）
+    adopted_model_ratio = f"{after_adopted_model_days / current_days:.2f}" if (after_adopted_model_days is not None and current_days > 0) else "—"
+    
     # 2. テーブルを表示
     comparison_data = {
         '現行設定': [
@@ -3818,13 +3870,13 @@ def display_after_cap_comparison(product_code: str,
             current_ratios[2]
         ],
         '採用モデル': [
-            f"{adopted_model_days * before_mean_demand:.2f}（{adopted_model_days:.1f}日）" if adopted_model_days is not None else "—",
-            "同上",  # 採用モデルはカット前後で同じなので「同上」
-            f"{adopted_model_days / current_days:.2f}" if (adopted_model_days is not None and current_days > 0) else "—"
+            before_adopted_display,
+            after_adopted_display,
+            adopted_model_ratio
         ]
     }
     
-    comparison_df = pd.DataFrame(comparison_data, index=['カット前_安全在庫数量（日数）', 'カット後_安全在庫数量（日数）', '現行比（カット後 ÷ 現行）'])
+    comparison_df = pd.DataFrame(comparison_data, index=['before', 'after', '現行比（カット後 ÷ 現行）'])
     
     # 採用モデル列のスタイル：計画誤差率と同じトーンに統一
     # 背景色：薄い緑系（計画誤差率と同じ #E8F5E9）
