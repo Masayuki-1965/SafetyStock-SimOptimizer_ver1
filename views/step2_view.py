@@ -1912,66 +1912,90 @@ def display_step2():
                         """, unsafe_allow_html=True)
                 
                 # d) 統合された結論メッセージ（注釈）
-                if adopted_safety_stock_days is not None and current_days > 0:
-                    # 現行比を計算
-                    recommended_ratio = adopted_safety_stock_days / current_days
+                # 計画誤差率が許容範囲内かどうかを判定
+                is_anomaly = st.session_state.get('step2_is_anomaly', False)
+                
+                # Aパターン：計画誤差率が許容範囲内で、安全在庫③（推奨モデル）を採用した場合
+                if adopted_model == "ss3" and not is_anomaly:
+                    model_display_name = "安全在庫③（推奨モデル）"
                     
-                    # Aパターン：安全在庫③（推奨モデル）を採用した場合
-                    if adopted_model == "ss3":
-                        model_display_name = "安全在庫③（推奨モデル）"
+                    if adopted_safety_stock_days is not None and current_days > 0:
+                        # 現行比を計算
+                        recommended_ratio = adopted_safety_stock_days / current_days
                         
                         # ① 現行設定 ＞ 安全在庫③ の場合
                         if recommended_ratio < 1:
                             reduction_rate = (1 - recommended_ratio) * 100
-                            effect_text = f"約 {round(reduction_rate):.0f}% の在庫削減が期待できます。"
+                            reduction_rate_rounded = round(reduction_rate)
+                            effect_text = f"約 {reduction_rate_rounded}% の在庫削減が期待できます。"
+                            # 統合メッセージを1つのブロックとして表示
+                            st.markdown(f"""
+                            <div class="annotation-success-box">
+                                <span class="icon">✅</span>
+                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
                         # ② 現行設定 ＜ 安全在庫③ の場合
                         else:
                             increase_rate = (recommended_ratio - 1) * 100
-                            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります。"
-                        
-                        # 統合メッセージを1つのブロックとして表示
+                            increase_rate_rounded = round(increase_rate)
+                            effect_text = f"約 {increase_rate_rounded}% の在庫増加となります。"
+                            # 統合メッセージを1つのブロックとして表示
+                            st.markdown(f"""
+                            <div class="annotation-success-box">
+                                <span class="icon">✅</span>
+                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    # ③ 現行設定がない場合
+                    else:
                         st.markdown(f"""
                         <div class="annotation-success-box">
                             <span class="icon">✅</span>
-                            <div class="text"><strong>採用モデル：</strong>{model_display_name}を採用しました。現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                            <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。在庫削減効果は現行設定がないため、削減効果を計算できません。</div>
                         </div>
                         """, unsafe_allow_html=True)
+                
+                # Bパターン：計画誤差率が許容範囲超過で、安全在庫②'を採用した場合
+                elif adopted_model == "ss2_corrected":
+                    model_display_name = "安全在庫②'（安全在庫②に計画誤差を加味したモデル）"
                     
-                    # Bパターン：安全在庫②'または安全在庫②を代替採用した場合
-                    elif adopted_model == "ss2_corrected":
-                        model_display_name = "安全在庫②'（補正後モデル）"
-                    else:  # adopted_model == "ss2"
-                        model_display_name = "安全在庫②（実績のバラつきを反映したモデル）"
+                    if adopted_safety_stock_days is not None and current_days > 0:
+                        # 現行比を計算
+                        recommended_ratio = adopted_safety_stock_days / current_days
                         
-                        # ③ 現行設定 ＞ 安全在庫② の場合
+                        # ① 現行設定 ＞ 安全在庫②' の場合
                         if recommended_ratio < 1:
                             reduction_rate = (1 - recommended_ratio) * 100
-                            effect_text = f"約 {round(reduction_rate):.0f}% の在庫削減が期待できます。"
-                        # ④ 現行設定 ＜ 安全在庫② の場合
+                            reduction_rate_rounded = round(reduction_rate)
+                            effect_text = f"約 {reduction_rate_rounded}% の在庫削減が期待できます。"
+                            # 統合メッセージを1つのブロックとして表示
+                            st.markdown(f"""
+                            <div class="annotation-success-box">
+                                <span class="icon">✅</span>
+                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} で、{effect_text}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        # ② 現行設定 ＜ 安全在庫②' の場合
                         else:
                             increase_rate = (recommended_ratio - 1) * 100
-                            effect_text = f"約 {round(increase_rate):.0f}% の在庫増加となります。"
-                        
-                        # 統合メッセージを1つのブロックとして表示
+                            increase_rate_rounded = round(increase_rate)
+                            effect_text = f"約 {increase_rate_rounded}% の在庫増加となります。"
+                            # 統合メッセージを1つのブロックとして表示
+                            st.markdown(f"""
+                            <div class="annotation-success-box">
+                                <span class="icon">✅</span>
+                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} で、{effect_text}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    # ③ 現行設定がない場合
+                    else:
                         st.markdown(f"""
                         <div class="annotation-success-box">
                             <span class="icon">✅</span>
-                            <div class="text"><strong>採用モデル：</strong>{model_display_name}を代替採用しました。現行比 {recommended_ratio:.2f} で、{effect_text}</div>
+                            <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。在庫削減効果は現行設定がないため、削減効果を計算できません。</div>
                         </div>
                         """, unsafe_allow_html=True)
-                elif current_days <= 0:
-                    # 採用モデル名を統合メッセージ用の形式に変換
-                    if adopted_model == "ss2":
-                        model_display_name = "安全在庫②（実測値－実績平均）"
-                    else:
-                        model_display_name = "安全在庫③（実測値：実績−計画）"
-                    
-                    st.markdown(f"""
-                    <div class="annotation-success-box">
-                        <span class="icon">✅</span>
-                        <div class="text"><strong>採用モデル：</strong>{model_display_name}を採用しました。<strong>在庫削減効果：</strong>現行設定がないため、削減効果を計算できません。</div>
-                    </div>
-                    """, unsafe_allow_html=True)
             
             st.divider()
     
