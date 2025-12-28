@@ -86,6 +86,10 @@ def display_safety_stock_definitions():
         font-size: 0.9em;
         font-weight: normal;
     }
+    .model-cell .model-subtitle {
+        font-size: 0.92em;
+        font-weight: bold;
+    }
     .formula-cell {
         font-family: 'Courier New', monospace;
         background-color: #f0f8ff;
@@ -100,12 +104,17 @@ def display_safety_stock_definitions():
         line-height: 1.4 !important;
         margin-top: 0.8rem !important;
         margin-bottom: 0 !important;
+        font-size: 14.5px;
     }
     .safety-stock-section p {
         line-height: 1.5 !important;
+        margin-bottom: 0.15rem !important;
     }
     .safety-stock-section p:first-child {
         margin-bottom: 0.5rem !important;
+    }
+    .safety-stock-section p:last-child {
+        margin-bottom: 0 !important;
     }
     .safety-stock-section ul {
         line-height: 1.5 !important;
@@ -134,26 +143,26 @@ def display_safety_stock_definitions():
     <table class="safety-stock-table">
         <thead>
             <tr>
-                <th style="width: 23%;">モデル</th>
-                <th style="width: 38%;">計算式</th>
-                <th style="width: 39%;">説明</th>
+                <th style="width: 19%;">モデル</th>
+                <th style="width: 43%;">計算式</th>
+                <th style="width: 38%;">説明</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td class="model-cell">安全在庫①：理論値<br><span class="subtitle">【理論モデル】</span></td>
-                <td class="formula-cell"><strong>安全在庫 ＝ 安全係数 Z × 標準偏差 σ × √リードタイム LT</strong></td>
-                <td class="description-cell">日々の<strong>実績のバラつき（標準偏差 σ）</strong>に、安全係数 Z とリードタイム LT の平方根を掛け合わせて算出する基本式。<strong>安全在庫理論の“教科書的モデル”ですが、計画誤差は考慮していません。</strong></td>
+                <td class="model-cell">【安全在庫①】<br><span class="model-subtitle">一般的な理論モデル</span></td>
+                <td class="formula-cell"><strong>安全在庫 ＝ 安全係数 Z × 標準偏差 σ × √リードタイム</strong><br>※ LT期間の実績のバラつきを理論式で計算し、安全在庫を決定</td>
+                <td class="description-cell">日々の実績データから標準偏差 σ を算出し、安全係数 Z とリードタイムの平方根を掛ける基本式。<strong>教科書的な安全在庫の理論モデル。計画誤差は考慮しない。</strong></td>
             </tr>
             <tr>
-                <td class="model-cell">安全在庫②：実測値（実績 − 平均）<br><span class="subtitle">【実績のバラつきを反映したモデル】</span></td>
-                <td class="formula-cell"><strong>リードタイム間差分（実績−平均）※実績バラつき<br> ＝ リードタイム期間の実績合計 − リードタイム期間実績合計の平均</strong><br>→ 欠品許容率 p（例：1%）をカバーする水準を採用<br>※ 総件数 ＝ 全期間の日数 − リードタイム LT ＋ 1</td>
-                <td class="description-cell">リードタイム期間の実績合計を 1 日ずつスライドさせながら計算し、平均を上回る“プラス差分”<strong>（＝実績バラつきによる欠品リスク）</strong>を実測します。ヒストグラム（件数 × 差分）の総件数に対し、左側（1−p）の件数をカバーする位置を安全在庫水準として設定します。<strong>“実績のバラつき”を反映したモデルですが、計画誤差は考慮していません。</strong></td>
+                <td class="model-cell">【安全在庫②】<br><span class="model-subtitle">実績バラつき実測モデル</span></td>
+                <td class="formula-cell"><strong>リードタイム間差分（実績－平均）<br>＝ リードタイム期間の実績合計 － リードタイム期間実績合計の平均</strong><br>※ LT期間の実績のバラつきを実測し、安全在庫を決定</td>
+                <td class="description-cell">LT期間の実績合計を 1 日ずつスライドし、平均を上回るプラス差分（＝実績のバラつきによる欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきを反映するが、計画誤差は考慮しない。</strong></td>
             </tr>
             <tr>
-                <td class="model-cell">安全在庫③：実測値（実績 − 計画）<br><span class="subtitle">【計画誤差を考慮した推奨モデル】</span></td>
-                <td class="formula-cell"><strong>リードタイム間差分（実績−計画）※計画誤差<br> ＝ リードタイム期間の実績合計 − リードタイム期間の計画合計</strong><br>→ 欠品許容率 p（例：1%）をカバーする水準を採用<br>※ 総件数 ＝ 全期間の日数 − リードタイム LT ＋ 1</td>
-                <td class="description-cell">リードタイム期間の実績合計と計画合計を 1 日ずつスライドして比較し、実績が計画を上回った“プラス差分”<strong>（＝計画誤差による欠品リスク）</strong>を実測します。ヒストグラム（件数 × 差分）の総件数に対し、左側（1−p）の件数をカバーする位置を安全在庫水準として設定します。<strong>実績のバラつきだけでなく、計画誤差も直接反映できるため、最も実用的なモデルです。</strong></td>
+                <td class="model-cell">【安全在庫③】<br><span class="model-subtitle">計画誤差実測モデル (推奨)</span></td>
+                <td class="formula-cell"><strong>リードタイム間差分（実績－計画）<br>＝ リードタイム期間の実績合計 － リードタイム期間の計画合計</strong><br>※ LT期間の計画誤差を実測し、安全在庫を決定</td>
+                <td class="description-cell">LT期間の実績と計画を 1 日ずつスライドし、実績が計画を上回るプラス差分（＝計画誤差による欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきに加え、計画誤差も反映できる、最も実用的なモデル。</strong></td>
             </tr>
         </tbody>
     </table>
@@ -163,12 +172,11 @@ def display_safety_stock_definitions():
     st.markdown("""
     <div class="safety-stock-section">
         <p style="margin-bottom: 0.5rem !important; margin-top: 0 !important;"><strong>【パラメータの説明】</strong></p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>欠品許容率 p</strong>：欠品を 1％（デフォルト値）まで許容する場合、需要変動の 99％ をカバーできるように安全在庫を設定します。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>安全係数 Z</strong>：欠品許容率 p に対応する標準正規分布の値。p＝1％の場合、Z＝2.326（片側 1％）で、片側基準を用います。※ 全モデルで片側（右側）基準を採用します。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>リードタイム LT</strong>：稼働日数またはカレンダー日数を任意に指定できます。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>標準偏差 σ</strong>：日次実績データにもとづき、√［Σ（値 − 平均値）² ÷ データ数］で算出し、安全在庫①（理論値）のみに適用します。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.4rem !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>計画データ</strong>：月次計画を稼働日マスタに基づき日割りして作成しています。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; line-height: 1.5 !important;">- <strong>実績データ</strong>：稼働日ベースに統一し、非稼働日に発生した実績は「翌稼働日」に合算して集計しています。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>欠品許容率 p</strong>：欠品を 1%（デフォルト値）まで許容する場合、需要変動の 99% をカバーする安全在庫水準を決定します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>リードタイム LT</strong>：生産（または発注）から在庫計上までの所要期間。稼働日数またはカレンダー日数を任意に指定できます。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>安全係数 Z</strong>：欠品許容率 p に対応する標準正規分布の片側基準値。p = 1% の場合、Z = 2.326（片側 1%）を使用します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>標準偏差 σ</strong>：日次実績データに基づき、√［Σ（値 − 平均値）² ÷ データ数］で算出します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; line-height: 1.5 !important;">※ 安全係数 Z と標準偏差 σ は、安全在庫①（理論モデル）のみに適用します。</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -252,7 +260,7 @@ def display_file_upload_section():
     if st.session_state.get('missing_safety_stock_error', False):
         st.markdown("""
         <div class="annotation-warning-box">
-            <span class="icon">❌</span>
+            <span class="icon">⚠</span>
             <div class="text">必須データエラー：③ 安全在庫データがアップロードされていないため、現行設定との比較ができません（安全在庫の算出は可能です）。</div>
         </div>
         """, unsafe_allow_html=True)
@@ -308,6 +316,15 @@ def display_file_upload_section():
                 del st.session_state.missing_safety_stock_error
         elif 'uploaded_safety_stock_file_obj' in st.session_state:
             del st.session_state.uploaded_safety_stock_file_obj
+
+    # データ説明（①②③のDrag and Dropエリアの直下）
+    st.markdown("""
+    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 14px; line-height: 1.6; color: #555555;">
+        <p style="margin: 0 0 0.3rem 0; padding: 0;">※ 月次計画データ：月次計画を稼働日マスタで日割りし、日次計画を作成</p>
+        <p style="margin: 0 0 0.3rem 0; padding: 0;">※ 日次実績データ：非稼働日の実績は翌稼働日に合算して集計</p>
+        <p style="margin: 0; padding: 0;">※ 安全在庫データ：未登録でも安全在庫算出は可能（現行との比較は不可）</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     # 任意データの案内
     st.markdown('<div class="step1-sub-section with-bullet">任意データ</div>', unsafe_allow_html=True)
