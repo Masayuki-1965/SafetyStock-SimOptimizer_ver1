@@ -287,7 +287,7 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                         mismatch_detail_df
                         .groupby("区分")
                         .agg(
-                            対象商品コード件数=("商品コード", "nunique"),
+                            商品コード件数=("商品コード", "nunique"),
                             例=("商品コード", "first"),
                             説明=("説明", "first"),
                         )
@@ -295,12 +295,12 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                     )
                     st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
                 else:
-                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
+                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
             except Exception as e:
                 # アンマッチチェックでエラーが発生した場合は警告のみ表示し、処理は続行
                 st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
                 st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
-                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
+                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
         else:
             # 安全在庫データがない場合もアンマッチチェックを実行（安全在庫なしのパターンは検出できないが、計画・実績のアンマッチは検出可能）
             if data_loader.plan_df is not None and data_loader.actual_df is not None:
@@ -314,7 +314,7 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                             mismatch_detail_df
                             .groupby("区分")
                             .agg(
-                                対象商品コード件数=("商品コード", "nunique"),
+                                商品コード件数=("商品コード", "nunique"),
                                 例=("商品コード", "first"),
                                 説明=("説明", "first"),
                             )
@@ -322,15 +322,15 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                         )
                         st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
                     else:
-                        st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
+                        st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
                 except Exception as e:
                     st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
                     st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
-                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
+                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
             else:
                 # 計画または実績データがない場合はアンマッチチェックをスキップ
                 st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
-                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '対象商品コード件数', '例', '説明'])
+                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
         
         st.success("✅ 全てのデータを適用しました。画面が更新されます。")
         st.rerun()
@@ -379,8 +379,8 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
     以下の4つのパターンを検出する：
     A: 計画のみ（計画はあるのに実績がない）
     B: 実績のみ（実績はあるのに計画がない）
-    C: 安全在庫なし（計画・実績あり）（計画・実績はあるが安全在庫が未設定）
-    D: 安全在庫あり（計画・実績なし）（安全在庫は設定されているが計画・実績がない）
+    C: 安全在庫なし（計画・実績はあるが安全在庫が未設定）
+    D: 安全在庫あり（安全在庫は設定されているが計画・実績がない）
     
     Args:
         data_loader: DataLoaderインスタンス（データが読み込まれていること）
@@ -433,23 +433,23 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
             '説明': '実績はあるのに計画がありません。計画漏れの可能性があります。確認してください。'
         })
     
-    # C: 安全在庫なし（計画・実績あり）（計画と実績の両方があるが安全在庫が未設定）
+    # C: 安全在庫なし（計画と実績の両方があるが安全在庫が未設定）
     plan_and_actual = plan_codes & actual_codes
     plan_actual_no_safety = plan_and_actual - safety_codes
     for code in plan_actual_no_safety:
         mismatch_list.append({
-            '区分': '安全在庫なし（計画・実績あり）',
+            '区分': '安全在庫なし',
             '商品コード': code,
             '説明': '計画・実績はありますが安全在庫が未設定です。新規設定の候補です。'
         })
     
-    # D: 安全在庫あり（計画・実績なし）（安全在庫は設定されているが計画・実績がない）
+    # D: 安全在庫あり（安全在庫は設定されているが計画・実績がない）
     # 計画にも実績にも存在しない商品を抽出
     plan_or_actual = plan_codes | actual_codes  # 計画または実績のいずれかに存在（和集合）
     safety_only = safety_codes - plan_or_actual
     for code in safety_only:
         mismatch_list.append({
-            '区分': '安全在庫あり（計画・実績なし）',
+            '区分': '安全在庫あり',
             '商品コード': code,
             '説明': '安全在庫はありますが計画・実績がありません。設定を解除してください。'
         })
@@ -461,8 +461,8 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
         sort_order = {
             '計画のみ': 1,
             '実績のみ': 2,
-            '安全在庫なし（計画・実績あり）': 3,
-            '安全在庫あり（計画・実績なし）': 4
+            '安全在庫なし': 3,
+            '安全在庫あり': 4
         }
         mismatch_df['sort_key'] = mismatch_df['区分'].map(sort_order)
         mismatch_df = mismatch_df.sort_values('sort_key').drop('sort_key', axis=1).reset_index(drop=True)

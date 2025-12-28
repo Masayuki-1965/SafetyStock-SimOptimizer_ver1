@@ -1399,10 +1399,10 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">計画誤差率を算出し、その判定結果に基づいて 安全在庫算出モデルを決定します。<br>
+        <div class="step-description">計画誤差率を算出し、判定結果に基づき安全在庫の算出モデルを決定します。<br>
         計画誤差率が<strong> 許容範囲内 </strong>の場合は、計画誤差を考慮した<strong> 安全在庫③（推奨モデル）</strong>を採用します。<br>
-        計画誤差率が<strong> 許容範囲超過 </strong>の場合は、安全在庫②をベースに、安全在庫②・③から算出した ABC区分別<strong> 補正比率 r </strong>で補正した<strong> 安全在庫②' </strong>を採用します。<br>
-        ※ 補正比率 r の詳細は「補正比率 r とは」を参照してください。
+        計画誤差率が<strong> 許容範囲を超過 </strong>する場合は、実績のバラつきを反映した安全在庫②をベースに<strong> 補正比率 r </strong>を適用して計画誤差を加味した<strong> 安全在庫②' </strong>を採用します。<br>
+        ※ 補正比率 r の詳細は<strong>「補正比率 r とは」</strong>を参照してください。
 </div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)

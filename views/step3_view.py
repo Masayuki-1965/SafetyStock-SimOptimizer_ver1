@@ -774,8 +774,8 @@ def display_step3():
             </div>
             """, unsafe_allow_html=True)
             
-            # 実績異常値処理・計画異常値処理・上限カット 処理結果サマリー
-            st.markdown('<div class="step-sub-section">実績異常値処理／計画異常値処理／上限カット 処理結果サマリー</div>', unsafe_allow_html=True)
+            # 異常値処理の実行結果（実績異常値／計画異常値／上限カット）
+            st.markdown('<div class="step-sub-section">異常値処理の実行結果（実績異常値／計画異常値／上限カット）</div>', unsafe_allow_html=True)
             
             # ABC区分別のサマリーを作成
             summary_rows = []

@@ -1072,7 +1072,7 @@ def display_data_consistency_check_results():
     .mismatch-list-table th {
         background-color: #f0f2f6;
         color: #262730;
-        font-weight: 600;
+        font-weight: normal;
         text-align: left;
         padding: 10px 12px;
         border: 1px solid #e0e0e0;
@@ -1090,13 +1090,13 @@ def display_data_consistency_check_results():
     /* 区分列（1列目）- 18% */
     .mismatch-list-table th:nth-child(1),
     .mismatch-list-table td:nth-child(1) {
-        width: 18%;
+        width: 15%;
         text-align: left;
     }
-    /* 対象商品コード件数列（2列目）- 15%（最小限の幅） */
+    /* 商品コード件数列（2列目）- 15%（最小限の幅） */
     .mismatch-list-table th:nth-child(2),
     .mismatch-list-table td:nth-child(2) {
-        width: 15%;
+        width: 12%;
         text-align: left;
         white-space: nowrap;
         padding: 10px 6px;
@@ -1110,7 +1110,7 @@ def display_data_consistency_check_results():
     /* 説明列（4列目）- 52%（広く） */
     .mismatch-list-table th:nth-child(4),
     .mismatch-list-table td:nth-child(4) {
-        width: 52%;
+        width: 58%;
         text-align: left;
     }
     </style>
@@ -1147,7 +1147,7 @@ def display_data_consistency_check_results():
         .mismatch-guide-table th {
             background-color: #f0f2f6;
             color: #262730;
-            font-weight: 600;
+            font-weight: normal;
             text-align: left;
             padding: 10px 12px;
             border: 1px solid #e0e0e0;
@@ -1165,11 +1165,11 @@ def display_data_consistency_check_results():
         }
         .mismatch-guide-table th:nth-child(1),
         .mismatch-guide-table td:nth-child(1) {
-            width: 20%;
+            width: 12%;
         }
         .mismatch-guide-table th:nth-child(2),
         .mismatch-guide-table td:nth-child(2) {
-            width: 80%;
+            width: 88%;
         }
         .mismatch-guide-note {
             margin-top: 1rem;
@@ -1198,19 +1198,17 @@ def display_data_consistency_check_results():
                     <td>実績は存在するものの、計画データが登録されていません。計画データを確認し、必要な場合は計画を追加した上で再度アップロードしてください。</td>
                 </tr>
                 <tr>
-                    <td>安全在庫なし（計画・実績あり）</td>
+                    <td>安全在庫なし</td>
                     <td>計画・実績の両方が存在しているにもかかわらず、安全在庫が未設定の状態です。安全在庫の新規設定候補となります。</td>
                 </tr>
                 <tr>
-                    <td>安全在庫あり（計画・実績なし）</td>
+                    <td>安全在庫あり</td>
                     <td>安全在庫は設定されていますが、計画データ・実績データともに存在しません。安全在庫設定を解除してください。</td>
                 </tr>
             </tbody>
         </table>
         <div class="mismatch-guide-note">
-            <p>※ 「あり・なし」は、対象商品コードのレコードが存在するかどうかを指します。数値がゼロかどうかではありませんので注意してください。</p>
-            <p>※ 「計画・実績あり」は、計画データと実績データの両方にレコードが存在する状態です。</p>
-            <p>※ 「計画・実績なし」は、計画データと実績データの両方にレコードが存在しない状態です。</p>
+            <p>※ レコード存在の有無を示す判定（ゼロ判定ではない）</p>
         </div>
         """, unsafe_allow_html=True)
 
