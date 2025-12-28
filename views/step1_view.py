@@ -172,10 +172,10 @@ def display_safety_stock_definitions():
     st.markdown("""
     <div class="safety-stock-section">
         <p style="margin-bottom: 0.5rem !important; margin-top: 0 !important;"><strong>【パラメータの説明】</strong></p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>欠品許容率 p</strong>：欠品を 1%（デフォルト値）まで許容する場合、需要変動の 99% をカバーする安全在庫水準を決定します。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>リードタイム LT</strong>：生産（または発注）から在庫計上までの所要期間。稼働日数またはカレンダー日数を任意に指定できます。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>安全係数 Z</strong>：欠品許容率 p に対応する標準正規分布の片側基準値。p = 1% の場合、Z = 2.326（片側 1%）を使用します。</p>
-        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>標準偏差 σ</strong>：日次実績データに基づき、√［Σ（値 − 平均値）² ÷ データ数］で算出します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>・欠品許容率 p</strong>：欠品を 1%（デフォルト値）まで許容する場合、需要変動の 99% をカバーする安全在庫水準を決定します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>・リードタイム LT</strong>：生産（または発注）から在庫計上までの所要期間。稼働日数またはカレンダー日数を任意に指定できます。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>・安全係数 Z</strong>：欠品許容率 p に対応する標準正規分布の片側基準値。p = 1% の場合、Z = 2.326（片側 1%）を使用します。</p>
+        <p style="margin-top: 0 !important; margin-bottom: 0.15rem !important; padding: 0 !important; line-height: 1.5 !important;"><strong>・標準偏差 σ</strong>：日次実績データに基づき、√［Σ（値 − 平均値）² ÷ データ数］で算出します。</p>
         <p style="margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; line-height: 1.5 !important;">※ 安全係数 Z と標準偏差 σ は、安全在庫①（理論モデル）のみに適用します。</p>
     </div>
     """, unsafe_allow_html=True)
