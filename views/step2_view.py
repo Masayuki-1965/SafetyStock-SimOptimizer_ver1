@@ -219,34 +219,49 @@ def display_step2():
         <p>手順①：対象商品コードを選択する</p>
     </div>
     """, unsafe_allow_html=True)
+    # 計画誤差率の閾値を取得（動的に使用するため、先に取得）
+    plan_plus_threshold = st.session_state.get("step2_plan_plus_threshold", 10.0)
+    plan_minus_threshold = st.session_state.get("step2_plan_minus_threshold", -10.0)
+    
     st.markdown("""
-    <div class="step-description">分析対象の商品コードを<strong>「任意の商品コード」</strong>から選択してください。<br>
-    または、<strong>「計画誤差率（％）の設定（任意）」</strong>で閾値を設定し、<strong>「計画誤差率（プラス）大」</strong>または<strong>「計画誤差率（マイナス）大」</strong>を選択してください。<br>
-    ※ 計画誤差率 ＝（計画合計 − 実績合計）÷ 実績合計</div>
+    <div class="step-description">分析対象の商品コードを、画面の選択肢から選んでください。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
     # 商品コード選択モード
     st.markdown('<div class="step-sub-section">商品コードの選択</div>', unsafe_allow_html=True)
+    # ラジオボタンの選択肢を動的に生成（閾値に連動）
+    radio_options = [
+        "任意の商品コード",
+        f"計画誤差率 +{plan_plus_threshold:.0f}% 以上",
+        f"計画誤差率 {plan_minus_threshold:.0f}% 以下"
+    ]
     selection_mode = st.radio(
         "選択モード",
-        options=["任意の商品コード", "計画誤差率（プラス）大", "計画誤差率（マイナス）大"],
+        options=radio_options,
         help="任意の商品コードから選択するか、計画誤差率が大きい商品コードから選択できます。",
         horizontal=True,
         key="step2_selection_mode"
     )
+    # 計画誤差率の計算式をラジオボタンの直下に表示
+    st.markdown("""
+    <div style="margin-top: 0.5rem; margin-bottom: 1rem;">※ 計画誤差率 =（計画合計 − 実績合計）÷ 実績合計</div>
+    """, unsafe_allow_html=True)
     
     # 計画誤差率の閾値設定（詳細設定として折り畳み）
-    with st.expander("計画誤差率（％）の設定（任意）", expanded=False):
-        st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±10%）のままで問題ない場合は、この設定を変更する必要はありません。より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
-        st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
+    with st.expander("計画誤差率（％）の閾値設定（任意）", expanded=False):
+        # プラスとマイナスの閾値が同じ場合は±で表示、異なる場合は両方を表示
+        if abs(plan_plus_threshold) == abs(plan_minus_threshold):
+            st.markdown(f"計画誤差率の閾値（±）は商品コードの絞り込みに使います。現在の設定値は±{abs(plan_plus_threshold):.0f}%です。", unsafe_allow_html=True)
+        else:
+            st.markdown(f"計画誤差率の閾値（±）は商品コードの絞り込みに使います。現在の設定値は+{plan_plus_threshold:.0f}% / {plan_minus_threshold:.0f}%です。", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             plan_plus_threshold = st.number_input(
                 "計画誤差率（プラス）の閾値（%）",
                 min_value=0.0,
                 max_value=500.0,
-                value=st.session_state.get("step2_plan_plus_threshold", 10.0),
+                value=plan_plus_threshold,
                 step=5.0,
                 help="計画誤差率がこの値以上の場合、計画誤差率（プラス）大として扱います。",
                 key="step2_plan_plus_threshold"
@@ -256,7 +271,7 @@ def display_step2():
                 "計画誤差率（マイナス）の閾値（%）",
                 min_value=-500.0,
                 max_value=0.0,
-                value=st.session_state.get("step2_plan_minus_threshold", -10.0),
+                value=plan_minus_threshold,
                 step=5.0,
                 help="計画誤差率がこの値以下の場合、計画誤差率（マイナス）大として扱います。",
                 key="step2_plan_minus_threshold"
@@ -264,35 +279,27 @@ def display_step2():
     
     # 計画誤差率を計算して商品リストをフィルタリング
     filtered_products = []
-    if selection_mode == "任意の商品コード":
+    # 選択モードの判定（新しいラベル形式に対応）
+    is_arbitrary = selection_mode == "任意の商品コード"
+    is_plus = selection_mode.startswith("+") and selection_mode.endswith("%以上")
+    is_minus = selection_mode.endswith("%以下")
+    
+    if is_arbitrary:
         filtered_products = all_products_with_category.copy()
-        st.markdown("""
-        <div class="annotation-info-box">💡 <strong>任意の商品コードから選択できます。</strong>まずはここから選んで問題ありません。</div>
-        """, unsafe_allow_html=True)
     else:
         # フィルタリング（計画誤差率は既に計算済み）
-        if selection_mode == "計画誤差率（プラス）大":
+        if is_plus:
             filtered_products = all_products_with_category[
                 all_products_with_category['plan_error_rate'].apply(
                     lambda x: x is not None and not (isinstance(x, float) and pd.isna(x)) and x >= plan_plus_threshold
                 )
             ].copy()
-            st.markdown(f"""
-            <div class="annotation-info-box">
-                <strong>計画誤差率が大きい（+{plan_plus_threshold:.1f}%以上）商品コードを選択できます。</strong><br><strong>計画誤差率（プラス）</strong> ＝（計画合計 − 実績合計）÷ 実績合計 × 100%（<strong>※計画合計 ＞ 実績合計</strong>：計画がどれだけ実績を上回ったか）
-            </div>
-            """, unsafe_allow_html=True)
-        elif selection_mode == "計画誤差率（マイナス）大":
+        elif is_minus:
             filtered_products = all_products_with_category[
                 all_products_with_category['plan_error_rate'].apply(
                     lambda x: x is not None and not (isinstance(x, float) and pd.isna(x)) and x <= plan_minus_threshold
                 )
             ].copy()
-            st.markdown(f"""
-            <div class="annotation-info-box">
-                <strong>計画誤差率が大きい（{plan_minus_threshold:.1f}%以下）商品コードを選択できます。</strong><br><strong>計画誤差率（マイナス）</strong> ＝（計画合計 − 実績合計）÷ 実績合計 × 100%（<strong>※計画合計 ＜ 実績合計</strong>：計画がどれだけ実績を下回ったか）
-            </div>
-            """, unsafe_allow_html=True)
         
         if filtered_products.empty:
             st.warning(f"⚠️ {selection_mode}に該当する商品コードがありません。")
@@ -301,19 +308,19 @@ def display_step2():
     # 商品コード選択プルダウン
     if not filtered_products.empty:
         # 選択モード別の並び順を適用
-        if selection_mode == "任意の商品コード":
+        if is_arbitrary:
             # 実績合計の多い順（降順：大 → 小）
             filtered_products = filtered_products.sort_values(
                 by=['total_actual', 'product_code'],
                 ascending=[False, True]
             ).reset_index(drop=True)
-        elif selection_mode == "計画誤差率（プラス）大":
+        elif is_plus:
             # プラス誤差率の大きい順（降順：大 → 小）
             filtered_products = filtered_products.sort_values(
                 by=['plan_error_rate', 'product_code'],
                 ascending=[False, True]
             ).reset_index(drop=True)
-        elif selection_mode == "計画誤差率（マイナス）大":
+        elif is_minus:
             # マイナス誤差率の小さい順（昇順：小 → 大、より負の値が上に来る）
             filtered_products = filtered_products.sort_values(
                 by=['plan_error_rate', 'product_code'],
@@ -323,7 +330,7 @@ def display_step2():
         filtered_labels = filtered_products['display_label'].tolist()
         
         # デフォルト値の設定
-        if selection_mode == "任意の商品コード":
+        if is_arbitrary:
             default_label = default_label
         else:
             default_label = filtered_labels[0] if filtered_labels else default_label
