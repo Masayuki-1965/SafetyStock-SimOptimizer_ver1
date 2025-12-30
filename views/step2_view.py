@@ -230,19 +230,33 @@ def display_step2():
     
     # 商品コード選択モード
     st.markdown('<div class="step-sub-section">商品コードの選択</div>', unsafe_allow_html=True)
-    # ラジオボタンの選択肢を動的に生成（閾値に連動）
+    
+    # ABC区分のソートキーを取得する関数
+    def get_abc_sort_key(abc_value):
+        """ABC区分のソートキーを取得（A→B→C→...→未分類の順）"""
+        if pd.isna(abc_value) or abc_value == '' or abc_value == '-' or str(abc_value).strip() == '未分類':
+            return (999, '')  # 未分類は最後
+        abc_str = str(abc_value).strip()
+        if len(abc_str) == 1 and abc_str.isalpha():
+            return (ord(abc_str.upper()), abc_str)
+        return (998, abc_str)  # その他の区分
+    
+    # ラジオボタンの選択肢を動的に生成
     radio_options = [
-        "任意の商品コード",
+        "任意の商品コード（ABC区分順）",
         f"計画誤差率 +{plan_plus_threshold:.0f}% 以上",
         f"計画誤差率 {plan_minus_threshold:.0f}% 以下"
     ]
+    
+    
     selection_mode = st.radio(
         "選択モード",
         options=radio_options,
         help="任意の商品コードから選択するか、計画誤差率が大きい商品コードから選択できます。",
-        horizontal=True,
+        horizontal=False,
         key="step2_selection_mode"
     )
+    
     # 計画誤差率の計算式をラジオボタンの直下に表示
     st.markdown("""
     <div style="margin-top: 0.5rem; margin-bottom: 1rem;">※ 計画誤差率 =（計画合計 − 実績合計）÷ 実績合計</div>
@@ -278,53 +292,79 @@ def display_step2():
             )
     
     # 計画誤差率を計算して商品リストをフィルタリング
-    filtered_products = []
-    # 選択モードの判定（新しいラベル形式に対応）
-    is_arbitrary = selection_mode == "任意の商品コード"
-    is_plus = selection_mode.startswith("+") and selection_mode.endswith("%以上")
-    is_minus = selection_mode.endswith("%以下")
+    # 選択モードの判定（括弧書きを削除したラベル形式に対応）
+    is_arbitrary = selection_mode == "任意の商品コード（ABC区分順）"
+    # プラス誤差率の判定：ラジオボタンの選択肢と一致するか確認
+    expected_plus_label = f"計画誤差率 +{plan_plus_threshold:.0f}% 以上"
+    is_plus = selection_mode == expected_plus_label
+    # マイナス誤差率の判定：ラジオボタンの選択肢と一致するか確認
+    expected_minus_label = f"計画誤差率 {plan_minus_threshold:.0f}% 以下"
+    is_minus = selection_mode == expected_minus_label
     
+    # フィルタリング処理
     if is_arbitrary:
         filtered_products = all_products_with_category.copy()
-    else:
-        # フィルタリング（計画誤差率は既に計算済み）
-        if is_plus:
-            filtered_products = all_products_with_category[
-                all_products_with_category['plan_error_rate'].apply(
-                    lambda x: x is not None and not (isinstance(x, float) and pd.isna(x)) and x >= plan_plus_threshold
-                )
-            ].copy()
-        elif is_minus:
-            filtered_products = all_products_with_category[
-                all_products_with_category['plan_error_rate'].apply(
-                    lambda x: x is not None and not (isinstance(x, float) and pd.isna(x)) and x <= plan_minus_threshold
-                )
-            ].copy()
-        
-        if filtered_products.empty:
+    elif is_plus:
+        # 計画誤差率が+10%以上の商品をフィルタリング
+        mask = (
+            all_products_with_category['plan_error_rate'].notna() &
+            (all_products_with_category['plan_error_rate'] >= plan_plus_threshold)
+        )
+        filtered_products = all_products_with_category[mask].copy()
+        # フィルタリング結果が空の場合は警告を表示
+        if hasattr(filtered_products, 'empty') and filtered_products.empty:
             st.warning(f"⚠️ {selection_mode}に該当する商品コードがありません。")
-            filtered_products = all_products_with_category.copy()
+    elif is_minus:
+        # 計画誤差率が-10%以下の商品をフィルタリング
+        # plan_minus_thresholdは負の値（例：-10.0）なので、<= で正しくフィルタリングできる
+        mask = (
+            all_products_with_category['plan_error_rate'].notna() &
+            (all_products_with_category['plan_error_rate'] <= plan_minus_threshold)
+        )
+        filtered_products = all_products_with_category[mask].copy()
+        # フィルタリング結果が空の場合は警告を表示
+        if hasattr(filtered_products, 'empty') and filtered_products.empty:
+            st.warning(f"⚠️ {selection_mode}に該当する商品コードがありません。")
+    else:
+        # どちらにも該当しない場合は全商品を表示
+        filtered_products = all_products_with_category.copy()
     
     # 商品コード選択プルダウン
-    if not filtered_products.empty:
+    # DataFrameかリストかを判定して適切にチェック
+    is_empty = False
+    if hasattr(filtered_products, 'empty'):
+        is_empty = filtered_products.empty
+    elif isinstance(filtered_products, list):
+        is_empty = len(filtered_products) == 0
+    
+    if not is_empty:
         # 選択モード別の並び順を適用
         if is_arbitrary:
-            # 実績合計の多い順（降順：大 → 小）
+            # ABC区分順 / 実績合計 降順
+            filtered_products['_abc_sort_key'] = filtered_products['abc_category'].apply(get_abc_sort_key)
+            # 計画誤差率がNoneの場合は最後に配置するためのフラグを追加
+            filtered_products['_has_error_rate'] = filtered_products['plan_error_rate'].apply(
+                lambda x: x is not None and not (isinstance(x, float) and pd.isna(x))
+            )
             filtered_products = filtered_products.sort_values(
-                by=['total_actual', 'product_code'],
-                ascending=[False, True]
+                by=['_has_error_rate', '_abc_sort_key', 'total_actual', 'product_code'],
+                ascending=[False, True, False, True]  # 誤差率ありを先に、ABC区分順、実績合計降順
             ).reset_index(drop=True)
+            filtered_products = filtered_products.drop(columns=['_abc_sort_key', '_has_error_rate'])
         elif is_plus:
-            # プラス誤差率の大きい順（降順：大 → 小）
+            # プラス誤差率の小さい順（昇順：小 → 大、+10 → +20 → +35… の順）
+            # フィルタリング後は計画誤差率がNoneの商品は含まれないため、直接ソート
             filtered_products = filtered_products.sort_values(
                 by=['plan_error_rate', 'product_code'],
-                ascending=[False, True]
+                ascending=[True, True]  # 誤差率小→大（+10 → +20 → +35…）
             ).reset_index(drop=True)
         elif is_minus:
-            # マイナス誤差率の小さい順（昇順：小 → 大、より負の値が上に来る）
+            # マイナス誤差率の並び順：-10%を基点に、よりマイナス側へ（-10 → -12 → -20 → -35…）
+            # 「誤差率 小→大」の意味：-10に近い（誤差が小さい）→ -10から離れる（誤差が大きい）
+            # 数値の降順でソート：-10 > -12 > -20 > -35 なので、降順で -10 → -12 → -20 → -35 の順になる
             filtered_products = filtered_products.sort_values(
                 by=['plan_error_rate', 'product_code'],
-                ascending=[True, True]
+                ascending=[False, True]  # 計画誤差率は降順（-10 → -12 → -20 → -35…）、商品コードは昇順
             ).reset_index(drop=True)
         
         filtered_labels = filtered_products['display_label'].tolist()
@@ -413,7 +453,7 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、<strong>実績のバラつき（平均−実績）</strong>と <strong>計画誤差（計画−実績）</strong> を可視化します。<br>
+    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、<strong>実績のバラつき（平均−実績）</strong>と <strong>計画誤差（計画−実績）</strong>を可視化します。<br>
     時系列グラフと統計情報により、需要変動の大きさや計画精度を把握し、<strong>次の手順④で安全在庫を算出するための前提となるデータ特性</strong> を確認します。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -805,8 +845,8 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">リードタイム間差分に基づく <strong>2つの実測モデル（安全在庫②・③）</strong>を中心に、比較指標として <strong>理論モデル（安全在庫①）</strong>も算出し、3種類の安全在庫を比較・評価します。<br>
-        ヒストグラムで「実績のばらつき」や「計画誤差」の分布の形状を確認し、各モデルの安全在庫ラインがどのように導かれるかを理解できます。</div>
+        <div class="step-description">2つの<strong> 実測モデル（安全在庫②・③）</strong>と<strong> 理論モデル（安全在庫①）</strong>も算出し、比較・評価します。<br>
+        ヒストグラムで「実績のばらつき」や「計画誤差」の分布の形状を確認し、欠品許容率 p に応じた安全在庫水準の決定の流れを直感的に理解できます。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
