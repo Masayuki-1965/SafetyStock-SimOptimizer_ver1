@@ -385,7 +385,7 @@ def display_step2():
             help="分析対象の商品コードを選択してください。"
         )
         
-        st.caption("※ 商品コードの選択リストは「ABC区分｜計画誤差率｜商品コード」の形式で表示されます。")
+        st.caption("※ 商品コードは「ABC区分｜計画誤差率｜商品コード」の形式で表示されます。")
         
         selected_product = label_to_product_code.get(selected_label, default_product)
     else:
@@ -1548,10 +1548,10 @@ def display_step2():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">計画誤差率を算出し、判定結果に基づき安全在庫の算出モデルを決定します。<br>
-        計画誤差率が<strong> 許容範囲内 </strong>の場合は、計画誤差を考慮した<strong> 安全在庫③（推奨モデル）</strong>を採用します。<br>
-        計画誤差率が<strong> 許容範囲を超過 </strong>する場合は、実績のバラつきを反映した安全在庫②をベースに<strong> 補正比率 r </strong>を適用して計画誤差を加味した<strong> 安全在庫②' </strong>を採用します。<br>
-        ※ 補正比率 r の詳細は<strong>「補正比率 r とは」</strong>を参照してください。
+        <div class="step-description">計画誤差率を算出し、判定結果に基づき採用モデルを決定します。<br>
+        計画誤差率が<strong> 許容範囲内 </strong>の場合は、<strong>安全在庫③（推奨モデル）</strong>を採用します。<br>
+        計画誤差率が<strong> 許容範囲を超過 </strong>する場合は、安全在庫②をベースに補正比率 r で計画誤差を加味した<strong> 安全在庫②' </strong>を採用します。<br>
+        ※ 補正比率 r の詳細は「補正比率 r とは」を参照してください。
 </div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1719,7 +1719,7 @@ def display_step2():
                 st.markdown(f"""
                 <div class="annotation-warning-box">
                     <span class="icon">⚠</span>
-                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率が {plan_error_rate:.1f}% で閾値を外れているため、安全在庫②をベースに計画誤差を加味したモデル（安全在庫②'）を採用します。</div>
+                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率 {plan_error_rate:.1f}% が閾値を外れたため、安全在庫②をベースに計画誤差を加味したモデル<strong> 安全在庫②' </strong>を採用します。</div>
                 </div>
                 """, unsafe_allow_html=True)
             elif adopted_model == "ss3":
@@ -1733,11 +1733,11 @@ def display_step2():
                 elif is_anomaly and (ratio_r is None or ratio_r <= 0):
                     # 添付1のメッセージ：計画誤差率が閾値を外れているが、比率rが算出できないため安全在庫③を採用
                     st.markdown(f"""
-                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率が {plan_error_rate:.1f}% で閾値（{plan_plus_threshold_final:.1f}% / {plan_minus_threshold_final:.1f}%）を外れていますが、{abc_category}区分の比率rが算出できないため、計画誤差を考慮した推奨モデルである安全在庫③を採用します。</div>
+                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率 {plan_error_rate:.1f}% が閾値（{plan_plus_threshold_final:.1f}% / {plan_minus_threshold_final:.1f}%）を外れていますが、{abc_category}区分の比率rが算出できないため、計画誤差を考慮した推奨モデルである安全在庫③を採用します。</div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率は {plan_error_rate:.1f}% で許容範囲内です。計画誤差を考慮した推奨モデルである安全在庫③を採用します。</div>
+                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率 {plan_error_rate:.1f}% は許容範囲内のため、推奨モデルの<strong> 安全在庫③ </strong>を採用します。</div>
                     """, unsafe_allow_html=True)
             
             # セッション状態に保存
