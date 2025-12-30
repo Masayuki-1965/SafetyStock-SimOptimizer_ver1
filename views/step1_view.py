@@ -156,13 +156,13 @@ def display_safety_stock_definitions():
             </tr>
             <tr>
                 <td class="model-cell">【安全在庫②】<br><span class="model-subtitle">実績バラつき実測モデル</span></td>
-                <td class="formula-cell"><strong>リードタイム間差分（実績－平均）<br>＝ リードタイム期間の実績合計 － リードタイム期間実績合計の平均</strong><br>※ LT期間の実績のバラつきを実測し、安全在庫を決定</td>
-                <td class="description-cell">LT期間の実績合計を 1 日ずつスライドし、平均を上回るプラス差分（＝実績のバラつきによる欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきを反映するが、計画誤差は考慮しない。</strong></td>
+                <td class="formula-cell"><strong>リードタイム間差分（平均－実績）<br>＝ リードタイム期間実績合計の平均 － リードタイム期間の実績合計</strong><br>※ LT期間の実績のバラつきを実測し、安全在庫を決定</td>
+                <td class="description-cell">LT期間の実績合計を 1 日ずつスライドし、平均を下回るマイナス差分（＝実績のバラつきによる欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきを反映するが、計画誤差は考慮しない。</strong></td>
             </tr>
             <tr>
                 <td class="model-cell">【安全在庫③】<br><span class="model-subtitle">計画誤差実測モデル (推奨)</span></td>
-                <td class="formula-cell"><strong>リードタイム間差分（実績－計画）<br>＝ リードタイム期間の実績合計 － リードタイム期間の計画合計</strong><br>※ LT期間の計画誤差を実測し、安全在庫を決定</td>
-                <td class="description-cell">LT期間の実績と計画を 1 日ずつスライドし、実績が計画を上回るプラス差分（＝計画誤差による欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきに加え、計画誤差も反映できる、最も実用的なモデル。</strong></td>
+                <td class="formula-cell"><strong>リードタイム間差分（計画－実績）<br>＝ リードタイム期間の計画合計 － リードタイム期間の実績合計</strong><br>※ LT期間の計画誤差を実測し、安全在庫を決定</td>
+                <td class="description-cell">LT期間の実績と計画を 1 日ずつスライドし、計画が実績を下回るマイナス差分（＝計画誤差による欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきに加え、計画誤差も反映できる、最も実用的なモデル。</strong></td>
             </tr>
         </tbody>
     </table>

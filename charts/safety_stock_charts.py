@@ -188,7 +188,7 @@ def create_lead_time_total_time_series_chart(product_code: str, calculator: Safe
     return fig
 
 
-def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict], calculator: SafetyStockCalculator, show_safety_stock_lines: bool = True) -> go.Figure:
+def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict], calculator: SafetyStockCalculator, show_safety_stock_lines: bool = True) -> Tuple[go.Figure, pd.Series, pd.Series]:
     """
     LT間差分の時系列棒グラフを生成（上下分割表示）
     
@@ -213,16 +213,16 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
     plan_data = calculator.plan_data
     actual_data = calculator.actual_data
     
-    # モデル②：実績−平均の差分を計算（日付付き）
+    # モデル②：平均−実績の差分を計算（日付付き）
     actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
-    delta2 = actual_sums - actual_sums.mean()
+    delta2 = actual_sums.mean() - actual_sums
     dates_model2 = delta2.index
     
-    # モデル③：実績−計画の差分を計算（日付付き）
+    # モデル③：計画−実績の差分を計算（日付付き）
     actual_sums_model3 = actual_data.rolling(window=lead_time_days).sum().dropna()
     plan_sums_model3 = plan_data.rolling(window=lead_time_days).sum().dropna()
     common_idx = actual_sums_model3.index.intersection(plan_sums_model3.index)
-    delta3 = actual_sums_model3.loc[common_idx] - plan_sums_model3.loc[common_idx]
+    delta3 = plan_sums_model3.loc[common_idx] - actual_sums_model3.loc[common_idx]
     dates_model3 = delta3.index
     
     # 横軸・縦軸のレンジを統一するために両方のデータの範囲を計算
@@ -242,10 +242,10 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
         rows=2, cols=1,
         shared_xaxes=True,
         subplot_titles=[
-            "リードタイム間差分（実績 − 平均）※実績バラつき",
-            "リードタイム間差分（実績 − 計画）※計画誤差"
+            "リードタイム間差分（平均 − 実績）※実績バラつき",
+            "リードタイム間差分（計画 − 実績）※計画誤差"
         ],
-        vertical_spacing=0.02
+        vertical_spacing=0.1
     )
     
     # 上段：LT間差分（実績−平均）の棒グラフ - 薄めの黒系
@@ -307,38 +307,38 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
         stockout_tolerance_pct = results['common_params']['stockout_tolerance_pct']
         is_p_zero = stockout_tolerance_pct <= 0
         
-        # 上段：安全在庫①（赤色破線）と安全在庫②（濃い黒系破線）を追加
+        # 上段：安全在庫①（赤色破線）と安全在庫②（濃い黒系破線）を追加（マイナス側に描画）
         # p=0%の時は①を非表示
         if safety_stock_1 is not None and not is_model1_undefined and not is_p_zero:
             fig.add_hline(
-                y=safety_stock_1,
+                y=-safety_stock_1,  # マイナス側に描画
                 line_dash="dash",
                 line_color="red",  # 赤色
                 line_width=2,
                 annotation_text="安全在庫①",
-                annotation_position="top right",
+                annotation_position="bottom right",
                 row=1, col=1
             )
         if safety_stock_2 is not None:
             fig.add_hline(
-                y=safety_stock_2,
+                y=-safety_stock_2,  # マイナス側に描画
                 line_dash="dash",
                 line_color="#333333",  # 濃い黒系
                 line_width=2,
                 annotation_text="安全在庫②",
-                annotation_position="top right",
+                annotation_position="bottom right",
                 row=1, col=1
             )
         
-        # 下段：安全在庫③（濃い緑系破線）を追加
+        # 下段：安全在庫③（濃い緑系破線）を追加（マイナス側に描画）
         if safety_stock_3 is not None:
             fig.add_hline(
-                y=safety_stock_3,
+                y=-safety_stock_3,  # マイナス側に描画
                 line_dash="dash",
                 line_color="#228B22",  # 濃い緑系
                 line_width=2,
                 annotation_text="安全在庫③",
-                annotation_position="top right",
+                annotation_position="bottom right",
                 row=2, col=1
             )
         
@@ -400,12 +400,12 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
         title=f"{product_code} - リードタイム間差分の時系列推移",
         height=900,
         hovermode='x unified',
-        margin=dict(l=60, r=60, t=120, b=40),
+        margin=dict(l=60, r=60, t=150, b=40),  # タイトルと凡例の間の余白を確保
         showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.06,
+            y=1.08,  # 凡例の位置を少し下げてタイトルとの間隔を確保
             xanchor="center",
             x=0.5,
             bgcolor="rgba(255,255,255,0)",
@@ -466,7 +466,9 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
     # 細かい見た目調整
     fig.update_layout(bargap=0.05)
     
-    return fig
+    # delta2とdelta3をSeriesとして返す（統計情報テーブルで使用）
+    # delta2は既にSeries、delta3もSeriesとして返す
+    return fig, delta2, delta3
 
 
 def create_histogram_with_unified_range(product_code: str, results: dict, calculator: SafetyStockCalculator) -> go.Figure:
@@ -514,8 +516,8 @@ def create_histogram_with_unified_range(product_code: str, results: dict, calcul
     fig = make_subplots(
         rows=1, cols=2,
         subplot_titles=[
-            "リードタイム間差分（実績 − 平均）※実績バラつき",
-            "リードタイム間差分（実績 − 計画）※計画誤差"
+            "リードタイム間差分（平均 − 実績）※実績バラつき",
+            "リードタイム間差分（計画 − 実績）※計画誤差"
         ],
         specs=[[{"secondary_y": False}, {"secondary_y": False}]],
         vertical_spacing=0.15
@@ -538,22 +540,22 @@ def create_histogram_with_unified_range(product_code: str, results: dict, calcul
     is_p_zero = hist_data.get('is_p_zero', False)
     if hist_data['model1_theoretical_line'] is not None and not is_p_zero:
         fig.add_vline(
-            x=hist_data['model1_theoretical_line'],
+            x=-hist_data['model1_theoretical_line'],  # マイナス側に描画
             line_dash="dash",
             line_color="red",  # 赤色
             annotation_text="",  # 安全在庫①は線だけ表示（ラベルなし）
-            annotation_position="top right",
+            annotation_position="bottom left",
             row=1, col=1,
             line_width=2
         )
     
-    # 安全在庫②（実績−平均）をモデル②に表示（濃い黒系破線）
+    # 安全在庫②（平均−実績）をモデル②に表示（濃い黒系破線、マイナス側に描画）
     fig.add_vline(
-        x=hist_data['model2_p95_line'],
+        x=-hist_data['model2_p95_line'],  # マイナス側に描画
         line_dash="dash",
         line_color="#333333",  # 濃い黒系
         annotation_text="安全在庫②",  # ラベルを表示
-        annotation_position="top right",
+        annotation_position="bottom left",
         row=1, col=1,
         line_width=2
     )
@@ -570,13 +572,13 @@ def create_histogram_with_unified_range(product_code: str, results: dict, calcul
         row=1, col=2
     )
     
-    # 安全在庫③（実績−計画）をモデル③に表示（濃い緑系破線）
+    # 安全在庫③（計画−実績）をモデル③に表示（濃い緑系破線、マイナス側に描画）
     fig.add_vline(
-        x=hist_data['model3_p95_line'],
+        x=-hist_data['model3_p95_line'],  # マイナス側に描画
         line_dash="dash",
         line_color="#228B22",  # 濃い緑系
         annotation_text="安全在庫③",  # ラベルを表示
-        annotation_position="top right",
+        annotation_position="bottom left",
         row=1, col=2,
         line_width=2
     )
@@ -1335,10 +1337,10 @@ def create_outlier_lt_delta_comparison_chart(product_code: str,
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=[
-            "Before: リードタイム間差分（実績 − 平均）※実績バラつき",
-            "Before: リードタイム間差分（実績 − 計画）※計画誤差",
-            "After: リードタイム間差分（実績 − 平均）※実績バラつき",
-            "After: リードタイム間差分（実績 − 計画）※計画誤差"
+            "Before: リードタイム間差分（計画 − 実績）※計画誤差",
+            "Before: リードタイム間差分（平均 − 実績）※実績バラつき",
+            "After: リードタイム間差分（計画 − 実績）※計画誤差",
+            "After: リードタイム間差分（平均 − 実績）※実績バラつき"
         ],
         vertical_spacing=0.08,
         horizontal_spacing=0.1,
@@ -1346,124 +1348,124 @@ def create_outlier_lt_delta_comparison_chart(product_code: str,
                [{"secondary_y": False}, {"secondary_y": False}]]
     )
     
-    # Before: 実績−平均 - 薄めの黒系（左側、上段）
+    # Before: 計画−実績 - 薄めの緑系（左側、上段）
     fig.add_trace(
         go.Histogram(
-            x=before_delta2.values,
-            name='実績−平均',
+            x=before_delta3.values,
+            name='計画誤差',
             opacity=0.8,
             xbins=dict(start=bin_edges[0], end=bin_edges[-1], size=bin_edges[1] - bin_edges[0]),
-            marker_color='rgba(128, 128, 128, 0.8)',  # 薄めの黒系
+            marker_color='rgba(100, 200, 150, 0.8)',  # 薄めの緑系（現状維持）
             showlegend=False
         ),
         row=1, col=1
     )
     
-    # Before: 安全在庫①（理論値）をモデル②に重ね表示（赤色破線）
-    # before_ss1が存在する場合は表示（is_before_ss1_undefinedとis_p_zeroの条件を緩和）
-    if before_ss1 is not None:
-        fig.add_vline(
-            x=before_ss1,
-            line_dash="dash",
-            line_color="red",  # 赤色
-            annotation_text="",  # 安全在庫①は線だけ表示（ラベルなし）
-            annotation_position="top right",
-            row=1, col=1,
-            line_width=2
-        )
-    
-    # Before: 安全在庫②（実績−平均）を表示（濃い黒系破線）
+    # Before: 安全在庫③（計画−実績）を表示（濃い緑系破線、マイナス側に描画）
     fig.add_vline(
-        x=before_ss2,
+        x=-before_ss3,  # マイナス側に描画
         line_dash="dash",
-        line_color="#333333",  # 濃い黒系
-        annotation_text="安全在庫②",  # ラベルを表示
-        annotation_position="top right",
+        line_color="#228B22",  # 濃い緑系
+        annotation_text="安全在庫③",  # ラベルを表示
+        annotation_position="bottom left",
         row=1, col=1,
         line_width=2
     )
     
-    # Before: 実績−計画 - 薄めの緑系（右側、上段）
+    # Before: 平均−実績 - 薄めの黒系（右側、上段）
     fig.add_trace(
         go.Histogram(
-            x=before_delta3.values,
-            name='実績−計画',
-            opacity=0.8,
-            xbins=dict(start=bin_edges[0], end=bin_edges[-1], size=bin_edges[1] - bin_edges[0]),
-            marker_color='rgba(100, 200, 150, 0.8)',  # 薄めの緑系（現状維持）
-            showlegend=False
-        ),
-        row=1, col=2
-    )
-    
-    # Before: 安全在庫③（実績−計画）を表示（濃い緑系破線）
-    fig.add_vline(
-        x=before_ss3,
-        line_dash="dash",
-        line_color="#228B22",  # 濃い緑系
-        annotation_text="安全在庫③",  # ラベルを表示
-        annotation_position="top right",
-        row=1, col=2,
-        line_width=2
-    )
-    
-    # After: 実績−平均 - 薄めの黒系（左側、下段）
-    fig.add_trace(
-        go.Histogram(
-            x=after_delta2.values,
-            name='実績−平均',
+            x=before_delta2.values,
+            name='実績バラつき',
             opacity=0.8,
             xbins=dict(start=bin_edges[0], end=bin_edges[-1], size=bin_edges[1] - bin_edges[0]),
             marker_color='rgba(128, 128, 128, 0.8)',  # 薄めの黒系
             showlegend=False
         ),
-        row=2, col=1
+        row=1, col=2
     )
     
-    # After: 安全在庫①（理論値）をモデル②に重ね表示（赤色破線）
-    # p=0%の時は①を非表示
-    if after_ss1 is not None and not is_after_ss1_undefined and not is_p_zero:
+    # Before: 安全在庫①（理論値）をモデル②に重ね表示（赤色破線、マイナス側に描画）
+    # before_ss1が存在する場合は表示（is_before_ss1_undefinedとis_p_zeroの条件を緩和）
+    if before_ss1 is not None:
         fig.add_vline(
-            x=after_ss1,
+            x=-before_ss1,  # マイナス側に描画
             line_dash="dash",
             line_color="red",  # 赤色
             annotation_text="",  # 安全在庫①は線だけ表示（ラベルなし）
-            annotation_position="top right",
-            row=2, col=1,
+            annotation_position="bottom left",
+            row=1, col=2,
             line_width=2
         )
     
-    # After: 安全在庫②（実績−平均）を表示（濃い黒系破線）
+    # Before: 安全在庫②（平均−実績）を表示（濃い黒系破線、マイナス側に描画）
     fig.add_vline(
-        x=after_ss2,
+        x=-before_ss2,  # マイナス側に描画
         line_dash="dash",
         line_color="#333333",  # 濃い黒系
         annotation_text="安全在庫②",  # ラベルを表示
-        annotation_position="top right",
-        row=2, col=1,
+        annotation_position="bottom left",
+        row=1, col=2,
         line_width=2
     )
     
-    # After: 実績−計画 - 薄めの緑系（右側、下段）
+    # After: 計画−実績 - 薄めの緑系（左側、下段）
     fig.add_trace(
         go.Histogram(
             x=after_delta3.values,
-            name='実績−計画',
+            name='計画誤差',
             opacity=0.8,
             xbins=dict(start=bin_edges[0], end=bin_edges[-1], size=bin_edges[1] - bin_edges[0]),
             marker_color='rgba(100, 200, 150, 0.8)',  # 薄めの緑系（現状維持）
             showlegend=False
         ),
-        row=2, col=2
+        row=2, col=1
     )
     
-    # After: 安全在庫③（実績−計画）を表示（濃い緑系破線）
+    # After: 安全在庫③（計画−実績）を表示（濃い緑系破線、マイナス側に描画）
     fig.add_vline(
-        x=after_ss3,
+        x=-after_ss3,  # マイナス側に描画
         line_dash="dash",
         line_color="#228B22",  # 濃い緑系
         annotation_text="安全在庫③",  # ラベルを表示
-        annotation_position="top right",
+        annotation_position="bottom left",
+        row=2, col=1,
+        line_width=2
+    )
+    
+    # After: 平均−実績 - 薄めの黒系（右側、下段）
+    fig.add_trace(
+        go.Histogram(
+            x=after_delta2.values,
+            name='実績バラつき',
+            opacity=0.8,
+            xbins=dict(start=bin_edges[0], end=bin_edges[-1], size=bin_edges[1] - bin_edges[0]),
+            marker_color='rgba(128, 128, 128, 0.8)',  # 薄めの黒系
+            showlegend=False
+        ),
+        row=2, col=2
+    )
+    
+    # After: 安全在庫①（理論値）をモデル②に重ね表示（赤色破線、マイナス側に描画）
+    # p=0%の時は①を非表示
+    if after_ss1 is not None and not is_after_ss1_undefined and not is_p_zero:
+        fig.add_vline(
+            x=-after_ss1,  # マイナス側に描画
+            line_dash="dash",
+            line_color="red",  # 赤色
+            annotation_text="",  # 安全在庫①は線だけ表示（ラベルなし）
+            annotation_position="bottom left",
+            row=2, col=2,
+            line_width=2
+        )
+    
+    # After: 安全在庫②（平均−実績）を表示（濃い黒系破線、マイナス側に描画）
+    fig.add_vline(
+        x=-after_ss2,  # マイナス側に描画
+        line_dash="dash",
+        line_color="#333333",  # 濃い黒系
+        annotation_text="安全在庫②",  # ラベルを表示
+        annotation_position="bottom left",
         row=2, col=2,
         line_width=2
     )
@@ -1508,11 +1510,11 @@ def create_outlier_lt_delta_comparison_chart(product_code: str,
         height=800,
         showlegend=True,
         title_text=f"{product_code} - リードタイム間差分の分布（Before/After）",
-        margin=dict(t=170, b=100, r=80),  # 右側の余白を追加して「安全在庫③」の切れを防止
+        margin=dict(t=200, b=100, r=80),  # タイトルと凡例の間の余白を確保
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.12,
+            y=1.15,  # 凡例の位置を少し下げてタイトルとの間隔を確保
             xanchor="center",
             x=0.5,
             bgcolor="rgba(255,255,255,0)",

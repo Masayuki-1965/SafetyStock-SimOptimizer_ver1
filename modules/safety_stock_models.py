@@ -2,8 +2,8 @@
 安全在庫計算モジュール（3モデル対応）
 
 安全在庫①：理論値（教科書基準）
-安全在庫②：実測値（実績−平均）
-安全在庫③：実測値（実績−計画）【推奨モデル】
+安全在庫②：実測値（平均−実績）
+安全在庫③：実測値（計画−実績）【推奨モデル】
 
 更新: C区分の安全在庫上限処理を追加
 """
@@ -91,10 +91,10 @@ class SafetyStockCalculator:
         # モデル①：理論値（教科書基準）
         model1_results = self._calculate_theoretical_model(safety_factor, lead_time_working_days)
         
-        # モデル②：実測値（実績−平均）
+        # モデル②：実測値（平均−実績）
         model2_results = self._calculate_empirical_actual_model(lead_time_days)
         
-        # モデル③：実測値（実績−計画）【推奨】
+        # モデル③：実測値（計画−実績）【推奨】
         model3_results = self._calculate_empirical_plan_model(lead_time_days)
         
         # 現行安全在庫：月数ベースから稼働日ベースに換算
@@ -196,7 +196,7 @@ class SafetyStockCalculator:
     
     def _calculate_empirical_actual_model(self, lead_time_days: int) -> Dict:
         """
-        モデル②：実測値（実績−平均）を計算
+        モデル②：実測値（平均−実績）を計算
         
         Args:
             lead_time_days: リードタイム（日数）
@@ -212,35 +212,36 @@ class SafetyStockCalculator:
         original_actual_sums = self.original_actual_data.rolling(window=lead_time_days).sum().dropna()
         mean_actual_sums = original_actual_sums.mean()
         
-        # 差分 = 実績合計（異常値処理後） - 平均（異常値処理前）
+        # 差分 = 平均（異常値処理前） - 実績合計（異常値処理後）
         # actual_sumsとoriginal_actual_sumsのインデックスが一致していることを確認
-        delta2 = actual_sums - mean_actual_sums
+        delta2 = mean_actual_sums - actual_sums
         
-        # 右側（正の差分、欠品リスク側）のみを抽出
-        delta2_positive = delta2[delta2 > 0]
-        N_pos = len(delta2_positive)
+        # 左側（負の差分、欠品リスク側）のみを抽出
+        delta2_negative = delta2[delta2 < 0]
+        N_neg = len(delta2_negative)
         
-        # 右側が空の場合は0を返す
-        if N_pos == 0:
+        # 左側が空の場合は0を返す
+        if N_neg == 0:
             safety_stock = 0.0
             percentile = None
-        # p=0%の時は右側（欠品側）分布の最大差分
+        # p=0%の時は左側（欠品側）分布の最小差分（絶対値最大）
         elif self.stockout_tolerance_pct <= 0:
-            # 右側サンプルが存在することを確認してからmax()を実行
-            if len(delta2_positive) > 0:
-                safety_stock = delta2_positive.max()
+            # 左側サンプルが存在することを確認してからmin()を実行
+            if len(delta2_negative) > 0:
+                safety_stock = abs(delta2_negative.min())  # 絶対値を取ってプラス値に
             else:
                 safety_stock = 0.0
             percentile = None
         else:
-            # 分位点 q = 1 - p/100（片側）で設定
-            q = 1 - self.stockout_tolerance_pct / 100.0
-            # 離散データは k = max(1, ceil(q * N_pos)) を用い、右側（正の差分）の昇順 k 番目を採用
-            k = max(1, int(np.ceil(q * N_pos)))
-            # 右側（正の差分）を昇順にソート
-            delta2_positive_sorted = np.sort(delta2_positive.values)
-            # k番目（0-indexedなので k-1）を採用
-            safety_stock = delta2_positive_sorted[k - 1]
+            # 分位点 q = p/100（片側）で設定（左側分布の下側から）
+            q = self.stockout_tolerance_pct / 100.0
+            # 離散データは k = max(1, ceil(q * N_neg)) を用い、左側（負の差分）の昇順 k 番目を採用
+            k = max(1, int(np.ceil(q * N_neg)))
+            # 左側（負の差分）を昇順にソート（最小値=最もマイナスが大きい値が先頭）
+            delta2_negative_sorted = np.sort(delta2_negative.values)  # 昇順ソート（最小値が先頭）
+            # k番目（0-indexedなので k-1）を採用し、絶対値を取ってプラス値に
+            # pが増加するとkが増加し、より0に近い値（絶対値が小さい値）を採用するため、安全在庫ラインは0に近づく
+            safety_stock = abs(delta2_negative_sorted[k - 1])
             percentile = 100 - self.stockout_tolerance_pct
         
         # 統計量
@@ -254,12 +255,12 @@ class SafetyStockCalculator:
             'std_delta': std_delta,
             'percentile': percentile,
             'method': 'empirical_actual',
-            'formula': f'P{percentile}(実績合計 - 平均)' if percentile is not None else 'max(実績合計 - 平均, 0)'
+            'formula': f'P{percentile}(平均 - 実績合計)' if percentile is not None else 'max(平均 - 実績合計, 0)'
         }
     
     def _calculate_empirical_plan_model(self, lead_time_days: int) -> Dict:
         """
-        モデル③：実測値（実績−計画）を計算【推奨モデル】
+        モデル③：実測値（計画−実績）を計算【推奨モデル】
         
         Args:
             lead_time_days: リードタイム（日数）
@@ -276,34 +277,35 @@ class SafetyStockCalculator:
         actual_sums_common = actual_sums.loc[common_idx]
         plan_sums_common = plan_sums.loc[common_idx]
         
-        # 差分 = 実績合計 - 計画合計
-        delta3 = actual_sums_common - plan_sums_common
+        # 差分 = 計画合計 - 実績合計
+        delta3 = plan_sums_common - actual_sums_common
         
-        # 右側（正の差分、欠品リスク側）のみを抽出
-        delta3_positive = delta3[delta3 > 0]
-        N_pos = len(delta3_positive)
+        # 左側（負の差分、欠品リスク側）のみを抽出
+        delta3_negative = delta3[delta3 < 0]
+        N_neg = len(delta3_negative)
         
-        # 右側が空の場合は0を返す
-        if N_pos == 0:
+        # 左側が空の場合は0を返す
+        if N_neg == 0:
             safety_stock = 0.0
             percentile = None
-        # p=0%の時は右側（欠品側）分布の最大差分
+        # p=0%の時は左側（欠品側）分布の最小差分（絶対値最大）
         elif self.stockout_tolerance_pct <= 0:
-            # 右側サンプルが存在することを確認してからmax()を実行
-            if len(delta3_positive) > 0:
-                safety_stock = delta3_positive.max()
+            # 左側サンプルが存在することを確認してからmin()を実行
+            if len(delta3_negative) > 0:
+                safety_stock = abs(delta3_negative.min())  # 絶対値を取ってプラス値に
             else:
                 safety_stock = 0.0
             percentile = None
         else:
-            # 分位点 q = 1 - p/100（片側）で設定
-            q = 1 - self.stockout_tolerance_pct / 100.0
-            # 離散データは k = max(1, ceil(q * N_pos)) を用い、右側（正の差分）の昇順 k 番目を採用
-            k = max(1, int(np.ceil(q * N_pos)))
-            # 右側（正の差分）を昇順にソート
-            delta3_positive_sorted = np.sort(delta3_positive.values)
-            # k番目（0-indexedなので k-1）を採用
-            safety_stock = delta3_positive_sorted[k - 1]
+            # 分位点 q = p/100（片側）で設定（左側分布の下側から）
+            q = self.stockout_tolerance_pct / 100.0
+            # 離散データは k = max(1, ceil(q * N_neg)) を用い、左側（負の差分）の昇順 k 番目を採用
+            k = max(1, int(np.ceil(q * N_neg)))
+            # 左側（負の差分）を昇順にソート（最小値=最もマイナスが大きい値が先頭）
+            delta3_negative_sorted = np.sort(delta3_negative.values)  # 昇順ソート（最小値が先頭）
+            # k番目（0-indexedなので k-1）を採用し、絶対値を取ってプラス値に
+            # pが増加するとkが増加し、より0に近い値（絶対値が小さい値）を採用するため、安全在庫ラインは0に近づく
+            safety_stock = abs(delta3_negative_sorted[k - 1])
             percentile = 100 - self.stockout_tolerance_pct
         
         # 統計量
@@ -317,7 +319,7 @@ class SafetyStockCalculator:
             'std_delta': std_delta,
             'percentile': percentile,
             'method': 'empirical_plan',
-            'formula': f'P{percentile}(実績合計 - 計画合計)' if percentile is not None else 'max(実績合計 - 計画合計, 0)'
+            'formula': f'P{percentile}(計画合計 - 実績合計)' if percentile is not None else 'max(計画合計 - 実績合計, 0)'
         }
     
     def _calculate_current_safety_stock(self) -> Dict:
@@ -390,8 +392,8 @@ class SafetyStockCalculator:
         data = []
         for model_name, model_key in [
             ('理論値（教科書基準）', 'model1_theoretical'),
-            ('実測値（実績−平均）', 'model2_empirical_actual'),
-            ('実測値（実績−計画）', 'model3_empirical_plan')
+            ('実測値（平均−実績）', 'model2_empirical_actual'),
+            ('実測値（計画−実績）', 'model3_empirical_plan')
         ]:
             model_result = self.results[model_key]
             data.append({
@@ -477,8 +479,8 @@ class SafetyStockCalculator:
         
         return {
             '安全在庫①（理論値）': f"{self.results['model1_theoretical']['safety_stock']:.2f}",
-            '安全在庫②（実績−平均）': f"{self.results['model2_empirical_actual']['safety_stock']:.2f}",
-            '安全在庫③（実績−計画）': f"{self.results['model3_empirical_plan']['safety_stock']:.2f}",
+            '安全在庫②（平均−実績）': f"{self.results['model2_empirical_actual']['safety_stock']:.2f}",
+            '安全在庫③（計画−実績）': f"{self.results['model3_empirical_plan']['safety_stock']:.2f}",
             'リードタイム（稼働日）': f"{self.results['common_params']['lead_time_working_days']:.1f}",
             '欠品許容率（%）': f"{self.results['common_params']['stockout_tolerance_pct']:.1f}",
             'サービスレベル（%）': f"{self.results['common_params']['service_level_pct']:.1f}",

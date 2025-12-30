@@ -79,7 +79,7 @@ def determine_adopted_model(
     """
     if plan_error_rate is None:
         # 計画誤差率計算不可の場合 → 安全在庫③を採用
-        return ("ss3", "安全在庫③（実測値：実績−計画）", None, None)
+        return ("ss3", "安全在庫③（実測値：計画−実績）", None, None)
     elif is_anomaly:
         # 異常値の場合 → 安全在庫②'を採用（比率rが算出できる場合）
         ratio_r = ratio_r_by_category.get('ratio_r', {}).get(abc_category) if ratio_r_by_category.get('ratio_r') else None
@@ -95,10 +95,10 @@ def determine_adopted_model(
             return ("ss2_corrected", "安全在庫②'（補正後モデル）", ss2_corrected, ss2_corrected_days)
         else:
             # 比率rが算出できない場合は安全在庫③を採用
-            return ("ss3", "安全在庫③（実測値：実績−計画）", None, None)
+            return ("ss3", "安全在庫③（実測値：計画−実績）", None, None)
     else:
         # 正常値の場合 → 安全在庫③を採用
-        return ("ss3", "安全在庫③（実測値：実績−計画）", None, None)
+        return ("ss3", "安全在庫③（実測値：計画−実績）", None, None)
 
 
 def display_step2():
@@ -192,7 +192,7 @@ def display_step2():
         return f"{sign}{rate:.1f}%"
     
     all_products_with_category['display_label'] = all_products_with_category.apply(
-        lambda row: f"{format_abc_category_for_display(row['abc_category'])} | {format_plan_error_rate(row['plan_error_rate'])} | {row['product_code']}", axis=1
+        lambda row: f"{format_abc_category_for_display(row['abc_category'])}区分 | {format_plan_error_rate(row['plan_error_rate'])} | {row['product_code']}", axis=1
     )
     
     # 商品コードとラベルのマッピングを作成
@@ -222,7 +222,7 @@ def display_step2():
     st.markdown("""
     <div class="step-description">分析対象の商品コードを<strong>「任意の商品コード」</strong>から選択してください。<br>
     または、<strong>「計画誤差率（％）の設定（任意）」</strong>で閾値を設定し、<strong>「計画誤差率（プラス）大」</strong>または<strong>「計画誤差率（マイナス）大」</strong>を選択してください。<br>
-    ※ 計画誤差率 ＝（実績合計 − 計画合計）÷ 実績合計</div>
+    ※ 計画誤差率 ＝（計画合計 − 実績合計）÷ 実績合計</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -238,7 +238,7 @@ def display_step2():
     
     # 計画誤差率の閾値設定（詳細設定として折り畳み）
     with st.expander("計画誤差率（％）の設定（任意）", expanded=False):
-        st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±10%）のままで問題ない場合は、この設定を変更する必要はありません。慣れてきたユーザーが、より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
+        st.markdown("計画誤差率の閾値（プラス／マイナス）は、商品コードの絞り込みに使用します。<br>初期値（±10%）のままで問題ない場合は、この設定を変更する必要はありません。より厳しい条件で分析したい場合にご活用ください。", unsafe_allow_html=True)
         st.markdown('<div class="step-sub-section">計画誤差率の閾値設定</div>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
@@ -279,7 +279,7 @@ def display_step2():
             ].copy()
             st.markdown(f"""
             <div class="annotation-info-box">
-                <strong>計画誤差率が大きい（+{plan_plus_threshold:.1f}%以上）商品コードを選択できます。</strong><br><strong>計画誤差率（プラス）</strong> ＝（実績合計 − 計画合計）÷ 実績合計 × 100%（<strong>※実績合計 ＞ 計画合計</strong>：実績がどれだけ計画を上回ったか）
+                <strong>計画誤差率が大きい（+{plan_plus_threshold:.1f}%以上）商品コードを選択できます。</strong><br><strong>計画誤差率（プラス）</strong> ＝（計画合計 − 実績合計）÷ 実績合計 × 100%（<strong>※計画合計 ＞ 実績合計</strong>：計画がどれだけ実績を上回ったか）
             </div>
             """, unsafe_allow_html=True)
         elif selection_mode == "計画誤差率（マイナス）大":
@@ -290,7 +290,7 @@ def display_step2():
             ].copy()
             st.markdown(f"""
             <div class="annotation-info-box">
-                <strong>計画誤差率が大きい（{plan_minus_threshold:.1f}%以下）商品コードを選択できます。</strong><br><strong>計画誤差率（マイナス）</strong> ＝（実績合計 − 計画合計）÷ 実績合計 × 100%（<strong>※実績合計 ＜ 計画合計</strong>：実績がどれだけ計画を下回ったか）
+                <strong>計画誤差率が大きい（{plan_minus_threshold:.1f}%以下）商品コードを選択できます。</strong><br><strong>計画誤差率（マイナス）</strong> ＝（計画合計 − 実績合計）÷ 実績合計 × 100%（<strong>※計画合計 ＜ 実績合計</strong>：計画がどれだけ実績を下回ったか）
             </div>
             """, unsafe_allow_html=True)
         
@@ -406,7 +406,7 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、<strong>実績のバラつき（実績−平均）</strong>と <strong>計画誤差（実績−計画）</strong> を可視化します。<br>
+    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、<strong>実績のバラつき（平均−実績）</strong>と <strong>計画誤差（計画−実績）</strong> を可視化します。<br>
     時系列グラフと統計情報により、需要変動の大きさや計画精度を把握し、<strong>次の手順④で安全在庫を算出するための前提となるデータ特性</strong> を確認します。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -466,12 +466,12 @@ def display_step2():
             for key in keys_to_remove:
                 del st.session_state[key]
             
-            # LT間差分を計算
+            # LT間差分を計算（新しい定義式：平均-実績、計画-実績）
             actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
-            delta2 = actual_sums - actual_sums.mean()
+            delta2 = actual_sums.mean() - actual_sums  # 平均-実績
             plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
             common_idx = actual_sums.index.intersection(plan_sums.index)
-            delta3 = actual_sums.loc[common_idx] - plan_sums.loc[common_idx]
+            delta3 = plan_sums.loc[common_idx] - actual_sums.loc[common_idx]  # 計画-実績
             
             # リードタイム区間の総件数を計算（稼働日ベース）
             # 全期間の日数 = LT間差分計算に使用している日次データの有効期間（稼働日のみ）
@@ -556,13 +556,73 @@ def display_step2():
         
         # 3. リードタイム区間の総件数（スライド集計）
         st.markdown('<div class="step-sub-section">リードタイム区間の総件数（スライド集計）</div>', unsafe_allow_html=True)
+        
+        # 説明文を追加
+        st.markdown(
+            """
+            <div style="margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
+                リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数<br>
+                総件数の算出式：総件数 ＝ 全期間の日数 － リードタイム期間 ＋ 1
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # 対象期間を計算して表示
+        plan_data = calculator.plan_data
+        lead_time_days = int(np.ceil(calculator._get_lead_time_in_working_days()))
+        plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+        actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
+        common_idx = plan_sums.index.intersection(actual_sums.index)
+        
+        period_display = "取得できませんでした"
+        if len(common_idx) > 0:
+            first_end_date = common_idx[0]
+            last_end_date = common_idx[-1]
+            
+            try:
+                first_end_pos = plan_data.index.get_loc(first_end_date)
+                first_start_pos = first_end_pos - (lead_time_days - 1)
+                if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                    first_start_date = plan_data.index[first_start_pos]
+                else:
+                    first_start_date = first_end_date
+            except (KeyError, IndexError):
+                first_start_date = first_end_date
+            
+            try:
+                last_end_pos = plan_data.index.get_loc(last_end_date)
+                last_start_pos = last_end_pos - (lead_time_days - 1)
+                if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                    last_start_date = plan_data.index[last_start_pos]
+                else:
+                    last_start_date = last_end_date
+            except (KeyError, IndexError):
+                last_start_date = last_end_date
+            
+            def format_date(date):
+                if isinstance(date, str):
+                    if len(date) == 8:
+                        return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                    else:
+                        return str(date)
+                else:
+                    return pd.to_datetime(date).strftime("%Y/%m/%d")
+            
+            first_start_str = format_date(first_start_date)
+            first_end_str = format_date(first_end_date)
+            last_start_str = format_date(last_start_date)
+            last_end_str = format_date(last_end_date)
+            
+            period_display = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+        
         st.markdown(
             f"""
             <div class="annotation-success-box">
                 <span class="icon">✅</span>
                 <div class="text">
                     <strong>リードタイム区間の総件数：{total_count}件</strong> 
-                    （リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数）
+                    （{period_display}）
                 </div>
             </div>
             """,
@@ -620,10 +680,19 @@ def display_step2():
             target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
             total_count = len(common_idx)
             
+            # ABC区分を取得
+            abc_category = get_product_category(product_code)
+            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+            
+            if abc_category_display:
+                product_display = f"{abc_category_display}区分 | {product_code}"
+            else:
+                product_display = product_code
+            
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
                 対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                対象商品： {product_code}
+                対象商品： {product_display}
             </div>
             """, unsafe_allow_html=True)
         
@@ -685,19 +754,39 @@ def display_step2():
             target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
             total_count = len(common_idx)
             
+            # ABC区分を取得
+            abc_category = get_product_category(product_code)
+            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+            
+            if abc_category_display:
+                product_display = f"{abc_category_display}区分 | {product_code}"
+            else:
+                product_display = product_code
+            
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
                 対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                対象商品： {product_code}
+                対象商品： {product_display}
             </div>
             """, unsafe_allow_html=True)
         
-        fig = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
+        fig, delta2_for_stats_step3, delta3_for_stats_step3 = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
         st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}")
+        
+        # 時系列グラフで使ったdelta2とdelta3をセッション状態に保存（統計情報テーブルで使用）
+        st.session_state.step2_delta2_for_stats_step3 = delta2_for_stats_step3
+        st.session_state.step2_delta3_for_stats_step3 = delta3_for_stats_step3
 
         # 7. リードタイム間差分の統計情報
         st.markdown('<div class="step-sub-section">リードタイム間差分の統計情報</div>', unsafe_allow_html=True)
-        display_delta_statistics_from_data(product_code, lt_delta_data['delta2'], lt_delta_data['delta3'])
+        # 時系列グラフで使ったdelta2とdelta3を使用（完全に同一のデータ）
+        delta2_for_stats = st.session_state.get('step2_delta2_for_stats_step3')
+        delta3_for_stats = st.session_state.get('step2_delta3_for_stats_step3')
+        if delta2_for_stats is not None and delta3_for_stats is not None:
+            display_delta_statistics_from_data(product_code, delta2_for_stats, delta3_for_stats)
+        else:
+            # フォールバック：lt_delta_dataから取得
+            display_delta_statistics_from_data(product_code, lt_delta_data['delta2'], lt_delta_data['delta3'])
         
         st.divider()
     
@@ -857,15 +946,28 @@ def display_step2():
                 target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
                 total_count = len(common_idx)
                 
+                # ABC区分を取得
+                abc_category = get_product_category(product_code)
+                abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                
+                if abc_category_display:
+                    product_display = f"{abc_category_display}区分 | {product_code}"
+                else:
+                    product_display = product_code
+                
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
                     対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                    対象商品： {product_code}
+                    対象商品： {product_display}
                 </div>
                 """, unsafe_allow_html=True)
             
-            fig = create_time_series_delta_bar_chart(product_code, results, calculator, show_safety_stock_lines=True)
+            fig, delta2_for_stats, delta3_for_stats = create_time_series_delta_bar_chart(product_code, results, calculator, show_safety_stock_lines=True)
             st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step3_{product_code}")
+            
+            # 時系列グラフで使ったdelta2とdelta3をセッション状態に保存（統計情報テーブルで使用）
+            st.session_state.step2_delta2_for_stats = delta2_for_stats
+            st.session_state.step2_delta3_for_stats = delta3_for_stats
             
             # ヒストグラム
             st.markdown('<div class="step-sub-section">リードタイム間差分の分布（ヒストグラム）</div>', unsafe_allow_html=True)
@@ -1302,11 +1404,11 @@ def display_step2():
             before_data = st.session_state.get('step2_actual_data')
             after_data = st.session_state.get('step2_imputed_data')
             before_sums = before_data.rolling(window=lead_time_days).sum().dropna()
-            before_delta2 = before_sums - before_sums.mean()
-            before_delta3 = before_sums - before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[before_sums.index]
+            before_delta2 = before_sums.mean() - before_sums  # 平均−実績
+            before_delta3 = before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[before_sums.index] - before_sums  # 計画−実績
             after_sums = after_data.rolling(window=lead_time_days).sum().dropna()
-            after_delta2 = after_sums - after_sums.mean()
-            after_delta3 = after_sums - before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[after_sums.index]
+            after_delta2 = after_sums.mean() - after_sums  # 平均−実績
+            after_delta3 = before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[after_sums.index] - after_sums  # 計画−実績
             before_ss1 = before_results['model1_theoretical']['safety_stock']
             before_ss2 = before_results['model2_empirical_actual']['safety_stock']
             before_ss3 = before_results['model3_empirical_plan']['safety_stock']
@@ -2257,11 +2359,11 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
             pass
     
     # 計画誤差率を計算（合計値ベースで計算）
-    # 誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
+    # 誤差率 = (計画合計 - 実績合計) ÷ 実績合計 × 100%
     # 実装では sum() を使用して合計値を計算している
     actual_total = float(actual_data.sum())
     plan_total = float(plan_data.sum())
-    plan_error = actual_total - plan_total
+    plan_error = plan_total - actual_total
     
     if actual_total == 0:
         plan_error_rate = None
@@ -2409,7 +2511,7 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     # 誤差率の注記を表の下に追加
     st.markdown("""
     <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
-    ※計画誤差率＝（実績合計ー計画合計）÷実績合計
+    ※計画誤差率＝（計画合計ー実績合計）÷実績合計
     </div>
     """, unsafe_allow_html=True)
     
@@ -2425,11 +2527,11 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         
         if abs_plan_error_rate < abs_abc_category_avg:
             # 誤差が小さい場合
-            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が小さいです。"
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が小さいです。"
             icon = "✅"
         else:
             # 誤差が大きい場合
-            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が大きいです。"
+            comparison_result = f"<strong>計画誤差率の比較結果：</strong>計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が大きいです。"
             icon = "⚠️"
         
         st.markdown(f"""
@@ -2461,14 +2563,14 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     actual_sums_common = actual_sums.loc[common_idx]
     
     # 計画誤差率を計算（リードタイム期間合計ベース）
-    # 計画誤差率 = (実績合計 - 計画合計) ÷ 実績合計 × 100%
+    # 計画誤差率 = (計画合計 - 実績合計) ÷ 実績合計 × 100%
     actual_total = float(actual_sums_common.sum())
     plan_total = float(plan_sums_common.sum())
     
     if actual_total == 0:
         plan_error_rate = None
     else:
-        plan_error_rate = ((actual_total - plan_total) / actual_total) * 100.0
+        plan_error_rate = ((plan_total - actual_total) / actual_total) * 100.0
     
     # 統計情報サマリーの情報を取得
     # 1. 対象期間：リードタイム区間において、実際に集計対象となった最初の期間から最後の期間まで
@@ -2558,8 +2660,7 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
         '標準偏差': np.std(plan_sums_common),
         '最小値': np.min(plan_sums_common),
         '中央値': np.median(plan_sums_common),
-        '最大値': np.max(plan_sums_common),
-        '計画誤差率': None  # 計画には計画誤差率は表示しない
+        '最大値': np.max(plan_sums_common)
     }
     
     # 実績合計の統計情報
@@ -2570,8 +2671,7 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
         '標準偏差': np.std(actual_sums_common),
         '最小値': np.min(actual_sums_common),
         '中央値': np.median(actual_sums_common),
-        '最大値': np.max(actual_sums_common),
-        '計画誤差率': plan_error_rate  # 計画誤差率を追加
+        '最大値': np.max(actual_sums_common)
     }
     
     # データフレーム作成
@@ -2581,8 +2681,8 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     # 表示用コピーを作成（元のDataFrameは変更しない）
     display_df = stats_df.copy()
     
-    # 列の順序を指定（計画誤差率を最後に配置）
-    column_order = ['項目', '件数', '平均', '標準偏差', '最小値', '中央値', '最大値', '計画誤差率']
+    # 列の順序を指定（計画誤差率は削除）
+    column_order = ['項目', '件数', '平均', '標準偏差', '最小値', '中央値', '最大値']
     display_df = display_df[column_order]
     
     # 数値表示形式を統一（表示用コピーに対してのみ適用）
@@ -2615,16 +2715,8 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
             lambda x: f'{x:.2f}' if not pd.isna(x) else ''
         )
     
-    # 計画誤差率はパーセント表示（例：-20.58%）
-    display_df['計画誤差率'] = display_df['計画誤差率'].apply(
-        lambda x: f'{x:.2f}%' if x is not None and not pd.isna(x) else ''
-    )
-    
-    # 対象商品コード数を取得
+    # 対象商品のABC区分を取得
     data_loader = st.session_state.get('uploaded_data_loader')
-    target_product_count = get_target_product_count(data_loader) if data_loader is not None else None
-    
-    # 4. 対象商品のABC区分を取得
     abc_category = None
     abc_category_display = None
     if data_loader is not None:
@@ -2638,63 +2730,20 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
         except Exception:
             pass
     
-    # 5. 同一ABC区分のリードタイム期間の計画誤差率（加重平均）を計算
-    abc_category_lead_time_plan_error_rate = None
-    abc_category_product_count = 0
-    if abc_category is not None and data_loader is not None:
-        try:
-            analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
-            abc_category_lead_time_plan_error_rate, abc_category_product_count = calculate_weighted_average_lead_time_plan_error_rate_by_abc_category(
-                data_loader,
-                abc_category,
-                lead_time_days,
-                analysis_result=analysis_result,
-                exclude_plan_only=True,
-                exclude_actual_only=True
-            )
-        except Exception:
-            pass
-    
     # CSSのinline-blockと固定幅を使用して「：」の位置を揃える
     summary_lines = []
     
-    # 項目名の最大文字数（14文字）に合わせて固定幅を設定
-    label_width = "14em"  # 最大項目名「A区分の計画誤差率（絶対値）」に合わせた幅
+    # 項目名の最大文字数に合わせて固定幅を設定（簡略化）
+    label_width = "8em"
     
     # 対象期間 + 総件数を統合
-    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間</span>： {target_period}（総件数：{total_count:,} 件）</div>")
+    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間</span>：{target_period}（総件数：{total_count:,} 件）</div>")
     
     # 対象商品
     if abc_category_display is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {abc_category_display}区分 | {product_code}</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>：{abc_category_display}区分 | {product_code}</div>")
     else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {product_code}</div>")
-    
-    # 計画誤差率（絶対値）
-    if plan_error_rate is not None:
-        abs_plan_error_rate = abs(plan_error_rate)
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： {abs_plan_error_rate:.2f} %</div>")
-    else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： 計算できませんでした</div>")
-    
-    # 全体計画誤差率（絶対値）
-    if weighted_avg_lead_time_plan_error_rate is not None and target_product_count is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_lead_time_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）</div>")
-    elif weighted_avg_lead_time_plan_error_rate is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_lead_time_plan_error_rate:.2f} %（加重平均）</div>")
-    else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： 計算できませんでした</div>")
-    
-    # ABC区分の計画誤差率（絶対値）
-    if abc_category_display is not None and abc_category_lead_time_plan_error_rate is not None and abc_category_product_count > 0:
-        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_lead_time_plan_error_rate:.2f} %（{abc_category_display}区分コード数 {abc_category_product_count:,} 件の加重平均）</div>")
-    elif abc_category_display is not None and abc_category_lead_time_plan_error_rate is not None:
-        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_lead_time_plan_error_rate:.2f} %（加重平均）</div>")
-    elif abc_category_display is not None:
-        label = f"{abc_category_display}区分の計画誤差率（絶対値）"
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： 計算できませんでした</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>：{product_code}</div>")
     
     summary_html = "".join(summary_lines)
     st.markdown(f"""
@@ -2706,52 +2755,10 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
     
-    # 計画誤差率列にスタイルを適用（背景：薄い緑、文字色：緑）
-    def style_plan_error_rate(val):
-        """計画誤差率列のスタイル設定"""
-        if val is not None and str(val) != '' and '%' in str(val):
-            return 'background-color: #E8F5E9; color: #2E7D32;'  # 薄い緑背景、緑文字
-        return ''
-    
     # スタイルを適用したDataFrameを表示
-    styled_df = display_df.style.applymap(
-        style_plan_error_rate,
-        subset=['計画誤差率']
-    )
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
-    
-    # 誤差率の注記を表の下に追加
-    st.markdown("""
-    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
-    ※ 計画誤差率 ＝（実績合計 − 計画合計）÷ 実績合計
-    </div>
-    """, unsafe_allow_html=True)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 計画誤差率の比較結果注釈（緑の結果系テキストボックス）を表の下に追加
-    # 比較対象を同一ABC区分の計画誤差率（絶対値）に変更
-    if plan_error_rate is not None and abc_category_lead_time_plan_error_rate is not None:
-        # 絶対値で比較
-        abs_plan_error_rate = abs(plan_error_rate)
-        # abc_category_lead_time_plan_error_rateは既に絶対値ベースで計算されているため、そのまま使用
-        abs_abc_category_avg = abc_category_lead_time_plan_error_rate
-        
-        if abs_plan_error_rate < abs_abc_category_avg:
-            # 誤差が小さい場合
-            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が小さいです。"
-            icon = "✅"
-        else:
-            # 誤差が大きい場合
-            comparison_result = f"<strong>計画誤差率の比較結果：</strong>対象商品コード（{product_code}）の計画誤差率（絶対値）は {abs_plan_error_rate:.2f}％です。同{abc_category_display}区分計画誤差率（絶対値 {abs_abc_category_avg:.2f}％）と比較して、誤差が大きいです。"
-            icon = "⚠️"
-        
-        st.markdown(f"""
-        <div class="annotation-success-box" style="margin-top: 1rem;">
-            <span class="icon">{icon}</span>
-            <div class="text">{comparison_result}</div>
-        </div>
-        """, unsafe_allow_html=True)
 
 
 def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, delta3: pd.Series):
@@ -2820,8 +2827,25 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     # 対象期間（4文字）+ 総件数を統合
     summary_lines.append(f"対象期間： {target_period}（総件数：{total_count:,} 件）")
     
+    # 対象商品のABC区分を取得
+    data_loader = st.session_state.get('uploaded_data_loader')
+    abc_category_display = None
+    if data_loader is not None:
+        try:
+            analysis_result, _, _ = get_abc_analysis_with_fallback(data_loader)
+            if analysis_result is not None and not analysis_result.empty:
+                product_row = analysis_result[analysis_result['product_code'] == product_code]
+                if not product_row.empty:
+                    abc_category = product_row.iloc[0]['abc_category']
+                    abc_category_display = format_abc_category_for_display(abc_category)
+        except Exception:
+            pass
+    
     # 対象商品（4文字）
-    summary_lines.append(f"対象商品： {product_code}")
+    if abc_category_display is not None:
+        summary_lines.append(f"対象商品： {abc_category_display}区分 | {product_code}")
+    else:
+        summary_lines.append(f"対象商品： {product_code}")
     
     summary_html = "<br>".join(summary_lines)
     st.markdown(f"""
@@ -2830,9 +2854,9 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     </div>
     """, unsafe_allow_html=True)
     
-    # LT間差分（実績−平均）の統計情報（6項目に統一）
+    # LT間差分（平均−実績）の統計情報（6項目に統一）
     model2_stats = {
-        '項目': 'リードタイム間差分（実績 − 平均）※実績バラつき',
+        '項目': 'リードタイム間差分（平均 − 実績）※実績バラつき',
         '件数': len(delta2),
         '平均': np.mean(delta2),
         '標準偏差': np.std(delta2),
@@ -2841,9 +2865,9 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
         '最大値': np.max(delta2)
     }
     
-    # LT間差分（実績−計画）の統計情報（6項目に統一）
+    # LT間差分（計画−実績）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
+        '項目': 'リードタイム間差分（計画 − 実績）※計画誤差',
         '件数': len(delta3),
         '平均': np.mean(delta3),
         '標準偏差': np.std(delta3),
@@ -2878,29 +2902,44 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
 def display_delta_statistics(product_code: str, calculator: SafetyStockCalculator):
     """LT間差分の統計情報テーブルを表示"""
     
-    # データ取得
-    hist_data = calculator.get_histogram_data()
+    # 時系列グラフで使ったdelta2とdelta3をセッション状態から取得（手順④の場合）
+    # 手順③の場合はdisplay_delta_statistics_from_dataを使用するため、ここでは手順④の場合のみ処理
+    delta2_for_stats = st.session_state.get('step2_delta2_for_stats')
+    delta3_for_stats = st.session_state.get('step2_delta3_for_stats')
     
-    # LT間差分（実績−平均）の統計情報（6項目に統一）
+    if delta2_for_stats is not None and delta3_for_stats is not None:
+        # 時系列グラフで使ったdelta2とdelta3を使用（完全に同一のデータ）
+        delta2 = delta2_for_stats
+        delta3 = delta3_for_stats
+    else:
+        # フォールバック：calculatorから取得（時系列グラフと同じ計算方法で再計算）
+        lead_time_days = int(np.ceil(calculator._get_lead_time_in_working_days()))
+        actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
+        delta2 = actual_sums.mean() - actual_sums  # 平均-実績
+        plan_sums = calculator.plan_data.rolling(window=lead_time_days).sum().dropna()
+        common_idx = actual_sums.index.intersection(plan_sums.index)
+        delta3 = plan_sums.loc[common_idx] - actual_sums.loc[common_idx]  # 計画-実績
+    
+    # LT間差分（平均−実績）の統計情報（6項目に統一）
     model2_stats = {
-        '項目': 'リードタイム間差分（実績 − 平均）※実績バラつき',
-        '件数': len(hist_data['model2_delta']),
-        '平均': np.mean(hist_data['model2_delta']),
-        '標準偏差': np.std(hist_data['model2_delta']),
-        '最小値': np.min(hist_data['model2_delta']),
-        '中央値': np.median(hist_data['model2_delta']),
-        '最大値': np.max(hist_data['model2_delta'])
+        '項目': 'リードタイム間差分（平均 − 実績）※実績バラつき',
+        '件数': len(delta2),
+        '平均': np.mean(delta2),
+        '標準偏差': np.std(delta2),
+        '最小値': np.min(delta2),
+        '中央値': np.median(delta2),
+        '最大値': np.max(delta2)
     }
     
-    # LT間差分（実績−計画）の統計情報（6項目に統一）
+    # LT間差分（計画−実績）の統計情報（6項目に統一）
     model3_stats = {
-        '項目': 'リードタイム間差分（実績 − 計画）※計画誤差',
-        '件数': len(hist_data['model3_delta']),
-        '平均': np.mean(hist_data['model3_delta']),
-        '標準偏差': np.std(hist_data['model3_delta']),
-        '最小値': np.min(hist_data['model3_delta']),
-        '中央値': np.median(hist_data['model3_delta']),
-        '最大値': np.max(hist_data['model3_delta'])
+        '項目': 'リードタイム間差分（計画 − 実績）※計画誤差',
+        '件数': len(delta3),
+        '平均': np.mean(delta3),
+        '標準偏差': np.std(delta3),
+        '最小値': np.min(delta3),
+        '中央値': np.median(delta3),
+        '最大値': np.max(delta3)
     }
     
     # データフレーム作成
@@ -3318,13 +3357,13 @@ def display_outlier_lt_delta_comparison(product_code: str,
     
     # BeforeのLT差分
     before_sums = before_data.rolling(window=lead_time_days).sum().dropna()
-    before_delta2 = before_sums - before_sums.mean()
-    before_delta3 = before_sums - before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[before_sums.index]
+    before_delta2 = before_sums.mean() - before_sums  # 平均−実績
+    before_delta3 = before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[before_sums.index] - before_sums  # 計画−実績
     
     # AfterのLT差分
     after_sums = after_data.rolling(window=lead_time_days).sum().dropna()
-    after_delta2 = after_sums - after_sums.mean()
-    after_delta3 = after_sums - before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[after_sums.index]
+    after_delta2 = after_sums.mean() - after_sums  # 平均−実績
+    after_delta3 = before_calculator.plan_data.rolling(window=lead_time_days).sum().dropna().loc[after_sums.index] - after_sums  # 計画−実績
     
     # Before/Afterの安全在庫値を計算
     # Before安全在庫
