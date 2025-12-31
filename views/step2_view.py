@@ -258,9 +258,7 @@ def display_step2():
     )
     
     # 計画誤差率の計算式をラジオボタンの直下に表示
-    st.markdown("""
-    <div style="margin-top: 0.5rem; margin-bottom: 1rem;">※ 計画誤差率 =（計画合計 − 実績合計）÷ 実績合計</div>
-    """, unsafe_allow_html=True)
+    st.caption("※ 計画誤差率 =（計画合計 − 実績合計）÷ 実績合計")
     
     # 計画誤差率の閾値設定（詳細設定として折り畳み）
     with st.expander("計画誤差率（％）の閾値設定（任意）", expanded=False):
@@ -1596,10 +1594,10 @@ def display_step2():
         st.markdown("""
         <div class="step-description">計画誤差率を算出し、判定結果に基づき採用モデルを決定します。<br>
         計画誤差率が<strong> 許容範囲内 </strong>の場合は、<strong>安全在庫③（推奨モデル）</strong>を採用します。<br>
-        計画誤差率が<strong> 許容範囲を超過 </strong>する場合は、安全在庫②をベースに補正比率 r で計画誤差を加味した<strong> 安全在庫②' </strong>を採用します。<br>
-        ※ 補正比率 r の詳細は「補正比率 r とは」を参照してください。
+        計画誤差率が<strong> 許容範囲を超過 </strong>する場合は、安全在庫②をベースに補正比率 r で計画誤差を加味した<strong> 安全在庫②' </strong>を採用します。
 </div>
         """, unsafe_allow_html=True)
+        st.caption("※ 補正比率 r の詳細は「補正比率 r とは」を参照してください。")
         st.markdown("<br>", unsafe_allow_html=True)
         
         # 1. 計画異常値処理の閾値設定
@@ -2624,11 +2622,7 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
     # 誤差率の注記を表の下に追加
-    st.markdown("""
-    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
-    ※計画誤差率＝（計画合計ー実績合計）÷実績合計
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("※ 計画誤差率＝（計画合計ー実績合計）÷実績合計")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
