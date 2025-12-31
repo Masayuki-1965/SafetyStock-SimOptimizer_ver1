@@ -585,10 +585,18 @@ def display_step2():
                 else:
                     working_days_count = len(calculator.plan_data)
                 
+                # ABC区分を取得
+                abc_category = get_product_category(product_code)
+                abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                if abc_category_display:
+                    product_display = f"{abc_category_display}区分 | {product_code}"
+                else:
+                    product_display = product_code
+                
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                    対象期間： {start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
-                    対象商品： {product_code}
+                    対象期間：{start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
+                    対象商品：{product_display}
                 </div>
                 """, unsafe_allow_html=True)
             except Exception:
@@ -738,8 +746,8 @@ def display_step2():
             
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                対象商品： {product_display}
+                対象期間：{target_period}（総件数：{total_count:,} 件）<br>
+                対象商品：{product_display}
             </div>
             """, unsafe_allow_html=True)
         
@@ -812,8 +820,8 @@ def display_step2():
             
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                対象商品： {product_display}
+                対象期間：{target_period}（総件数：{total_count:,} 件）<br>
+                対象商品：{product_display}
             </div>
             """, unsafe_allow_html=True)
         
@@ -1002,12 +1010,12 @@ def display_step2():
                 else:
                     product_display = product_code
                 
-                st.markdown(f"""
-                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                    対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                    対象商品： {product_display}
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                対象期間：{target_period}（総件数：{total_count:,} 件）<br>
+                対象商品：{product_display}
+            </div>
+            """, unsafe_allow_html=True)
             
             fig, delta2_for_stats, delta3_for_stats = create_time_series_delta_bar_chart(product_code, results, calculator, show_safety_stock_lines=True)
             st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step3_{product_code}")
@@ -1067,10 +1075,18 @@ def display_step2():
                 target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
                 total_count = len(common_idx)
                 
+                # ABC区分を取得
+                abc_category = get_product_category(product_code)
+                abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                if abc_category_display:
+                    product_display = f"{abc_category_display}区分 | {product_code}"
+                else:
+                    product_display = product_code
+                
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                    対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                    対象商品： {product_code}
+                    対象期間：{target_period}（総件数：{total_count:,} 件）<br>
+                    対象商品：{product_display}
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -1101,9 +1117,16 @@ def display_step2():
             
             # 安全在庫比較結果（棒グラフ＋表の一体化）
             st.markdown('<div class="step-sub-section">安全在庫比較結果</div>', unsafe_allow_html=True)
+            # ABC区分を取得
+            abc_category = get_product_category(product_code)
+            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+            if abc_category_display:
+                product_display = f"{abc_category_display}区分 | {product_code}"
+            else:
+                product_display = product_code
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象商品： {product_code}
+                対象商品：{product_display}
             </div>
             """, unsafe_allow_html=True)
             display_safety_stock_comparison(product_code, results, calculator)
@@ -1257,10 +1280,17 @@ def display_step2():
                     
                     if working_days_count is not None:
                         product_code = st.session_state.get('step2_product_code')
+                        # ABC区分を取得
+                        abc_category = get_product_category(product_code)
+                        abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                        if abc_category_display:
+                            product_display = f"{abc_category_display}区分 | {product_code}"
+                        else:
+                            product_display = product_code
                         st.markdown(f"""
                         <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                            対象期間： {start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
-                            対象商品： {product_code}
+                            対象期間：{start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
+                            対象商品：{product_display}
                         </div>
                         """, unsafe_allow_html=True)
                 except Exception:
@@ -1368,9 +1398,17 @@ def display_step2():
         if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
             st.markdown('<div class="step-sub-section">実績異常値処理後：安全在庫比較結果（Before/After）</div>', unsafe_allow_html=True)
             product_code = st.session_state.get('step2_product_code')
+            # ABC区分を取得
+            abc_category = get_product_category(product_code)
+            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+            if abc_category_display:
+                product_display = f"{abc_category_display}区分 | {product_code}"
+            else:
+                product_display = product_code
+            
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象商品： {product_code}
+                対象商品：{product_display}
             </div>
             """, unsafe_allow_html=True)
             
@@ -1439,10 +1477,18 @@ def display_step2():
                 total_count = len(common_idx)
                 
                 product_code = st.session_state.get('step2_product_code')
+                # ABC区分を取得
+                abc_category = get_product_category(product_code)
+                abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                if abc_category_display:
+                    product_display = f"{abc_category_display}区分 | {product_code}"
+                else:
+                    product_display = product_code
+                
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                    対象期間： {target_period}（総件数：{total_count:,} 件）<br>
-                    対象商品： {product_code}
+                    対象期間：{target_period}（総件数：{total_count:,} 件）<br>
+                    対象商品：{product_display}
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -1859,9 +1905,17 @@ def display_step2():
                 
                 st.markdown('<div class="step-sub-section">計画異常値処理後：安全在庫比較結果（採用モデル含む）</div>', unsafe_allow_html=True)
                 product_code = st.session_state.get('step2_product_code')
+                # ABC区分を取得
+                abc_category = get_product_category(product_code)
+                abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                if abc_category_display:
+                    product_display = f"{abc_category_display}区分 | {product_code}"
+                else:
+                    product_display = product_code
+                
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                    対象商品： {product_code}
+                    対象商品：{product_display}
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -2266,9 +2320,17 @@ def display_step2():
             
             # 上限カット適用前後の安全在庫比較結果
             st.markdown('<div class="step-sub-section">上限カット後：安全在庫比較結果（採用モデル含む）</div>', unsafe_allow_html=True)
+            # ABC区分を取得
+            abc_category = get_product_category(product_code)
+            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+            if abc_category_display:
+                product_display = f"{abc_category_display}区分 | {product_code}"
+            else:
+                product_display = product_code
+            
             st.markdown(f"""
             <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象商品： {product_code}
+                対象商品：{product_display}
             </div>
             """, unsafe_allow_html=True)
             
@@ -2484,10 +2546,16 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
             lambda x: f'{x:.2f}' if not pd.isna(x) else ''
         )
     
-    # 計画誤差率はパーセント表示（例：-20.58%）
-    display_df['計画誤差率'] = display_df['計画誤差率'].apply(
-        lambda x: f'{x:.2f}%' if x is not None and not pd.isna(x) else ''
-    )
+    # 計画誤差率はパーセント表示（例：+12.3% または -20.58%）
+    def format_plan_error_rate(x):
+        if x is not None and not pd.isna(x):
+            if x >= 0:
+                return f'+{x:.2f}%'
+            else:
+                return f'{x:.2f}%'
+        return ''
+    
+    display_df['計画誤差率'] = display_df['計画誤差率'].apply(format_plan_error_rate)
     
     # 統計情報サマリーを表示（表の上に表示、縦並び・背景なし・装飾最小限）
     # CSSのinline-blockと固定幅を使用して「：」の位置を揃える
@@ -2497,13 +2565,13 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     label_width = "14em"  # 最大項目名「A区分の計画誤差率（絶対値）」に合わせた幅
     
     # 対象期間
-    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間</span>： {target_period}</div>")
+    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間：</span>{target_period}</div>")
     
     # 対象商品
     if abc_category_display is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {abc_category_display}区分 | {product_code}</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品：</span>{abc_category_display}区分 | {product_code}</div>")
     else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>： {product_code}</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品：</span>{product_code}</div>")
     
     # 計画誤差率（絶対値）
     if plan_error_rate is not None:
@@ -2777,22 +2845,19 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
         except Exception:
             pass
     
-    # CSSのinline-blockと固定幅を使用して「：」の位置を揃える
+    # 「リードタイム間差分の時系列推移」セクションと同じ形式で表示（label_widthを使わない）
     summary_lines = []
     
-    # 項目名の最大文字数に合わせて固定幅を設定（簡略化）
-    label_width = "8em"
-    
     # 対象期間 + 総件数を統合
-    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間</span>：{target_period}（総件数：{total_count:,} 件）</div>")
+    summary_lines.append(f"対象期間：{target_period}（総件数：{total_count:,} 件）")
     
     # 対象商品
     if abc_category_display is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>：{abc_category_display}区分 | {product_code}</div>")
+        summary_lines.append(f"対象商品：{abc_category_display}区分 | {product_code}")
     else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品</span>：{product_code}</div>")
+        summary_lines.append(f"対象商品：{product_code}")
     
-    summary_html = "".join(summary_lines)
+    summary_html = "<br>".join(summary_lines)
     st.markdown(f"""
     <div style="margin-bottom: 1rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
         {summary_html}
@@ -2872,7 +2937,7 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     summary_lines = []
     
     # 対象期間（4文字）+ 総件数を統合
-    summary_lines.append(f"対象期間： {target_period}（総件数：{total_count:,} 件）")
+    summary_lines.append(f"対象期間：{target_period}（総件数：{total_count:,} 件）")
     
     # 対象商品のABC区分を取得
     data_loader = st.session_state.get('uploaded_data_loader')
@@ -2890,9 +2955,9 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     
     # 対象商品（4文字）
     if abc_category_display is not None:
-        summary_lines.append(f"対象商品： {abc_category_display}区分 | {product_code}")
+        summary_lines.append(f"対象商品：{abc_category_display}区分 | {product_code}")
     else:
-        summary_lines.append(f"対象商品： {product_code}")
+        summary_lines.append(f"対象商品：{product_code}")
     
     summary_html = "<br>".join(summary_lines)
     st.markdown(f"""
