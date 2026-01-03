@@ -775,38 +775,67 @@ def display_step3():
             # 異常値処理（実績異常値／計画異値／上限カット）の実行結果
             st.markdown('<div class="step-sub-section">異常値処理（実績異常値／計画異値／上限カット）の実行結果</div>', unsafe_allow_html=True)
             
+            # 商品コードの総件数（割合計算の分母）
+            total_product_count = len(final_results_df)
+            
             # ABC区分別のサマリーを作成
             summary_rows = []
             all_categories = sorted(final_results_df['ABC区分'].unique().tolist())
             
             for category in all_categories:
                 category_df = final_results_df[final_results_df['ABC区分'] == category]
-                outlier_count = category_df['実績異常値処理'].sum()
-                cap_count = category_df['上限カット'].sum()
-                plan_anomaly_count = category_df['計画異常値処理'].sum()
+                product_count = len(category_df)
+                outlier_count = int(category_df['実績異常値処理'].sum())
+                cap_count = int(category_df['上限カット'].sum())
+                plan_anomaly_count = int(category_df['計画異常値処理'].sum())
+                
+                # 割合%を計算（小数点第1位）
+                outlier_pct = (outlier_count / total_product_count * 100) if total_product_count > 0 else 0.0
+                plan_anomaly_pct = (plan_anomaly_count / total_product_count * 100) if total_product_count > 0 else 0.0
+                cap_pct = (cap_count / total_product_count * 100) if total_product_count > 0 else 0.0
                 
                 summary_rows.append({
-                    'ABC区分': category,
-                    '実績異常値処理件数': int(outlier_count),
-                    '計画異常値処理件数': int(plan_anomaly_count),
-                    '上限カット件数': int(cap_count)
+                    'ABC区分': f"{category}区分",
+                    '商品コード件数': f"{product_count}件",
+                    '実績異常値処理件数（%）': f"{outlier_count}件（{outlier_pct:.1f}%）",
+                    '計画異常値処理件数（%）': f"{plan_anomaly_count}件（{plan_anomaly_pct:.1f}%）",
+                    '上限カット件数（%）': f"{cap_count}件（{cap_pct:.1f}%）"
                 })
             
             # 合計行を追加
-            total_outlier = final_results_df['実績異常値処理'].sum()
-            total_cap = final_results_df['上限カット'].sum()
-            total_plan_anomaly = final_results_df['計画異常値処理'].sum()
+            total_outlier = int(final_results_df['実績異常値処理'].sum())
+            total_cap = int(final_results_df['上限カット'].sum())
+            total_plan_anomaly = int(final_results_df['計画異常値処理'].sum())
+            
+            # 合計行の割合%を計算
+            total_outlier_pct = (total_outlier / total_product_count * 100) if total_product_count > 0 else 0.0
+            total_plan_anomaly_pct = (total_plan_anomaly / total_product_count * 100) if total_product_count > 0 else 0.0
+            total_cap_pct = (total_cap / total_product_count * 100) if total_product_count > 0 else 0.0
+            
             summary_rows.append({
                 'ABC区分': '合計',
-                '実績異常値処理件数': int(total_outlier),
-                '計画異常値処理件数': int(total_plan_anomaly),
-                '上限カット件数': int(total_cap)
+                '商品コード件数': f"{total_product_count}件",
+                '実績異常値処理件数（%）': f"{total_outlier}件（{total_outlier_pct:.1f}%）",
+                '計画異常値処理件数（%）': f"{total_plan_anomaly}件（{total_plan_anomaly_pct:.1f}%）",
+                '上限カット件数（%）': f"{total_cap}件（{total_cap_pct:.1f}%）"
             })
             
             summary_df = pd.DataFrame(summary_rows)
-            # 列順を処理順に統一（実績異常値処理 → 計画異常値処理 → 上限カット）
-            summary_df = summary_df[['ABC区分', '実績異常値処理件数', '計画異常値処理件数', '上限カット件数']]
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            # 列順を指定（商品コード件数、実績異常値処理件数（%）、計画異常値処理件数（%）、上限カット件数（%））
+            summary_df = summary_df[['ABC区分', '商品コード件数', '実績異常値処理件数（%）', '計画異常値処理件数（%）', '上限カット件数（%）']]
+            
+            # 合計行にスタイルを適用（薄緑背景・緑字）
+            def style_summary_table(row):
+                """合計行にスタイルを適用"""
+                if row['ABC区分'] == '合計':
+                    return ['background-color: #E8F5E9; color: #2E7D32'] * len(row)
+                return [''] * len(row)
+            
+            styled_summary_df = summary_df.style.apply(style_summary_table, axis=1)
+            st.dataframe(styled_summary_df, use_container_width=True, hide_index=True)
+            
+            # テーブル直下の補足説明を追加
+            st.caption("※ 割合（%）＝ 各処理件数 ÷ 商品コードの総件数 × 100")
             
             # 詳細データ（折り畳み式、デフォルト：非表示）
             with st.expander("詳細データを表示", expanded=False):
