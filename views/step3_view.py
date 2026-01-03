@@ -1611,11 +1611,11 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
         
         # KPI行の判定
         if row_name == '合計件数':
-            return ['background-color: #F0F6FF; font-weight: bold'] * len(row)
+            return ['background-color: #E8F5E9; color: #2E7D32; font-weight: normal'] * len(row)
         elif row_name == '安全在庫_数量':
-            return ['background-color: #F0F6FF; font-weight: bold'] * len(row)
+            return ['background-color: #E8F5E9; color: #2E7D32; font-weight: normal'] * len(row)
         elif row_name == '安全在庫_日数':
-            return ['background-color: #E0EDFF; font-weight: bold; font-size: 1.1em'] * len(row)
+            return ['background-color: #C8E6C9; color: #2E7D32; font-weight: bold; font-size: 1.1em'] * len(row)
         return [''] * len(row)
     
     styled_matrix = styled_matrix.apply(highlight_important_rows, axis=1)
@@ -1630,14 +1630,16 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
         border: 1px solid #DDDDDD !important;
     }
     /* 「合計件数」「安全在庫_数量」行のインデックス列 */
-    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #F0F6FF"]) th {
-        background-color: #F0F6FF !important;
-        font-weight: bold !important;
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #E8F5E9"]) th {
+        background-color: #E8F5E9 !important;
+        color: #2E7D32 !important;
+        font-weight: normal !important;
         border: 1px solid #DDDDDD !important;
     }
     /* 「安全在庫_日数」行のインデックス列 */
-    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #E0EDFF"]) th {
-        background-color: #E0EDFF !important;
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #C8E6C9"]) th {
+        background-color: #C8E6C9 !important;
+        color: #2E7D32 !important;
         font-weight: bold !important;
         font-size: 1.1em !important;
         border: 1px solid #DDDDDD !important;
