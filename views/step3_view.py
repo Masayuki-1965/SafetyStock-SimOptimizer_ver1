@@ -444,7 +444,7 @@ def display_step3():
                 max_value=500.0,
                 value=st.session_state.get("step3_plan_plus_threshold", st.session_state.get("step2_plan_plus_threshold_final", 10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以上の場合、安全在庫②'を採用します。",
+                help="計画誤差率がこの値を超える場合、安全在庫②'を採用します。",
                 key="step3_plan_plus_threshold"
             )
         with col4:
@@ -454,7 +454,7 @@ def display_step3():
                 max_value=0.0,
                 value=st.session_state.get("step3_plan_minus_threshold", st.session_state.get("step2_plan_minus_threshold_final", -10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以下の場合、安全在庫②'を採用します。",
+                help="計画誤差率がこの値を下回る場合、安全在庫②'を採用します。",
                 key="step3_plan_minus_threshold"
             )
         

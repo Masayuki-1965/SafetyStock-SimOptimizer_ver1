@@ -1610,7 +1610,7 @@ def display_step2():
                 max_value=500.0,
                 value=st.session_state.get("step2_plan_plus_threshold_final", st.session_state.get("step2_plan_plus_threshold", 10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以上の場合、安全在庫②'を採用します。",
+                help="計画誤差率がこの値を超える場合、安全在庫②'を採用します。",
                 key="step2_plan_plus_threshold_final"
             )
         with col2:
@@ -1620,7 +1620,7 @@ def display_step2():
                 max_value=0.0,
                 value=st.session_state.get("step2_plan_minus_threshold_final", st.session_state.get("step2_plan_minus_threshold", -10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以下の場合、安全在庫②'を採用します。",
+                help="計画誤差率がこの値を下回る場合、安全在庫②'を採用します。",
                 key="step2_plan_minus_threshold_final"
             )
         

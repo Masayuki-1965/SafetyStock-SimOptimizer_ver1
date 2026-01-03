@@ -782,10 +782,10 @@ def is_plan_anomaly(
     if plan_error_rate is None:
         return False, "計画誤差率計算不可"
     
-    if plan_error_rate >= plus_threshold:
+    if plan_error_rate > plus_threshold:
         return True, f"計画誤差率が+{plan_error_rate:.1f}%で、閾値（+{plus_threshold:.1f}%）を超過"
     
-    if plan_error_rate <= minus_threshold:
+    if plan_error_rate < minus_threshold:
         return True, f"計画誤差率が{plan_error_rate:.1f}%で、閾値（{minus_threshold:.1f}%）を下回る"
     
     return False, f"計画誤差率は{plan_error_rate:.1f}%で許容範囲内"
