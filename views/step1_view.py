@@ -104,7 +104,7 @@ def display_safety_stock_definitions():
         line-height: 1.4 !important;
         margin-top: 0.8rem !important;
         margin-bottom: 0 !important;
-        font-size: 14.5px;
+        font-size: 15.64px;
     }
     .safety-stock-section p {
         line-height: 1.5 !important;
