@@ -397,15 +397,18 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
     
     # レイアウト設定
     fig.update_layout(
-        title=f"{product_code} - リードタイム間差分の時系列推移",
+        title=dict(
+            text=f"{product_code} - リードタイム間差分の時系列推移",
+            pad=dict(t=-50)  # タイトルを上に移動させて「対象商品」との間隔を狭める
+        ),
         height=900,
         hovermode='x unified',
-        margin=dict(l=60, r=60, t=150, b=40),  # タイトルと凡例の間の余白を確保
+        margin=dict(l=60, r=60, t=220, b=40),  # タイトルと凡例の間の余白を確保（トップマージンを増加）
         showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.08,  # 凡例の位置を少し下げてタイトルとの間隔を確保
+            y=1.08,  # 凡例の位置
             xanchor="center",
             x=0.5,
             bgcolor="rgba(255,255,255,0)",
