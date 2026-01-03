@@ -1143,8 +1143,8 @@ def display_step2():
         突発的に大きく跳ね上がる値を抑えることで、安全在庫が過大に算定されることを防ぎ、算出結果の妥当性を高めます。</div>
         """, unsafe_allow_html=True)
         
-        # 実績異常値処理パラメータ設定
-        st.markdown('<div class="step-sub-section">実績異常値処理パラメータ</div>', unsafe_allow_html=True)
+        # 実績異常値処理のパラメータ設定
+        st.markdown('<div class="step-sub-section">実績異常値処理のパラメータ設定</div>', unsafe_allow_html=True)
         
         # グローバル異常基準と上位カット割合を横並びレイアウト
         col1, col2 = st.columns(2)
@@ -1600,8 +1600,8 @@ def display_step2():
         st.caption("※ 補正比率 r の詳細は「補正比率 r とは」を参照してください。")
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 1. 計画異常値処理の閾値設定
-        st.markdown('<div class="step-sub-section">計画異常値処理の閾値設定</div>', unsafe_allow_html=True)
+        # 1. 計画異常値処理のパラメータ設定
+        st.markdown('<div class="step-sub-section">計画異常値処理のパラメータ設定</div>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             plan_plus_threshold_final = st.number_input(
@@ -1610,7 +1610,7 @@ def display_step2():
                 max_value=500.0,
                 value=st.session_state.get("step2_plan_plus_threshold_final", st.session_state.get("step2_plan_plus_threshold", 10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
+                help="計画誤差率がこの値以上の場合、安全在庫②'を採用します。",
                 key="step2_plan_plus_threshold_final"
             )
         with col2:
@@ -1620,7 +1620,7 @@ def display_step2():
                 max_value=0.0,
                 value=st.session_state.get("step2_plan_minus_threshold_final", st.session_state.get("step2_plan_minus_threshold", -10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
+                help="計画誤差率がこの値以下の場合、安全在庫②'を採用します。",
                 key="step2_plan_minus_threshold_final"
             )
         

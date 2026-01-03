@@ -444,7 +444,7 @@ def display_step3():
                 max_value=500.0,
                 value=st.session_state.get("step3_plan_plus_threshold", st.session_state.get("step2_plan_plus_threshold_final", 10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以上の場合、安全在庫②を採用します。",
+                help="計画誤差率がこの値以上の場合、安全在庫②'を採用します。",
                 key="step3_plan_plus_threshold"
             )
         with col4:
@@ -454,15 +454,13 @@ def display_step3():
                 max_value=0.0,
                 value=st.session_state.get("step3_plan_minus_threshold", st.session_state.get("step2_plan_minus_threshold_final", -10.0)),
                 step=5.0,
-                help="計画誤差率がこの値以下の場合、安全在庫②を採用します。",
+                help="計画誤差率がこの値以下の場合、安全在庫②'を採用します。",
                 key="step3_plan_minus_threshold"
             )
         
         # ABC区分ごとの上限日数設定
         st.markdown('<div class="step-sub-section">ABC区分ごとの上限日数設定</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="step-description">この上限日数は、実績異常値処理後に適用されます。</div>
-        """, unsafe_allow_html=True)
+        st.caption("※ 0 を入力した場合は上限なし（制限なし）")
         
         # analysis_resultから実際に存在する全ての区分を取得（「未分類」も含む）
         all_categories_in_data = analysis_result['abc_category'].apply(format_abc_category_for_display).unique().tolist()
@@ -492,7 +490,7 @@ def display_step3():
             with cols[col_idx]:
                 current_value = st.session_state.category_cap_days.get(cat, 40)
                 cap_days = st.number_input(
-                    f"{cat}区分の上限日数",
+                    f"{cat}区分の上限日数（日）",
                     min_value=1,
                     max_value=365,
                     value=current_value,
