@@ -1512,12 +1512,15 @@ def create_outlier_lt_delta_comparison_chart(product_code: str,
     fig.update_layout(
         height=800,
         showlegend=True,
-        title_text=f"{product_code} - リードタイム間差分の分布（Before/After）",
-        margin=dict(t=200, b=100, r=80),  # タイトルと凡例の間の余白を確保
+        title=dict(
+            text=f"{product_code} - リードタイム間差分の分布（Before/After）",
+            pad=dict(t=-50)  # タイトルを上に移動させて「対象商品」との間隔を狭める
+        ),
+        margin=dict(t=270, b=100, r=80),  # タイトルと凡例の間の余白を確保（トップマージンを増加）
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.15,  # 凡例の位置を少し下げてタイトルとの間隔を確保
+            y=1.15,  # 凡例の位置
             xanchor="center",
             x=0.5,
             bgcolor="rgba(255,255,255,0)",
