@@ -451,8 +451,8 @@ def display_step2():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
-    <div class="step-description">リードタイム期間の実績合計と計画合計を比較し、<strong>実績のバラつき（平均−実績）</strong>と <strong>計画誤差（計画−実績）</strong>を可視化します。<br>
-    時系列グラフと統計情報により、需要変動の大きさや計画精度を把握し、<strong>次の手順④で安全在庫を算出するための前提となるデータ特性</strong> を確認します。</div>
+    <div class="step-description">リードタイム期間の<strong>実績のばらつき（平均−実績）</strong>と<strong>計画誤差（計画−実績）</strong>を可視化し、需要変動の大きさと計画精度を把握します。<br>
+    時系列グラフと統計サマリーから、需要の振れ幅や誤差の偏りを評価し、<strong>手順④で安全在庫を算出するための前提となるデータ特性</strong>を確認します。</div>
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -468,8 +468,8 @@ def display_step2():
     if 'step2_lt_delta_total_count' not in st.session_state:
         st.session_state.step2_lt_delta_total_count = None
     
-    # ボタン: LT間差分を計算・表示する
-    if st.button("LT間差分を計算・表示する", type="primary", use_container_width=True, key="step2_lt_delta_button"):
+    # ボタン: 実績のばらつきと計画誤差を可視化する
+    if st.button("実績のばらつきと計画誤差を可視化する", type="primary", use_container_width=True, key="step2_lt_delta_button"):
         try:
             # データ取得
             if st.session_state.uploaded_data_loader is not None:
@@ -613,7 +613,7 @@ def display_step2():
         # 説明文を追加
         st.markdown(
             """
-            <div style="margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
+            <div class="step-description" style="margin-bottom: 0.5rem;">
                 リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数<br>
                 総件数の算出式：総件数 ＝ 全期間の日数 － リードタイム期間 ＋ 1
             </div>
