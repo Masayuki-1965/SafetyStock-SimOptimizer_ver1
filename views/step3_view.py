@@ -284,7 +284,7 @@ def display_step3():
                 <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理前）</p>
             </div>
             """, unsafe_allow_html=True)
-            st.caption("安全在庫モデルを『現行設定』『安全在庫①』『安全在庫②』『安全在庫③』から選択してください。")
+            st.caption("※ 安全在庫モデルを「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」から選択してください。（初期値：安全在庫③）")
             
             # 安全在庫タイプ選択UI
             col1, col2 = st.columns([1, 3])
@@ -304,10 +304,10 @@ def display_step3():
             
             with col2:
                 type_descriptions = {
-                    "current": "<strong>現行設定</strong>：現行設定している安全在庫",
-                    "ss1": "<strong>安全在庫①</strong>：理論値【理論モデル】",
-                    "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績のバラつきを反映したモデル】",
-                    "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差率を考慮した推奨モデル】"
+                    "current": "<strong>【現行設定】</strong> 現行設定している安全在庫",
+                    "ss1": "<strong>【安全在庫①】</strong> 一般的な理論モデル",
+                    "ss2": "<strong>【安全在庫②】</strong> 実績バラつき実測モデル",
+                    "ss3": "<strong>【安全在庫③】</strong> 計画誤差実測モデル（推奨）"
                 }
                 st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_before]}</div>', unsafe_allow_html=True)
             
@@ -397,10 +397,10 @@ def display_step3():
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div class="step-description">全機種に対して <strong>実績異常値処理</strong>・<strong>計画異常値処理</strong>・<strong>上限カット</strong> を順番に適用し、最終的な安全在庫を確定します。<br>
-        実績異常値処理では、需要データの統計的な上振れ異常値を検出して補正します。<br>
-        計画異常値処理では、計画誤差が大きい商品について <strong>安全在庫②を代替採用</strong> して精度を確保します。<br>
-        最後に、ABC区分ごとに設定した上限日数でカットし、過剰な安全在庫を抑制します。</div>
+        <div class="step-description">全機種に対して<strong> 実績異常値処理 → 計画異常値処理 → 上限カット </strong>の順に適用し、最終的な安全在庫を確定します。<br>
+        実績異常値処理では、需要データの統計的な上振れ異常値を検出し補正します。<br>
+        計画異常値処理では、計画誤差率が 許容範囲内なら安全在庫③（推奨）、超過する場合は安全在庫②'（補正モデル） を採用して精度を確保します。<br>
+        最後に、ABC 区分ごとに設定した上限日数でカットし、過剰な安全在庫を抑制します。</div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -1008,7 +1008,7 @@ def display_step3():
                     <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理後）</p>
                 </div>
                 """, unsafe_allow_html=True)
-                st.caption("安全在庫モデルを『現行設定』『安全在庫①』『安全在庫②』『安全在庫③』から選択してください。")
+                st.caption("※ 安全在庫モデルを「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」から選択してください。（初期値：安全在庫③）")
                 
                 # 安全在庫タイプ選択UI（異常値処理前と同じ選択を維持）
                 col1, col2 = st.columns([1, 3])
@@ -1028,10 +1028,10 @@ def display_step3():
                 
                 with col2:
                     type_descriptions = {
-                        "current": "<strong>現行設定</strong>：現行設定している安全在庫",
-                        "ss1": "<strong>安全在庫①</strong>：理論値【理論モデル】",
-                        "ss2": "<strong>安全在庫②</strong>：実測値（実績 − 平均）【実績のバラつきを反映したモデル】",
-                        "ss3": "<strong>安全在庫③</strong>：実測値（実績 − 計画）【計画誤差率を考慮した推奨モデル】"
+                        "current": "<strong>【現行設定】</strong> 現行設定している安全在庫",
+                        "ss1": "<strong>【安全在庫①】</strong> 一般的な理論モデル",
+                        "ss2": "<strong>【安全在庫②】</strong> 実績バラつき実測モデル",
+                        "ss3": "<strong>【安全在庫③】</strong> 計画誤差実測モデル（推奨）"
                     }
                     st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_after]}</div>', unsafe_allow_html=True)
                 
@@ -1158,7 +1158,7 @@ def display_step3():
             </div>
             """, unsafe_allow_html=True)
             st.markdown("""
-            <div class="step-description">③で確定した最終安全在庫をSCP登録用データとして出力します。<br>CSV形式でダウンロードでき、システムへの登録に使用できます。</div>
+            <div class="step-description">手順③で確定した最終安全在庫を、SCP 登録用データ（CSV 形式）として出力します。</div>
             """, unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
             
@@ -1204,9 +1204,7 @@ def display_step3():
                 )
                 
                 # 補足説明を追加
-                st.markdown("""
-                <div class="step-description">『商品コード』と『安全在庫月数』のみをダウンロードします。安全在庫月数は『最終安全在庫_日数』÷20 で算出しています。</div>
-                """, unsafe_allow_html=True)
+                st.caption("※「商品コード」と「安全在庫月数」のみをダウンロードします。安全在庫月数は「最終安全在庫_日数」÷20 で算出しています。")
                 
                 # 登録データのプレビュー（ダウンロード対象と同じ内容を表示）
                 st.markdown('<div class="step-sub-section">登録データプレビュー</div>', unsafe_allow_html=True)
@@ -1624,12 +1622,7 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     st.dataframe(styled_matrix, use_container_width=True, height=500)
     
     # マトリクスの直下に注意文を追加
-    st.markdown("""
-    <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: #555555; font-size: 0.9rem;">
-    ※表内の数値は該当する商品コードの件数です。<br>
-    ※安全在庫_日数は加重平均です。<br><br>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("※ 表内の数値は該当する商品コードの件数です。")
     
     # CSV出力ボタン
     # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
@@ -1638,11 +1631,11 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     # マトリクス直下の罫線は削除（滑らかに繋げるため）
     with st.expander("ABC区分別_安全在庫比較マトリクスの見方", expanded=False):
         st.markdown("""
-        - 表内の数値は該当する商品コードの件数です。
-        - 現行設定_数量が0、または安全在庫①/②/③_数量が計算できない商品コードは、「0日（設定なし）」に分類します。
+        - 表内の数値は、該当する商品コードの件数です。
+        - 現行設定_数量が 0、または安全在庫①/②/③_数量が算出できない商品コードは、「0日（設定なし）」に分類します。
         - 安全在庫_数量は、各商品コードの［安全在庫_日数 × 日当たり実績］を算出し、全件集計した値です。
         - 安全在庫_日数は、全件集計した［安全在庫_数量］を全件集計した［日当たり実績］で割って求める加重平均です。
-        - 安全在庫_日数は「稼働日ベース」です（非稼働日は日当たり実績に含みません）。
+        - 安全在庫_日数は「稼働日ベース」です。
         - 在庫日数の区分は、各範囲の上限値を含みます（例：5.0日は「0〜5日」、50.0日は「40〜50日」に分類）。
         """)
 

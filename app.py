@@ -457,7 +457,7 @@ def display_step_content():
         st.markdown("""
         <div class="step-header-box">
             <div class="step-header-title">STEP 3：安全在庫算出と登録値作成（全機種）</div>
-            <div class="step-header-description">全機種を対象に、STEP2 で理解したロジックを適用して安全在庫を算出します。まず現行設定と比較し、サマリーで全体傾向を把握します。次に、全機種へ異常値処理を適用し、ABC 区分に応じた上限日数を設定して最終安全在庫を確定します。確定した安全在庫は SCP 登録用データとして出力できます。</div>
+            <div class="step-header-description">すべての商品コードに STEP2 で理解したロジックを適用し、安全在庫を算出します。現行設定と比較し、サマリーで全体傾向を把握します。続いて、異常値処理と上限日数カットを実施し、最終安全在庫を確定します。最後に、確定した安全在庫を SCP 登録用データとして出力します。</div>
         </div>
         """, unsafe_allow_html=True)
         st.divider()
