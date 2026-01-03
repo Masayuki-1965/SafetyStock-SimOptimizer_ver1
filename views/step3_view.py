@@ -772,8 +772,8 @@ def display_step3():
             </div>
             """, unsafe_allow_html=True)
             
-            # 異常値処理の実行結果（実績異常値／計画異常値／上限カット）
-            st.markdown('<div class="step-sub-section">異常値処理の実行結果（実績異常値／計画異常値／上限カット）</div>', unsafe_allow_html=True)
+            # 異常値処理（実績異常値／計画異値／上限カット）の実行結果
+            st.markdown('<div class="step-sub-section">異常値処理（実績異常値／計画異値／上限カット）の実行結果</div>', unsafe_allow_html=True)
             
             # ABC区分別のサマリーを作成
             summary_rows = []
@@ -996,7 +996,7 @@ def display_step3():
             display_df['安全在庫③_日数'] = display_df['最終安全在庫③_日数']
             
             if 'ABC区分' in display_df.columns:
-                st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス（実績異常値処理・計画異常値処理・上限カット後）</div>', unsafe_allow_html=True)
+                st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス（異常値処理後）</div>', unsafe_allow_html=True)
                 display_abc_matrix_comparison(display_df, key_prefix="abc_matrix_after")
                 
                 # 受注量の多い商品順 安全在庫比較グラフ（実績異常値処理・計画異常値処理・上限カット後）を追加
