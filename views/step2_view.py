@@ -1649,15 +1649,68 @@ def display_step2():
             
             # 2. 計画誤差率情報
             st.markdown('<div class="step-sub-section">計画誤差率情報</div>', unsafe_allow_html=True)
+            
+            # 対象期間を取得
+            target_period_str = "取得できませんでした"
+            data_loader = st.session_state.get('uploaded_data_loader')
+            if data_loader is not None:
+                try:
+                    common_start, common_end = data_loader.get_common_date_range()
+                    # 日付をYYYY/MM/DD形式にフォーマット
+                    if isinstance(common_start, str):
+                        if len(common_start) == 8:
+                            start_date_str = f"{common_start[:4]}/{common_start[4:6]}/{common_start[6:8]}"
+                        else:
+                            start_date_str = str(common_start)
+                    else:
+                        start_date_str = common_start.strftime("%Y/%m/%d")
+                    
+                    if isinstance(common_end, str):
+                        if len(common_end) == 8:
+                            end_date_str = f"{common_end[:4]}/{common_end[4:6]}/{common_end[6:8]}"
+                        else:
+                            end_date_str = str(common_end)
+                    else:
+                        end_date_str = common_end.strftime("%Y/%m/%d")
+                    
+                    target_period_str = f"{start_date_str} ～ {end_date_str}"
+                except Exception:
+                    target_period_str = "取得できませんでした"
+            
+            # 計画誤差率のフォーマット関数
+            def format_plan_error_rate_for_table(rate):
+                """計画誤差率をテーブル表示用にフォーマット（小数点第2位、プラス値に+）"""
+                if rate is not None:
+                    if rate >= 0:
+                        return f"+{rate:.2f}%"
+                    else:
+                        return f"{rate:.2f}%"
+                return "計算不可"
+            
             plan_info_data = {
                 '対象商品コード': [product_code],
-                '実績合計': [f"{actual_data.sum():,.2f}"],
+                '対象期間': [target_period_str],
                 '計画合計': [f"{plan_total:,.2f}" if plan_total > 0 else "0.00"],
-                '計画誤差（実績合計−計画合計）': [f"{plan_error:,.2f}"],
-                '計画誤差率': [f"{plan_error_rate:.1f}%" if plan_error_rate is not None else "計算不可"]
+                '実績合計': [f"{actual_data.sum():,.2f}"],
+                '計画誤差率': [format_plan_error_rate_for_table(plan_error_rate)]
             }
             plan_info_df = pd.DataFrame(plan_info_data)
-            st.dataframe(plan_info_df, use_container_width=True, hide_index=True)
+            
+            # 計画誤差率列にスタイルを適用（背景：薄い緑、文字色：緑）
+            def style_plan_error_rate_column(val):
+                """計画誤差率列のスタイル設定"""
+                if val is not None and str(val) != '' and '%' in str(val):
+                    return 'background-color: #E8F5E9; color: #2E7D32;'  # 薄い緑背景、緑文字
+                return ''
+            
+            styled_plan_info_df = plan_info_df.style.applymap(
+                style_plan_error_rate_column,
+                subset=['計画誤差率']
+            )
+            st.dataframe(styled_plan_info_df, use_container_width=True, hide_index=True)
+            
+            # テーブル直下に注釈を追加
+            st.caption("※ 計画誤差率 =（計画合計 − 実績合計）÷ 実績合計")
             
             # 3. 計画異常値処理の判定結果
             st.markdown('<div class="step-sub-section">計画異常値処理の判定結果</div>', unsafe_allow_html=True)
@@ -1759,11 +1812,22 @@ def display_step2():
             #       - 目的: 計画誤差率が許容範囲内であるため、推奨モデルである安全在庫③を採用することを伝える
             #       - 表示条件: adopted_model == "ss3" and not is_anomaly
             
+            # 計画誤差率のフォーマット関数（注釈用）
+            def format_plan_error_rate_for_annotation(rate):
+                """計画誤差率を注釈表示用にフォーマット（小数点第2位、プラス値に+）"""
+                if rate is not None:
+                    if rate >= 0:
+                        return f"+{rate:.2f}%"
+                    else:
+                        return f"{rate:.2f}%"
+                return "計算不可"
+            
             if adopted_model == "ss2_corrected":
+                formatted_error_rate = format_plan_error_rate_for_annotation(plan_error_rate)
                 st.markdown(f"""
                 <div class="annotation-warning-box">
                     <span class="icon">⚠</span>
-                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率 {plan_error_rate:.1f}% が閾値を外れたため、安全在庫②をベースに計画誤差を加味したモデル<strong> 安全在庫②' </strong>を採用します。</div>
+                    <div class="text"><strong>計画異常値処理結果：</strong>計画誤差率 {formatted_error_rate} が閾値を外れたため、安全在庫②をベースに計画誤差を加味したモデル<strong> 安全在庫②' </strong>を採用します。</div>
                 </div>
                 """, unsafe_allow_html=True)
             elif adopted_model == "ss3":
@@ -1776,12 +1840,16 @@ def display_step2():
                     """, unsafe_allow_html=True)
                 elif is_anomaly and (ratio_r is None or ratio_r <= 0):
                     # 添付1のメッセージ：計画誤差率が閾値を外れているが、比率rが算出できないため安全在庫③を採用
+                    formatted_error_rate = format_plan_error_rate_for_annotation(plan_error_rate)
+                    formatted_plus_threshold = f"+{plan_plus_threshold_final:.2f}%" if plan_plus_threshold_final >= 0 else f"{plan_plus_threshold_final:.2f}%"
+                    formatted_minus_threshold = f"+{plan_minus_threshold_final:.2f}%" if plan_minus_threshold_final >= 0 else f"{plan_minus_threshold_final:.2f}%"
                     st.markdown(f"""
-                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率 {plan_error_rate:.1f}% が閾値（{plan_plus_threshold_final:.1f}% / {plan_minus_threshold_final:.1f}%）を外れていますが、{abc_category}区分の比率rが算出できないため、計画誤差を考慮した推奨モデルである安全在庫③を採用します。</div>
+                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率 {formatted_error_rate} が閾値（{formatted_plus_threshold} / {formatted_minus_threshold}）を外れていますが、{abc_category}区分の比率rが算出できないため、計画誤差を考慮した推奨モデルである安全在庫③を採用します。</div>
                     """, unsafe_allow_html=True)
                 else:
+                    formatted_error_rate = format_plan_error_rate_for_annotation(plan_error_rate)
                     st.markdown(f"""
-                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率 {plan_error_rate:.1f}% は許容範囲内のため、推奨モデルの<strong> 安全在庫③ </strong>を採用します。</div>
+                    <div class="annotation-info-box">ℹ️ <strong>計画異常値処理結果：</strong>計画誤差率 {formatted_error_rate} は許容範囲内のため、推奨モデルの<strong> 安全在庫③ </strong>を採用します。</div>
                     """, unsafe_allow_html=True)
             
             # セッション状態に保存

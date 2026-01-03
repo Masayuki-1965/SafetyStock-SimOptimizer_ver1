@@ -436,7 +436,7 @@ def display_step_content():
         st.markdown("""
         <div class="step-header-box">
             <div class="step-header-title">STEP 2：安全在庫算出ロジック体感（選定機種）</div>
-            <div class="step-header-description">ABC 区分ごとに任意の機種を選び、3種類の安全在庫モデルを使って、【需要変動（計画誤差）の把握】→【安全在庫の算出】→【異常値処理】→【上限カット】までの一連のプロセスを実際に操作しながら体感します。手を動かしながら、「安全在庫算定」「異常値処理」「上限カット」がどう機能するのかを直感的に理解できます。</div>
+            <div class="step-header-description">任意の商品コードを選び、3種類の安全在庫モデルで【需要変動・計画誤差の把握】→【安全在庫の算出】→【異常値処理】→【上限カット】の一連のプロセスを、実際に手を動かしながら操作することで、「安全在庫算定」「異常値処理」「上限カット」の機能と動作を直感的に理解できます。</div>
         </div>
         """, unsafe_allow_html=True)
         st.divider()
