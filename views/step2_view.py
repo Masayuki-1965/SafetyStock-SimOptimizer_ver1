@@ -2201,7 +2201,7 @@ def display_step2():
                             st.markdown(f"""
                             <div class="annotation-success-box">
                                 <span class="icon">✅</span>
-                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} は変わりません。{effect_text}</div>
                             </div>
                             """, unsafe_allow_html=True)
                         # ② 現行設定 ＜ 安全在庫③ の場合
@@ -2213,7 +2213,7 @@ def display_step2():
                             st.markdown(f"""
                             <div class="annotation-success-box">
                                 <span class="icon">✅</span>
-                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                                <div class="text"><strong>採用モデル：</strong><strong>{model_display_name}</strong>を採用しました。現行比 {recommended_ratio:.2f} は変わりません。{effect_text}</div>
                             </div>
                             """, unsafe_allow_html=True)
                     # ③ 現行設定がない場合
@@ -3831,7 +3831,7 @@ def display_after_processing_comparison(product_code: str,
             st.markdown(f"""
             <div class="annotation-success-box">
                 <span class="icon">✅</span>
-                <div class="text"><strong>在庫削減効果：</strong>異常値は検出されなかったため、安全在庫③（推奨モデル）の現行比 {recommended_ratio:.2f} に変更はありません。{effect_text}</div>
+                <div class="text"><strong>在庫削減効果：</strong>異常値は検出されなかったため、安全在庫③（推奨モデル）の現行比 {recommended_ratio:.2f} は変わりません。{effect_text}</div>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -4198,7 +4198,7 @@ def display_after_cap_comparison(product_code: str,
                 st.markdown(f"""
                 <div class="annotation-success-box">
                     <span class="icon">✅</span>
-                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットが適用されなかったため、現行比 {current_ratio:.2f} に変更はありません。約 {change_rate_rounded}% の在庫削減効果が期待できます。</div>
+                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットが適用されなかったため、現行比 {current_ratio:.2f} は変わりません。約 {change_rate_rounded}% の在庫削減効果が期待できます。</div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -4206,7 +4206,7 @@ def display_after_cap_comparison(product_code: str,
                 st.markdown(f"""
                 <div class="annotation-success-box">
                     <span class="icon">✅</span>
-                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットが適用されなかったため、現行比 {current_ratio:.2f} に変更はありません。約 {change_rate_rounded}% の在庫増加となります。</div>
+                    <div class="text"><strong>在庫削減効果：</strong>採用モデルに上限カットが適用されなかったため、現行比 {current_ratio:.2f} は変わりません。約 {change_rate_rounded}% の在庫増加となります。</div>
                 </div>
                 """, unsafe_allow_html=True)
 
