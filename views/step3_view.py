@@ -835,7 +835,7 @@ def display_step3():
             st.dataframe(styled_summary_df, use_container_width=True, hide_index=True)
             
             # テーブル直下の補足説明を追加
-            st.caption("※ 割合（%）＝ 各処理件数 ÷ 商品コードの総件数 × 100")
+            st.caption("※（ ）内の％は商品コード総件数に対する割合。算出式：割合（%）＝ 各処理件数 ÷ 商品コード総件数 × 100")
             
             # 詳細データ（折り畳み式、デフォルト：非表示）
             with st.expander("詳細データを表示", expanded=False):
