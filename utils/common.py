@@ -916,6 +916,10 @@ def calculate_abc_category_ratio_r(
     ss2_total_by_category = {}
     ss3_total_by_category = {}
     
+    # 全区分の合計を計算
+    ss2_total_all = sum(ss2_by_category.values())
+    ss3_total_all = sum(ss3_by_category.values())
+    
     for category in ss2_by_category.keys():
         ss2_total = ss2_by_category[category]
         ss3_total = ss3_by_category[category]
@@ -929,8 +933,16 @@ def calculate_abc_category_ratio_r(
             ratio_r = ss3_total / ss2_total
             ratio_r_by_category[category] = ratio_r
     
+    # 全区分の比率rを計算
+    ratio_r_all = None
+    if ss2_total_all > 0:
+        ratio_r_all = ss3_total_all / ss2_total_all
+    
     return {
         'ratio_r': ratio_r_by_category,
         'ss2_total': ss2_total_by_category,
-        'ss3_total': ss3_total_by_category
+        'ss3_total': ss3_total_by_category,
+        'ratio_r_all': ratio_r_all,
+        'ss2_total_all': ss2_total_all,
+        'ss3_total_all': ss3_total_all
     }

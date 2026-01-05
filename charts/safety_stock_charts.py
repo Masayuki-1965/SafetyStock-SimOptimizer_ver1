@@ -704,7 +704,7 @@ def create_order_volume_comparison_chart_before(results_df: pd.DataFrame, safety
     if len(chart_df) == 0:
         # 空のグラフを返す
         fig = go.Figure()
-        fig.update_layout(title=f'受注量順 「{type_name}」 比較グラフ（異常値処理前）')
+        fig.update_layout(title=f'■ 受注量順 「{type_name}」 比較グラフ（異常値処理前）')
         return fig
     
     # 受注量（日当たり実績）で降順ソート
@@ -836,7 +836,7 @@ def create_order_volume_comparison_chart_before(results_df: pd.DataFrame, safety
     
     # レイアウト設定
     fig.update_layout(
-        title=f'受注量順 「{type_name}」 比較グラフ（異常値処理前）',
+        title=f'■ 受注量順 「{type_name}」 比較グラフ（異常値処理前）',
         xaxis_title='商品コード（数量・降順）',
         yaxis_title='数量',
         yaxis2_title='日数',
@@ -927,9 +927,9 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
         fig = go.Figure()
         # 現行設定の場合は「（異常値処理後）」を削除
         if safety_stock_type == "current":
-            title = f'受注量順 「{type_name}」 比較グラフ'
+            title = f'■ 受注量順 「{type_name}」 比較グラフ'
         else:
-            title = f'受注量順 「{type_name}」 比較グラフ（異常値処理後）'
+            title = f'■ 受注量順 「{type_name}」 比較グラフ（異常値処理後）'
         fig.update_layout(title=title)
         return fig
     
@@ -1139,9 +1139,9 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
     # レイアウト設定
     # 現行設定の場合は「（異常値処理後）」を削除
     if safety_stock_type == "current":
-        title = f'受注量順 「{type_name}」 比較グラフ'
+        title = f'■ 受注量順 「{type_name}」 比較グラフ'
     else:
-        title = f'受注量順 「{type_name}」 比較グラフ（異常値処理後）'
+        title = f'■ 受注量順 「{type_name}」 比較グラフ（異常値処理後）'
     fig.update_layout(
         title=title,
         xaxis_title='商品コード（受注数・降順）',
