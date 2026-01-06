@@ -550,7 +550,7 @@ def display_abc_classification_section():
     
     # 実行ボタン
     st.markdown("---")
-    if st.button("ABC区分を自動生成する", type="primary", use_container_width=True):
+    if st.button("ABC区分を自動生成する", type="primary", width='stretch'):
         execute_abc_analysis(data_loader)
     
     # 結果表示
@@ -797,7 +797,7 @@ def display_abc_results(results):
     aggregation_df['実績合計'] = aggregation_df['実績合計'].apply(lambda x: f"{x:,.0f}")
     aggregation_df['構成比率（％）'] = aggregation_df['構成比率（％）'].apply(lambda x: f"{x:.2f}")
     
-    st.dataframe(aggregation_df, use_container_width=True, hide_index=True)
+    st.dataframe(aggregation_df, width='stretch', hide_index=True)
 
 if __name__ == "__main__":
     main()

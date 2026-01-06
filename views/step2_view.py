@@ -513,7 +513,7 @@ def display_step2():
         st.session_state.step2_lt_delta_total_count = None
     
     # ボタン: 実績のばらつきと計画誤差を可視化する
-    if st.button("実績のばらつきと計画誤差を可視化する", type="primary", use_container_width=True, key="step2_lt_delta_button"):
+    if st.button("実績のばらつきと計画誤差を可視化する", type="primary", width='stretch', key="step2_lt_delta_button"):
         try:
             # データ取得
             if st.session_state.uploaded_data_loader is not None:
@@ -598,6 +598,12 @@ def display_step2():
         total_count = st.session_state.get('step2_lt_delta_total_count')
         lead_time_days = lt_delta_data['lead_time_days']
         
+        # 手順⑥以降では処理後の実績データを使用（詳細データ表示を処理後の実績で統一）
+        # 手順⑥以降ではafter_calculatorを使用、それ以前はcalculatorを使用
+        display_calculator = calculator
+        if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_calculator') is not None:
+            display_calculator = st.session_state.get('step2_after_calculator')
+        
         # 1. 日次計画と日次実績の時系列推移
         st.markdown('<div class="step-sub-section">日次計画と日次実績の時系列推移</div>', unsafe_allow_html=True)
         
@@ -623,9 +629,9 @@ def display_step2():
                 working_dates = data_loader.get_working_dates()
                 if working_dates is not None and len(working_dates) > 0:
                     working_dates_in_range = [d for d in working_dates if common_start <= d <= common_end]
-                    working_days_count = len(working_dates_in_range) if working_dates_in_range else len(calculator.plan_data)
+                    working_days_count = len(working_dates_in_range) if working_dates_in_range else len(display_calculator.plan_data)
                 else:
-                    working_days_count = len(calculator.plan_data)
+                    working_days_count = len(display_calculator.plan_data)
                 
                 # ABC区分を取得
                 abc_category = get_product_category(product_code)
@@ -644,12 +650,12 @@ def display_step2():
             except Exception:
                 pass
         
-        fig = create_time_series_chart(product_code, calculator)
-        st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}")
+        fig = create_time_series_chart(product_code, display_calculator)
+        st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
         
         # 2. 日次計画と日次実績の統計情報（計画誤差率を追加）
         st.markdown('<div class="step-sub-section">日次計画と日次実績の統計情報</div>', unsafe_allow_html=True)
-        display_plan_actual_statistics(product_code, calculator)
+        display_plan_actual_statistics(product_code, display_calculator)
         
         # 3. リードタイム区間の総件数（スライド集計）
         st.markdown('<div class="step-sub-section">リードタイム区間の総件数（スライド集計）</div>', unsafe_allow_html=True)
@@ -794,7 +800,7 @@ def display_step2():
             """, unsafe_allow_html=True)
         
         fig = create_lead_time_total_time_series_chart(product_code, calculator)
-        st.plotly_chart(fig, use_container_width=True, key=f"lead_time_total_time_series_step2_{product_code}")
+        st.plotly_chart(fig, use_container_width=True, key=f"lead_time_total_time_series_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
         
         # 5. リードタイム期間合計（計画・実績）の統計情報（NEW）
         st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の統計情報</div>', unsafe_allow_html=True)
@@ -868,7 +874,7 @@ def display_step2():
             """, unsafe_allow_html=True)
         
         fig, delta2_for_stats_step3, delta3_for_stats_step3 = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
-        st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}")
+        st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
         
         # 時系列グラフで使ったdelta2とdelta3をセッション状態に保存（統計情報テーブルで使用）
         st.session_state.step2_delta2_for_stats_step3 = delta2_for_stats_step3
@@ -911,7 +917,7 @@ def display_step2():
             st.session_state.step2_product_code = None
         
         # ボタン: 安全在庫を算出する
-        if st.button("安全在庫を算出する", type="primary", use_container_width=True, key="step2_calculate_button"):
+        if st.button("安全在庫を算出する", type="primary", width='stretch', key="step2_calculate_button"):
             try:
                 # データ取得（手順②で計算済みのデータを再利用）
                 if st.session_state.get('step2_lt_delta_plan_data') is not None:
@@ -1060,7 +1066,7 @@ def display_step2():
             """, unsafe_allow_html=True)
             
             fig, delta2_for_stats, delta3_for_stats = create_time_series_delta_bar_chart(product_code, results, calculator, show_safety_stock_lines=True)
-            st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step3_{product_code}")
+            st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step3_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
             
             # 時系列グラフで使ったdelta2とdelta3をセッション状態に保存（統計情報テーブルで使用）
             st.session_state.step2_delta2_for_stats = delta2_for_stats
@@ -1133,7 +1139,7 @@ def display_step2():
                 """, unsafe_allow_html=True)
             
             fig = create_histogram_with_unified_range(product_code, results, calculator)
-            st.plotly_chart(fig, use_container_width=True, key=f"histogram_{product_code}")
+            st.plotly_chart(fig, use_container_width=True, key=f"histogram_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
             # 安全在庫算出メッセージを表示
             hist_data = calculator.get_histogram_data()
             series_avg_diff = hist_data['model2_delta']
@@ -1228,7 +1234,7 @@ def display_step2():
             st.session_state.step2_imputed_data = None
         
         # ボタン2: 実績異常値処理を実施する
-        if st.button("実績異常値処理を実施する", type="primary", use_container_width=True, key="step2_outlier_button"):
+        if st.button("実績異常値処理を実施する", type="primary", width='stretch', key="step2_outlier_button"):
             try:
                 actual_data = st.session_state.get('step2_actual_data')
                 working_dates = st.session_state.get('step2_working_dates')
@@ -1395,7 +1401,7 @@ def display_step2():
             st.session_state.step2_after_calculator = None
         
         # ボタン4: 異常値処理前後の安全在庫を再算出・比較する
-        if st.button("安全在庫を再算出・比較する", type="primary", use_container_width=True, key="step2_recalculate_button"):
+        if st.button("安全在庫を再算出・比較する", type="primary", width='stretch', key="step2_recalculate_button"):
             try:
                 plan_data = st.session_state.get('step2_plan_data')
                 imputed_data = st.session_state.get('step2_imputed_data')
@@ -1603,7 +1609,7 @@ def display_step2():
                 is_before_ss1_undefined,
                 is_after_ss1_undefined
             )
-            st.plotly_chart(fig, use_container_width=True, key=f"delta_distribution_{product_code}")
+            st.plotly_chart(fig, use_container_width=True, key=f"delta_distribution_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
             
             # 異常値処理後の安全在庫設定の説明注釈
             total_count_after = len(after_delta2)  # または len(after_delta3)、どちらでも同じ
@@ -1624,9 +1630,7 @@ def display_step2():
                 """, unsafe_allow_html=True)
             
             st.divider()
-        else:
-            # ボタン押下前は軽いメッセージのみ表示
-            st.info("💡 「安全在庫を再算出・比較する」ボタンを押すと、LT間差分の分布グラフが表示されます。")
+        # ボタン押下前のメッセージは削除
     
     # ========== 手順⑦：計画異常値処理を実施し、安全在庫を適正化する ==========
     if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_results') is not None:
@@ -1751,7 +1755,7 @@ def display_step2():
                 style_plan_error_rate_column,
                 subset=['計画誤差率']
             )
-            st.dataframe(styled_plan_info_df, use_container_width=True, hide_index=True)
+            st.dataframe(styled_plan_info_df, width='stretch', hide_index=True)
             
             # テーブル直下に注釈を追加
             st.caption("※ 計画誤差率 =（計画合計 − 実績合計）÷ 実績合計")
@@ -1963,7 +1967,7 @@ def display_step2():
             )
             
             # ボタン: 安全在庫を適正化する
-            if st.button("安全在庫を適正化する", type="primary", use_container_width=True, key="step2_finalize_safety_stock_button"):
+            if st.button("安全在庫を適正化する", type="primary", width='stretch', key="step2_finalize_safety_stock_button"):
                 # 比率rを算出（初回計算時またはパラメータ変更時）
                 # 初期表示時に既に算出されている場合は再計算不要
                 if needs_recalc_for_button:
@@ -2130,7 +2134,7 @@ def display_step2():
                             ratio_r=ratio_r,
                             daily_actual_mean=daily_actual_mean  # 計画誤差分の数量計算用
                         )
-                        st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}")
+                        st.plotly_chart(fig_left, use_container_width=True, key=f"adopted_model_left_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
                     
                     with col_arrow:
                         # 中央の矢印を縦に3つ並べて強調表示
@@ -2144,7 +2148,7 @@ def display_step2():
                     
                     with col_right:
                         # 右側グラフ：採用モデル専用
-                        st.plotly_chart(fig_right, use_container_width=True, key=f"adopted_model_right_{product_code}")
+                        st.plotly_chart(fig_right, use_container_width=True, key=f"adopted_model_right_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
                 
                 # c) テーブル
                 theoretical_value = final_results['model1_theoretical']['safety_stock']
@@ -2219,7 +2223,7 @@ def display_step2():
                 }
                 </style>
                 """, unsafe_allow_html=True)
-                st.dataframe(styled_df, use_container_width=True)
+                st.dataframe(styled_df, width='stretch')
                 
                 # c-2) 安全在庫②'の算出根拠（補正内訳）- 計画誤差率が閾値外の場合のみ表示
                 if adopted_model == "ss2_corrected":
@@ -2573,7 +2577,7 @@ def display_step2():
             st.session_state.step2_final_calculator = None
         
         # ボタン5: 上限カットを適用する
-        if st.button("上限カットを適用する", type="primary", use_container_width=True, key="step2_apply_cap_button"):
+        if st.button("上限カットを適用する", type="primary", width='stretch', key="step2_apply_cap_button"):
             try:
                 plan_data = st.session_state.get('step2_plan_data')
                 imputed_data = st.session_state.get('step2_imputed_data')
@@ -2932,7 +2936,7 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
         style_plan_error_rate,
         subset=['計画誤差率']
     )
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    st.dataframe(styled_df, width='stretch', hide_index=True)
     
     # 誤差率の注記を表の下に追加
     st.caption("※ 計画誤差率＝（計画合計ー実績合計）÷実績合計")
@@ -3175,7 +3179,7 @@ def display_lead_time_total_statistics(product_code: str, calculator: SafetyStoc
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
     
     # スタイルを適用したDataFrameを表示
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, width='stretch', hide_index=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -3314,7 +3318,7 @@ def display_delta_statistics_from_data(product_code: str, delta2: pd.Series, del
     
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, width='stretch', hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -3380,7 +3384,7 @@ def display_delta_statistics(product_code: str, calculator: SafetyStockCalculato
     
     # グラフ直下に配置するためのスタイル適用
     st.markdown('<div class="statistics-table-container">', unsafe_allow_html=True)
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, width='stretch', hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -3418,7 +3422,7 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
             is_ss1_undefined=is_model1_undefined,
             use_after_colors=False  # Before色を使用
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"safety_stock_comparison_{product_code}")
+        st.plotly_chart(fig, use_container_width=True, key=f"safety_stock_comparison_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
     
     # 2. 比較テーブルを表示
     stockout_tolerance_pct = results['common_params']['stockout_tolerance_pct']
@@ -3497,7 +3501,7 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
     """, unsafe_allow_html=True)
     
     # インデックスを表示してテーブルを表示（手順⑥と同じ）
-    st.dataframe(comparison_df, use_container_width=True)
+    st.dataframe(comparison_df, width='stretch')
     
     # 算出条件テーブルを追加（折りたたみ式、初期状態は閉じる）
     # このブロックと上部のテーブルを一体的に見せたいので、間に余計なスペースは入れない
@@ -3537,7 +3541,7 @@ def display_safety_stock_comparison(product_code: str, results: dict, calculator
         }
         
         calculation_conditions_df = pd.DataFrame(calculation_conditions_data)
-        st.dataframe(calculation_conditions_df, use_container_width=True, hide_index=True)
+        st.dataframe(calculation_conditions_df, width='stretch', hide_index=True)
     
     # 区分別上限適用情報を表示（実際に上限カットが適用された場合のみ表示）
     if calculator.abc_category:
@@ -3605,7 +3609,7 @@ def display_outlier_processing_results(product_code: str,
     
     # chartsモジュールからグラフを生成
     fig = create_outlier_processing_results_chart(product_code, before_data, after_data, outlier_indices)
-    st.plotly_chart(fig, use_container_width=True, key=f"outlier_detail_{product_code}")
+    st.plotly_chart(fig, use_container_width=True, key=f"outlier_detail_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
     
     # 異常値処理の詳細情報を表示（グラフの後に表示）
     # show_detailsがFalseの場合は表示しない
@@ -3861,7 +3865,7 @@ def display_outlier_lt_delta_comparison(product_code: str,
         is_after_ss1_undefined
     )
     
-    st.plotly_chart(fig, use_container_width=True, key=f"after_cap_comparison_{product_code}")
+    st.plotly_chart(fig, use_container_width=True, key=f"after_cap_comparison_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
 
 
 def display_after_processing_comparison(product_code: str,
@@ -3882,20 +3886,25 @@ def display_after_processing_comparison(product_code: str,
     if after_mean_demand <= 0:
         after_mean_demand = 1.0
     
-    # 現行安全在庫（日数）を取得
+    # 現行安全在庫（日数）を取得（Before/Afterで不変）
     current_days = before_results['current_safety_stock']['safety_stock_days']
-    current_value = before_results['current_safety_stock']['safety_stock']
+    
+    # 現行設定の数量を計算
+    # Before: 処理前の日当たり実績×固定日数
+    current_value_before = before_results['current_safety_stock']['safety_stock']
+    # After: 処理後の日当たり実績×固定日数（日数は不変、数量は変動）
+    current_value_after = current_days * after_mean_demand if after_mean_demand > 0 else 0.0
     
     # 安全在庫数量を安全在庫日数に変換
-    # 比較の一貫性を保つため、処理前のデータの平均を基準として使用する
+    # 処理前の安全在庫：処理前の日当たり実績で日数換算
     before_ss1_days = before_results['model1_theoretical']['safety_stock'] / before_mean_demand if before_results['model1_theoretical']['safety_stock'] is not None else None
     before_ss2_days = before_results['model2_empirical_actual']['safety_stock'] / before_mean_demand
     before_ss3_days = before_results['model3_empirical_plan']['safety_stock'] / before_mean_demand
     
-    # 処理後の安全在庫も、処理前のデータの平均で日数換算する（比較の一貫性のため）
-    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / before_mean_demand if after_results['model1_theoretical']['safety_stock'] is not None else None
-    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / before_mean_demand
-    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / before_mean_demand
+    # 処理後の安全在庫：処理後の日当たり実績で日数換算（数量算出に使用した実績と同じ基準）
+    after_ss1_days = after_results['model1_theoretical']['safety_stock'] / after_mean_demand if after_results['model1_theoretical']['safety_stock'] is not None else None
+    after_ss2_days = after_results['model2_empirical_actual']['safety_stock'] / after_mean_demand
+    after_ss3_days = after_results['model3_empirical_plan']['safety_stock'] / after_mean_demand
     
     # 安全在庫①が未定義かどうか
     is_before_ss1_undefined = before_results['model1_theoretical'].get('is_undefined', False) or before_results['model1_theoretical']['safety_stock'] is None
@@ -3927,8 +3936,8 @@ def display_after_processing_comparison(product_code: str,
             after_ss3_days=after_ss3_days,
             is_before_ss1_undefined=is_before_ss1_undefined,
             is_after_ss1_undefined=is_after_ss1_undefined,
-            mean_demand=before_mean_demand,  # 比較の一貫性のため、処理前のデータの平均を使用
-            current_value=current_value,
+            mean_demand=after_mean_demand,  # 現行設定のAfter数量計算用に処理後の日当たり実績を使用
+            current_value=current_value_after,  # 処理後の日当たり実績×固定日数
             before_ss1_value=before_ss1_value,
             before_ss2_value=before_ss2_value,
             before_ss3_value=before_ss3_value,
@@ -3936,7 +3945,7 @@ def display_after_processing_comparison(product_code: str,
             after_ss2_value=after_ss2_value,
             after_ss3_value=after_ss3_value
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"after_processing_comparison_detail_{product_code}")
+        st.plotly_chart(fig, use_container_width=True, key=f"after_processing_comparison_detail_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
     
     # 2. 比較テーブル + 現行比表示
     # 処理前の安全在庫数量を取得
@@ -3997,10 +4006,11 @@ def display_after_processing_comparison(product_code: str,
             current_ratios.append("—")
     
     # 現行安全在庫の表示形式を作成
-    # 処理前と処理後は常に同じ値なので「同上」と表示
-    current_display_before = f"{current_value:.2f}（{current_days:.1f}日）"
-    current_display_after = "同上"
-    current_ratio_display = "1.00"
+    # 日数は不変、数量は処理後の日当たり実績×固定日数で変動
+    current_display_before = f"{current_value_before:.2f}（{current_days:.1f}日）"
+    current_display_after = f"{current_value_after:.2f}（{current_days:.1f}日）"
+    # 現行比は処理後の数量÷処理前の数量（日数は同じなので実質的に日当たり実績の比率）
+    current_ratio_display = f"{current_value_after / current_value_before:.2f}" if current_value_before > 0 else "1.00"
     
     # 欠品許容率とZの対応表示を取得
     stockout_tolerance_pct = before_results['common_params']['stockout_tolerance_pct']
@@ -4037,7 +4047,7 @@ def display_after_processing_comparison(product_code: str,
     }
     
     comparison_df = pd.DataFrame(comparison_data, index=['処理前_安全在庫数量（日数）', '処理後_安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
-    st.dataframe(comparison_df, use_container_width=True)
+    st.dataframe(comparison_df, width='stretch')
     
     # 3. テキストボックス型注釈を表示
     if current_days <= 0:
@@ -4243,7 +4253,7 @@ def display_after_cap_comparison(product_code: str,
                 ratio_r=ratio_r_for_chart,
                 daily_actual_mean=daily_actual_mean_for_chart
             )
-            st.plotly_chart(fig_left, use_container_width=True, key=f"cap_adopted_model_left_{product_code}")
+            st.plotly_chart(fig_left, use_container_width=True, key=f"cap_adopted_model_left_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
         
         with col_arrow:
             # 中央の矢印を縦に3つ並べて強調表示
@@ -4257,7 +4267,7 @@ def display_after_cap_comparison(product_code: str,
         
         with col_right:
             # 右側グラフ：採用モデル専用
-            st.plotly_chart(fig_right, use_container_width=True, key=f"cap_adopted_model_right_{product_code}")
+            st.plotly_chart(fig_right, use_container_width=True, key=f"cap_adopted_model_right_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
     
     # 処理前の安全在庫数量を取得
     before_quantities = [
@@ -4393,7 +4403,7 @@ def display_after_cap_comparison(product_code: str,
     }
     </style>
     """, unsafe_allow_html=True)
-    st.dataframe(styled_df, use_container_width=True)
+    st.dataframe(styled_df, width='stretch')
     
     # 3. テキストボックス型注釈を表示（4パターン動的表示）
     # 採用モデルのみを基準として判定

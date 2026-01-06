@@ -30,11 +30,11 @@ def display_sidebar():
 
             if is_active:
                 # アクティブなステップはprimaryスタイル（濃い青＋白字）
-                if st.button(button_label, key=f"step_{step_num}", use_container_width=True, type="primary"):
+                if st.button(button_label, key=f"step_{step_num}", width='stretch', type="primary"):
                     pass  # 既にアクティブなステップは何もしない
             else:
                 # 非アクティブなステップはsecondaryスタイル（薄い青＋青字）
-                if st.button(button_label, key=f"step_{step_num}", use_container_width=True, type="secondary"):
+                if st.button(button_label, key=f"step_{step_num}", width='stretch', type="secondary"):
                     st.session_state.current_step = step_num
                     # ページ最上部にスクロールするためのマーカーを設定
                     st.session_state.scroll_to_top = True

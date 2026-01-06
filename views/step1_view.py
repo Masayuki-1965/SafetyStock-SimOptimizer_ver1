@@ -271,7 +271,7 @@ def display_file_upload_section():
     with col1:
         st.markdown('<div class="step1-sub-section">① 月次計画データ</div>', unsafe_allow_html=True)
         monthly_plan_file = st.file_uploader(
-            "",
+            "月次計画データ",
             type=['csv'],
             help="形式: 行=商品コード、列=日付（YYYYMM）、セル=数量（数値）",
             key="monthly_plan_uploader",
@@ -287,7 +287,7 @@ def display_file_upload_section():
     with col2:
         st.markdown('<div class="step1-sub-section">② 日次実績データ</div>', unsafe_allow_html=True)
         actual_file = st.file_uploader(
-            "",
+            "日次実績データ",
             type=['csv'],
             help="形式: 行=商品コード、列=日付（YYYYMMDD）、セル=数量（数値）",
             key="actual_uploader",
@@ -302,7 +302,7 @@ def display_file_upload_section():
     with col3:
         st.markdown('<div class="step1-sub-section">③ 安全在庫データ</div>', unsafe_allow_html=True)
         safety_stock_file = st.file_uploader(
-            "",
+            "安全在庫データ",
             type=['csv'],
             help="形式: A列=商品コード、B列=安全在庫月数",
             key="safety_stock_uploader",
@@ -334,7 +334,7 @@ def display_file_upload_section():
 
     st.markdown('<div class="step1-sub-section">④ ABC区分データ（任意）</div>', unsafe_allow_html=True)
     current_abc_file = st.file_uploader(
-        "",
+        "ABC区分データ（任意）",
         type=['csv'],
         help="形式: A列=商品コード、B列=ABC区分（A/B/C/Z）",
         key="current_abc_uploader",
@@ -361,7 +361,7 @@ def display_file_upload_section():
         """, unsafe_allow_html=True)
     
     # データ処理ボタン（全幅表示、常に表示）
-    if st.button("データを取り込む（確定）", type="primary", use_container_width=True):
+    if st.button("データを取り込む（確定）", type="primary", width='stretch'):
         process_uploaded_files(
             st.session_state.get('uploaded_monthly_plan_file_obj'),
             st.session_state.get('uploaded_actual_file_obj'),
@@ -570,7 +570,7 @@ def display_abc_classification_section():
             display_abc_range_settings()
         
         # 実行ボタン
-        if st.button("ABC区分を自動生成する", type="primary", use_container_width=True):
+        if st.button("ABC区分を自動生成する", type="primary", width='stretch'):
             execute_abc_analysis(data_loader)
         
         # 結果表示（自動生成モードの場合のみ）
@@ -867,7 +867,7 @@ def display_abc_results(results):
     aggregation_df['実績合計'] = aggregation_df['実績合計'].apply(lambda x: f"{x:,.0f}")
     aggregation_df['構成比率（％）'] = aggregation_df['構成比率（％）'].apply(lambda x: f"{x:.2f}")
     
-    st.dataframe(aggregation_df, use_container_width=True, hide_index=True)
+    st.dataframe(aggregation_df, width='stretch', hide_index=True)
 
 
 def apply_existing_abc_results(data_loader):

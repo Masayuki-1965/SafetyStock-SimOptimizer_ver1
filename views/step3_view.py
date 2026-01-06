@@ -147,7 +147,7 @@ def display_step3():
     st.markdown("<br>", unsafe_allow_html=True)
     
     # 実行ボタン
-    if st.button("安全在庫を算出する", type="primary", use_container_width=True):
+    if st.button("安全在庫を算出する", type="primary", width='stretch'):
         # STEP1のデータ整合性チェック結果から「計画のみ」の商品コードリストを取得
         plan_only_codes = set()
         mismatch_detail_df = st.session_state.get('product_code_mismatch_detail_df')
@@ -346,7 +346,7 @@ def display_step3():
                 y2_max=st.session_state.step3_before_y2_max
             )
             if len(fig.data) > 0:
-                st.plotly_chart(fig, use_container_width=True, key="order_volume_comparison_chart_before")
+                st.plotly_chart(fig, use_container_width=True, key="order_volume_comparison_chart_before", config={'displayModeBar': True, 'displaylogo': False})
                 
                 # 縦軸最大値の入力欄を追加
                 col_y1, col_y2 = st.columns(2)
@@ -385,8 +385,8 @@ def display_step3():
             # 存在する列のみを選択
             available_columns = [col for col in column_order if col in results_df.columns]
             results_df_display = results_df[available_columns]
-            # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
-            st.dataframe(results_df_display, use_container_width=True, hide_index=True)
+            # 横スクロールを有効化（width='stretch'で自動的に横スクロール可能）
+            st.dataframe(results_df_display, width='stretch', hide_index=True)
         
         # CSVエクスポート（列順を指定）
         # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
@@ -519,7 +519,7 @@ def display_step3():
         st.session_state.category_cap_days = category_cap_days
         
         # 実績異常値処理・計画異常値処理・上限カットと最終安全在庫の確定ボタン
-        if st.button("実績異常値処理・計画異常値処理・上限カットを実施する", type="primary", use_container_width=True):
+        if st.button("実績異常値処理・計画異常値処理・上限カットを実施する", type="primary", width='stretch'):
             # ②で算出した結果が存在するか確認
             if 'all_products_results' not in st.session_state or st.session_state.all_products_results is None:
                 st.error("❌ 先に「② 全機種_安全在庫を算出する」を実行してください。")
@@ -788,14 +788,19 @@ def display_step3():
                         ss3_before_qty = 0
                         ss3_before_days = 0
                     
-                    # 月当たり実績を取得（analysis_resultから）
-                    monthly_avg_actual = 0.0
-                    if 'monthly_avg_actual' in analysis_result.columns:
-                        product_monthly = analysis_result[analysis_result['product_code'] == product_code]
-                        if len(product_monthly) > 0:
-                            monthly_avg_actual = product_monthly.iloc[0]['monthly_avg_actual']
-                            if pd.isna(monthly_avg_actual):
-                                monthly_avg_actual = 0.0
+                    # 月当たり実績を計算（実績異常値処理後のデータから）
+                    # 対象期間の月数を計算
+                    if len(working_dates) > 0:
+                        start_date = working_dates[0]
+                        end_date = working_dates[-1]
+                        target_months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+                        target_months = max(1, target_months)
+                    else:
+                        target_months = 1
+                    
+                    # 実績異常値処理後の実績合計を月数で割る
+                    corrected_total = corrected_data.sum()
+                    monthly_avg_actual = corrected_total / target_months if target_months > 0 else 0.0
                     
                     # 採用補正比率rを取得（安全在庫②'が計算された場合）
                     ratio_r_used = None
@@ -951,7 +956,7 @@ def display_step3():
                 return [''] * len(row)
             
             styled_summary_df = summary_df.style.apply(style_summary_table, axis=1)
-            st.dataframe(styled_summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(styled_summary_df, width='stretch', hide_index=True)
             
             # テーブル直下の補足説明を追加
             st.caption("※ カッコ内の％は商品コード総件数に対する割合。算出式：割合（%）＝ 各処理件数 ÷ 商品コード総件数 × 100")
@@ -1056,7 +1061,7 @@ def display_step3():
                     
                     styled_df = styled_df.set_table_styles(header_styles)
                     
-                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                    st.dataframe(styled_df, width='stretch', hide_index=True)
                 else:
                     st.info("実績異常値処理・計画異常値処理・上限カットが実施された商品はありません。")
             
@@ -1088,7 +1093,9 @@ def display_step3():
             
             if 'ABC区分' in display_df.columns:
                 st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス（異常値処理後）</div>', unsafe_allow_html=True)
-                display_abc_matrix_comparison_after(display_df, key_prefix="abc_matrix_after")
+                # 異常値処理前のデータを取得（現行設定の集計用）
+                before_results_df = st.session_state.get('all_products_results')
+                display_abc_matrix_comparison_after(display_df, before_results_df=before_results_df, key_prefix="abc_matrix_after")
                 
                 # 受注量の多い商品順 安全在庫比較グラフ（実績異常値処理・計画異常値処理・上限カット後）を追加
                 # Before/Afterを1つのグラフに統合して表示
@@ -1195,7 +1202,7 @@ def display_step3():
                     y2_max=st.session_state.step3_after_y2_max
                 )
                 if len(fig.data) > 0:
-                    st.plotly_chart(fig, use_container_width=True, key="order_volume_comparison_chart_after")
+                    st.plotly_chart(fig, use_container_width=True, key="order_volume_comparison_chart_after", config={'displayModeBar': True, 'displaylogo': False})
                     
                     # 縦軸最大値の入力欄を追加
                     col_y1, col_y2 = st.columns(2)
@@ -1306,8 +1313,8 @@ def display_step3():
                         available_columns.append(column_mapping[col])
                 
                 display_detail_df_display = display_detail_df[available_columns]
-                # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
-                st.dataframe(display_detail_df_display, use_container_width=True, hide_index=True)
+                # 横スクロールを有効化（width='stretch'で自動的に横スクロール可能）
+                st.dataframe(display_detail_df_display, width='stretch', hide_index=True)
             
             # CSVエクスポート
             # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
@@ -1324,7 +1331,7 @@ def display_step3():
             """, unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
             
-            if st.button("安全在庫登録データを作成する", type="primary", use_container_width=True):
+            if st.button("安全在庫登録データを作成する", type="primary", width='stretch'):
                 # 登録用データを作成（最終安全在庫を使用）
                 registration_df = final_results_df[[
                     '商品コード', 'ABC区分', 
@@ -1373,19 +1380,20 @@ def display_step3():
                 # テーブルの横幅をさらにコンパクト化し、左寄せで表示（現在の約半分の幅）
                 col1, col2 = st.columns([1, 3])
                 with col1:
-                    st.dataframe(scp_registration_df, use_container_width=True, hide_index=True)
+                    st.dataframe(scp_registration_df, width='stretch', hide_index=True)
 
 
 # ========================================
 # STEP3専用のUIヘルパー関数
 # ========================================
 
-def display_abc_matrix_comparison_after(results_df, key_prefix="abc_matrix"):
+def display_abc_matrix_comparison_after(results_df, before_results_df=None, key_prefix="abc_matrix"):
     """
     ABC区分別 安全在庫比較結果をマトリクス形式で表示（異常値処理後用）
     
     Args:
         results_df: 全機種の安全在庫算出結果DataFrame（異常値処理後）
+        before_results_df: 異常値処理前のDataFrame（現行設定の集計用、オプション）
         key_prefix: ダウンロードボタンの一意のキープレフィックス
     """
     # 見出しは呼び出し側で表示するため、ここでは表示しない
@@ -1553,16 +1561,26 @@ def display_abc_matrix_comparison_after(results_df, key_prefix="abc_matrix"):
                 category_char = category.replace('区分', '')
                 target_df = results_df[results_df['ABC区分'] == category_char]
             
+            # 現行設定の数量合計は処理後の日当たり実績×固定日数で計算
+            # 日数は不変だが、数量は処理後の実績で換算するため変動する
+            if ss_type == '現行設定':
+                # 処理後の日当たり実績を使用（数量合計を処理後実績×固定日数で計算）
+                merged_df = target_df
+                daily_actual_col = '日当たり実績'  # 処理後の日当たり実績を使用
+            else:
+                merged_df = target_df
+                daily_actual_col = '日当たり実績'
+            
             valid_mask = (
-                (target_df['日当たり実績'].notna()) &
-                (target_df['日当たり実績'] > 0) &
-                (target_df[days_col].notna()) &
-                (target_df[days_col] > 0)
+                (merged_df[daily_actual_col].notna()) &
+                (merged_df[daily_actual_col] > 0) &
+                (merged_df[days_col].notna()) &
+                (merged_df[days_col] > 0)
             )
             
             if valid_mask.sum() > 0:
-                valid_df = target_df[valid_mask]
-                ss_quantity = (valid_df[days_col] * valid_df['日当たり実績']).sum()
+                valid_df = merged_df[valid_mask]
+                ss_quantity = (valid_df[days_col] * valid_df[daily_actual_col]).sum()
                 ss_quantity = round(ss_quantity)  # 四捨五入
             else:
                 ss_quantity = 0
@@ -1581,17 +1599,25 @@ def display_abc_matrix_comparison_after(results_df, key_prefix="abc_matrix"):
                 category_char = category.replace('区分', '')
                 target_df = results_df[results_df['ABC区分'] == category_char]
             
+            # 現行設定の日数計算も処理後の日当たり実績を使用
+            # 数量合計 = 処理後の日当たり実績×固定日数の合計
+            # 日当たり実績合計 = 処理後の日当たり実績の合計
+            # 加重平均日数 = 数量合計 / 日当たり実績合計
+            # これにより、商品コード単位の日数は固定だが、サマリーの加重平均日数は変動する
+            merged_df = target_df
+            daily_actual_col = '日当たり実績'  # 処理後の日当たり実績を使用
+            
             valid_mask = (
-                (target_df['日当たり実績'].notna()) &
-                (target_df['日当たり実績'] > 0) &
-                (target_df[days_col].notna()) &
-                (target_df[days_col] > 0)
+                (merged_df[daily_actual_col].notna()) &
+                (merged_df[daily_actual_col] > 0) &
+                (merged_df[days_col].notna()) &
+                (merged_df[days_col] > 0)
             )
             
             if valid_mask.sum() > 0:
-                valid_df = target_df[valid_mask]
-                total_ss_quantity = (valid_df[days_col] * valid_df['日当たり実績']).sum()
-                total_daily_actual = valid_df['日当たり実績'].sum()
+                valid_df = merged_df[valid_mask]
+                total_ss_quantity = (valid_df[days_col] * valid_df[daily_actual_col]).sum()
+                total_daily_actual = valid_df[daily_actual_col].sum()
                 ss_days = total_ss_quantity / total_daily_actual if total_daily_actual > 0 else 0
             else:
                 ss_days = 0
@@ -1853,7 +1879,7 @@ def display_abc_matrix_comparison_after(results_df, key_prefix="abc_matrix"):
         st.stop()
     
     # Streamlitで表示（Stylerオブジェクトを渡すことでスタイルを維持）
-    st.dataframe(styled_df, use_container_width=True, height=500)
+    st.dataframe(styled_df, width='stretch', height=500)
     
     # マトリクスの直下に注意文を追加
     st.caption("※ 表内の数値は該当する商品コードの件数です。")
@@ -2273,7 +2299,7 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     """, unsafe_allow_html=True)
     
     # Streamlitで表示
-    st.dataframe(styled_matrix, use_container_width=True, height=500)
+    st.dataframe(styled_matrix, width='stretch', height=500)
     
     # マトリクスの直下に注意文を追加
     st.caption("※ 表内の数値は該当する商品コードの件数です。")
