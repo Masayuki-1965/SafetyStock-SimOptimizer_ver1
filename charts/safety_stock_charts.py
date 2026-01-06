@@ -741,7 +741,7 @@ def create_order_volume_comparison_chart_before(results_df: pd.DataFrame, safety
         go.Bar(
             x=x_values,
             y=ss_quantity,
-            name=f'{type_name}_数量',
+            name='安全在庫 数量',
             marker_color='rgb(100, 150, 200)',
             hovertemplate='<b>%{text}</b><br>' +
                           '受注量: %{customdata[0]:.2f}<br>' +
@@ -759,7 +759,7 @@ def create_order_volume_comparison_chart_before(results_df: pd.DataFrame, safety
         go.Scatter(
             x=x_values,
             y=ss_days,
-            name=f'{type_name}_日数',
+            name='安全在庫 日数',
             mode='lines+markers',
             marker=dict(size=4, color='rgb(200, 50, 50)'),
             line=dict(color='rgb(200, 50, 50)', width=2),
@@ -892,24 +892,77 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
         "current": ("現行設定_数量", "現行設定_日数", "現行設定"),
         "ss1": ("安全在庫①_数量", "安全在庫①_日数", "安全在庫①"),
         "ss2": ("安全在庫②_数量", "安全在庫②_日数", "安全在庫②"),
-        "ss3": ("安全在庫③_数量", "安全在庫③_日数", "安全在庫③")
+        "ss2_corrected": ("安全在庫②\'_数量", "安全在庫②\'_日数", "安全在庫②'"),
+        "ss3": ("安全在庫③_数量", "安全在庫③_日数", "安全在庫③"),
+        "adopted": ("採用モデル_数量", "採用モデル_日数", "採用モデル")
     }
     
-    # 異常値処理後の列名（最終安全在庫の場合は「最終」プレフィックスを付ける）
+    # 異常値処理後の列名（前提0)に基づき、すべて異常値処理+上限カット後データを使用）
     if safety_stock_type == "current":
         after_quantity_col = "現行設定_数量"
         after_days_col = "現行設定_日数"
-    else:
-        # 安全在庫①、②、③の場合の列名を生成
-        ss_num = type_mapping[safety_stock_type][2].replace('安全在庫', '').replace('①', '1').replace('②', '2').replace('③', '3')
-        after_quantity_col = f"最終安全在庫{ss_num}_数量"
-        after_days_col = f"最終安全在庫{ss_num}_日数"
-        # 最終安全在庫の列が存在しない場合は、通常の安全在庫列を使用
+        type_name = "現行設定"
+    elif safety_stock_type == "ss1":
+        # 安全在庫①の場合（上限カット後データを使用）
+        after_quantity_col = "安全在庫①_数量"
+        after_days_col = "安全在庫①_日数"
+        type_name = "安全在庫①"
+        # 列が存在しない場合は最終安全在庫①の列を確認
         if after_quantity_col not in after_results_df.columns:
-            after_quantity_col = type_mapping[safety_stock_type][0]
-            after_days_col = type_mapping[safety_stock_type][1]
+            after_quantity_col = "最終安全在庫①_数量"
+            after_days_col = "最終安全在庫①_日数"
+    elif safety_stock_type == "ss2":
+        # 安全在庫②の場合（上限カット後データを使用）
+        after_quantity_col = "安全在庫②_数量"
+        after_days_col = "安全在庫②_日数"
+        type_name = "安全在庫②"
+        # 列が存在しない場合は最終安全在庫②の列を確認
+        if after_quantity_col not in after_results_df.columns:
+            after_quantity_col = "最終安全在庫②_数量"
+            after_days_col = "最終安全在庫②_日数"
+    elif safety_stock_type == "ss2_corrected":
+        # 安全在庫②'の場合（上限カット後データを使用）
+        after_quantity_col = "安全在庫②\'_数量"
+        after_days_col = "安全在庫②\'_日数"
+        type_name = "安全在庫②'"
+        # 列が存在しない場合は最終安全在庫②'の列を確認
+        if after_quantity_col not in after_results_df.columns:
+            after_quantity_col = "最終安全在庫②\'_数量"
+            after_days_col = "最終安全在庫②\'_日数"
+    elif safety_stock_type == "ss3":
+        # 安全在庫③の場合（上限カット後データを使用）
+        after_quantity_col = "安全在庫③_数量"
+        after_days_col = "安全在庫③_日数"
+        type_name = "安全在庫③"
+        # 列が存在しない場合は最終安全在庫③の列を確認
+        if after_quantity_col not in after_results_df.columns:
+            after_quantity_col = "最終安全在庫③_数量"
+            after_days_col = "最終安全在庫③_日数"
+    elif safety_stock_type == "adopted":
+        # 採用モデルの場合（上限カット後データを使用）
+        after_quantity_col = "採用モデル_数量"
+        after_days_col = "採用モデル_日数"
+        type_name = "採用モデル"
+    else:
+        # デフォルトは安全在庫③
+        after_quantity_col = "安全在庫③_数量"
+        after_days_col = "安全在庫③_日数"
+        type_name = "安全在庫③"
+        if after_quantity_col not in after_results_df.columns:
+            after_quantity_col = "最終安全在庫③_数量"
+            after_days_col = "最終安全在庫③_日数"
     
-    before_quantity_col, before_days_col, type_name = type_mapping.get(safety_stock_type, type_mapping["ss3"])
+    # 異常値処理前のデータ用の列名を決定（adoptedやss2_correctedの場合は異常値処理前には存在しない）
+    if safety_stock_type in ["adopted", "ss2_corrected"]:
+        # 異常値処理前には採用モデルや安全在庫②'は存在しないため、対応する基本モデルを使用
+        if safety_stock_type == "adopted":
+            # 採用モデルの場合は、安全在庫③を異常値処理前のデータとして使用
+            before_quantity_col, before_days_col, _ = type_mapping.get("ss3", type_mapping["ss3"])
+        else:  # ss2_corrected
+            # 安全在庫②'の場合は、安全在庫②を異常値処理前のデータとして使用
+            before_quantity_col, before_days_col, _ = type_mapping.get("ss2", type_mapping["ss2"])
+    else:
+        before_quantity_col, before_days_col, _ = type_mapping.get(safety_stock_type, type_mapping["ss3"])
     
     # 異常値処理後のデータを取得
     # 日当たり実績が0または欠損の機種は除外
@@ -948,7 +1001,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
     before_ss_quantity = None
     before_ss_days = None
     before_daily_actual = None
-    if before_results_df is not None:
+    if before_results_df is not None and before_quantity_col in before_results_df.columns and before_days_col in before_results_df.columns:
         # 異常値処理前のデータを取得
         before_valid_mask = (
             (before_results_df['日当たり実績'].notna()) &
@@ -996,7 +1049,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
             go.Bar(
                 x=x_values,
                 y=before_ss_quantity,
-                name=f'{type_name}_数量（異常値処理前）',
+                name='安全在庫 数量（処理前）',
                 marker_color='rgba(100, 150, 255, 0.35)',  # 薄い青色、透明度35%（重ね表示用）
                 offsetgroup=None,  # グループ化を無効化して重ね表示
                 hovertemplate='<b>%{text}</b><br>' +
@@ -1018,7 +1071,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
             go.Scatter(
                 x=x_values,
                 y=before_ss_days,
-                name=f'{type_name}_日数（異常値処理前）',
+                name='安全在庫 日数（処理前）',
                 mode='lines+markers',
                 marker=dict(size=4, color='rgba(200, 100, 100, 0.5)'),  # 薄い赤色、透明度50%（見やすく調整）
                 line=dict(color='rgba(200, 100, 100, 0.5)', width=1.5),  # 薄い赤色、透明度50%、少し太め
@@ -1042,7 +1095,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
         go.Bar(
             x=x_values,
             y=after_ss_quantity,
-            name=f'{type_name}_数量（異常値処理後）',
+            name='安全在庫 数量（処理後）',
             marker_color='rgb(60, 120, 220)',  # 青色（異常値処理前より濃いが、適度な濃さ）
             offsetgroup=None,  # グループ化を無効化して重ね表示
             hovertemplate='<b>%{text}</b><br>' +
@@ -1061,7 +1114,7 @@ def create_order_volume_comparison_chart_after(after_results_df: pd.DataFrame, b
         go.Scatter(
             x=x_values,
             y=after_ss_days,
-            name=f'{type_name}_日数（異常値処理後）',
+            name='安全在庫 日数（処理後）',
             mode='lines+markers',
             marker=dict(size=6, color='rgb(220, 20, 20)'),  # 濃い赤色、大きめ
             line=dict(color='rgb(220, 20, 20)', width=2),  # 濃い赤色、適度な太さ

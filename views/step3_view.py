@@ -15,8 +15,10 @@ from utils.common import (
     get_abc_analysis_with_fallback,
     calculate_plan_error_rate,
     is_plan_anomaly,
-    format_abc_category_for_display
+    format_abc_category_for_display,
+    calculate_abc_category_ratio_r
 )
+from views.step2_view import determine_adopted_model
 from charts.safety_stock_charts import (
     create_order_volume_comparison_chart_before,
     create_order_volume_comparison_chart_after
@@ -458,6 +460,19 @@ def display_step3():
                 key="step3_plan_minus_threshold"
             )
         
+        # r上限値の設定（折り畳み式）
+        with st.expander("r 上限値の設定（任意）", expanded=False):
+            ratio_r_upper_limit = st.number_input(
+                "r上限値（閾値）",
+                min_value=0.1,
+                max_value=10.0,
+                value=st.session_state.get("step3_ratio_r_upper_limit", 1.5),
+                step=0.1,
+                help="区分内のデータが極端に少ない場合のブレを避けるため",
+                key="step3_ratio_r_upper_limit"
+            )
+            st.caption("※ r上限値（閾値）は、補正モデル②' を採用するか判断する基準値です（初期値1.5）。通常はこのままご使用ください。")
+        
         # ABC区分ごとの上限日数設定
         st.markdown('<div class="step-sub-section">ABC区分ごとの上限日数設定</div>', unsafe_allow_html=True)
         st.caption("※ 0 を入力した場合は上限なし（制限なし）")
@@ -539,6 +554,21 @@ def display_step3():
             lead_time_type = st.session_state.get("shared_lead_time_type", "working_days")
             stockout_tolerance = st.session_state.get("shared_stockout_tolerance", 1.0)
             std_method = st.session_state.get("shared_std_method", STD_METHOD_FIXED)
+            ratio_r_upper_limit = st.session_state.get("step3_ratio_r_upper_limit", 1.5)
+            
+            # 比率rを事前に算出（全商品の実績異常値処理後の安全在庫②・③から算出）
+            from utils.common import calculate_abc_category_ratio_r
+            ratio_r_by_category = calculate_abc_category_ratio_r(
+                data_loader=data_loader,
+                lead_time=lead_time,
+                lead_time_type=lead_time_type,
+                stockout_tolerance_pct=stockout_tolerance,
+                sigma_k=sigma_k,
+                top_limit_mode='percent',
+                top_limit_n=2,
+                top_limit_p=top_limit_p,
+                category_cap_days={}  # 比率r算出時は上限カットを適用しない
+            )
             
             # 全機種に異常値処理を適用して最終安全在庫を算出
             final_results = []
@@ -630,32 +660,109 @@ def display_step3():
                     
                     # 計画異常値処理の判定
                     plan_error_rate, plan_error, plan_total = calculate_plan_error_rate(actual_data, plan_data)
+                    actual_total = actual_data.sum()
                     is_plan_anomaly_flag, _ = is_plan_anomaly(
                         plan_error_rate,
                         plan_plus_threshold,
                         plan_minus_threshold
                     )
                     
+                    # ABC区分の表示名を取得（比率rのキーとして使用）
+                    abc_category_display = format_abc_category_for_display(abc_category)
+                    
+                    # 安全在庫②'を全機種で計算（前提0)に基づき、常に計算する）
+                    # 比率rを取得（区分別 → 全区分の順でフォールバック）
+                    ratio_r_category = ratio_r_by_category.get('ratio_r', {}).get(abc_category_display) if ratio_r_by_category.get('ratio_r') else None
+                    ratio_r_all = ratio_r_by_category.get('ratio_r_all')
+                    
+                    ratio_r = None
+                    used_r_source = None
+                    
+                    # 区分別rのチェック
+                    import math
+                    if ratio_r_category is not None:
+                        if (not math.isnan(ratio_r_category) and 
+                            not math.isinf(ratio_r_category) and 
+                            ratio_r_category > 0):
+                            if ratio_r_category <= ratio_r_upper_limit:
+                                ratio_r = ratio_r_category
+                                used_r_source = "区分別"
+                    
+                    # 区分別rが使えない場合は全区分rを試す
+                    if ratio_r is None and ratio_r_all is not None:
+                        if (not math.isnan(ratio_r_all) and 
+                            not math.isinf(ratio_r_all) and 
+                            ratio_r_all > 0):
+                            ratio_r = ratio_r_all
+                            used_r_source = "全区分"
+                    
+                    # 安全在庫②'を全機種で計算（前提0)に基づき、常に計算する）
+                    # rが算出できない場合でも、安全在庫②'は安全在庫②と同じ値として計算する
+                    ss2_corrected = None
+                    ss2_corrected_days = None
+                    if ratio_r is not None:
+                        # r < 1 の場合は補正を行わず「安全在庫②' = 安全在庫② と同値」で扱う
+                        if ratio_r < 1.0:
+                            ss2_corrected = final_ss2_quantity  # r < 1 の場合は補正を適用しない
+                        else:
+                            ss2_corrected = final_ss2_quantity * ratio_r
+                    else:
+                        # rが算出できない場合でも、安全在庫②'は安全在庫②と同じ値として計算する
+                        ss2_corrected = final_ss2_quantity
+                    ss2_corrected_days = ss2_corrected / daily_actual_mean if (daily_actual_mean > 0 and ss2_corrected is not None) else 0
+                    
+                    # 安全在庫②'を上限カット後に適用（条件カット後）
+                    final_ss2_corrected_quantity = None
+                    final_ss2_corrected_days = None
+                    if ss2_corrected is not None:
+                        final_ss2_corrected_quantity = apply_cap_days(ss2_corrected, daily_actual_mean, abc_category)
+                        final_ss2_corrected_days = final_ss2_corrected_quantity / daily_actual_mean if daily_actual_mean > 0 else 0
+                    else:
+                        # ss2_correctedがNoneの場合は、安全在庫②と同じ値として扱う
+                        final_ss2_corrected_quantity = final_ss2_quantity
+                        final_ss2_corrected_days = final_ss2_days
+                    
+                    # 採用モデルを決定（安全在庫②'の算出後）
+                    adopted_model, adopted_model_name, _, _, _ = determine_adopted_model(
+                        plan_error_rate=plan_error_rate,
+                        is_anomaly=is_plan_anomaly_flag,
+                        abc_category=abc_category_display,
+                        ratio_r_by_category=ratio_r_by_category,
+                        ss2_value=final_ss2_quantity,
+                        ss3_value=final_ss3_quantity,
+                        daily_actual_mean=daily_actual_mean,
+                        plan_plus_threshold=plan_plus_threshold,
+                        plan_minus_threshold=plan_minus_threshold,
+                        ratio_r_upper_limit=ratio_r_upper_limit,
+                        actual_total=actual_total
+                    )
+                    
                     # 上限カットが適用されたかチェック
                     is_cap_applied = (
                         (final_ss1_quantity is not None and final_ss1_quantity < ss1_value) or
                         final_ss2_quantity < ss2_value or
-                        final_ss3_quantity < ss3_value
+                        final_ss3_quantity < ss3_value or
+                        (final_ss2_corrected_quantity is not None and final_ss2_corrected_quantity < ss2_corrected)
                     )
                     
-                    # 最終安全在庫の決定（計画異常値処理に基づく）
-                    if plan_error_rate is None:
-                        # 計画誤差率計算不可の場合は安全在庫③を採用
+                    # 最終安全在庫の決定（採用モデルに基づく）
+                    if adopted_model == "excluded":
+                        # 判定対象外（実績合計 <= 0）の場合は安全在庫0扱い
+                        final_safety_stock_quantity = 0.0
+                        final_safety_stock_days = 0.0
+                        final_model_name = "判定対象外"
+                    elif adopted_model == "ss2_corrected":
+                        # 安全在庫②'を採用
+                        final_safety_stock_quantity = final_ss2_corrected_quantity if final_ss2_corrected_quantity is not None else 0.0
+                        final_safety_stock_days = final_ss2_corrected_days if final_ss2_corrected_days is not None else 0.0
+                        final_model_name = "安全在庫②'"
+                    elif adopted_model == "ss3":
+                        # 安全在庫③を採用
                         final_safety_stock_quantity = final_ss3_quantity
                         final_safety_stock_days = final_ss3_days
                         final_model_name = "安全在庫③"
-                    elif is_plan_anomaly_flag:
-                        # 計画異常の場合は安全在庫②を採用
-                        final_safety_stock_quantity = final_ss2_quantity
-                        final_safety_stock_days = final_ss2_days
-                        final_model_name = "安全在庫②"
                     else:
-                        # 正常の場合は安全在庫③を採用
+                        # その他の場合は安全在庫③を採用（フォールバック）
                         final_safety_stock_quantity = final_ss3_quantity
                         final_safety_stock_days = final_ss3_days
                         final_model_name = "安全在庫③"
@@ -690,10 +797,18 @@ def display_step3():
                             if pd.isna(monthly_avg_actual):
                                 monthly_avg_actual = 0.0
                     
+                    # 採用補正比率rを取得（安全在庫②'が計算された場合）
+                    ratio_r_used = None
+                    if final_ss2_corrected_quantity is not None and used_r_source:
+                        if used_r_source == "区分別":
+                            ratio_r_used = ratio_r_by_category.get('ratio_r', {}).get(abc_category_display)
+                        elif used_r_source == "全区分":
+                            ratio_r_used = ratio_r_by_category.get('ratio_r_all')
+                    
                     # 最終結果を保存
                     result_row = {
                         '商品コード': product_code,
-                        'ABC区分': format_abc_category_for_display(abc_category),
+                        'ABC区分': abc_category_display,
                         '月当たり実績': monthly_avg_actual,
                         '現行設定_数量': current_qty,
                         '現行設定_日数': current_days,
@@ -702,12 +817,14 @@ def display_step3():
                         '安全在庫③_数量': ss3_before_qty,  # 実績異常値処理前
                         '最終安全在庫①_数量': final_ss1_quantity,  # 実績異常値処理＋上限カット後
                         '最終安全在庫②_数量': final_ss2_quantity,  # 実績異常値処理＋上限カット後
+                        '最終安全在庫②\'_数量': final_ss2_corrected_quantity if final_ss2_corrected_quantity is not None else 0.0,  # 実績異常値処理＋条件カット後（全機種で計算）
                         '最終安全在庫③_数量': final_ss3_quantity,  # 実績異常値処理＋上限カット後
                         '安全在庫①_日数': ss1_days,  # 実績異常値処理前
                         '安全在庫②_日数': ss2_days,  # 実績異常値処理前
                         '安全在庫③_日数': ss3_before_days,  # 実績異常値処理前
                         '最終安全在庫①_日数': final_ss1_days,  # 実績異常値処理＋上限カット後
                         '最終安全在庫②_日数': final_ss2_days,  # 実績異常値処理＋上限カット後
+                        '最終安全在庫②\'_日数': final_ss2_corrected_days if final_ss2_corrected_days is not None else 0.0,  # 実績異常値処理＋条件カット後（全機種で計算）
                         '最終安全在庫③_日数': final_ss3_days,  # 実績異常値処理＋上限カット後
                         '日当たり実績': daily_actual_mean,
                         '欠品許容率': stockout_tolerance,
@@ -717,11 +834,13 @@ def display_step3():
                         '計画異常値処理': is_plan_anomaly_flag if plan_error_rate is not None else False,
                         '計画誤差率': plan_error_rate,
                         '計画誤差率（実績合計 - 計画合計）': plan_error,
-                        '実績合計': actual_data.sum(),
+                        '実績合計': actual_total,
                         '計画合計': plan_total,
                         '最終安全在庫_数量': final_safety_stock_quantity,
                         '最終安全在庫_日数': final_safety_stock_days,
-                        '採用モデル': final_model_name
+                        '採用モデル': final_model_name,
+                        '採用補正比率r': ratio_r_used,
+                        '採用rソース': used_r_source
                     }
                     final_results.append(result_row)
                     
@@ -835,7 +954,7 @@ def display_step3():
             st.dataframe(styled_summary_df, use_container_width=True, hide_index=True)
             
             # テーブル直下の補足説明を追加
-            st.caption("※（ ）内の％は商品コード総件数に対する割合。算出式：割合（%）＝ 各処理件数 ÷ 商品コード総件数 × 100")
+            st.caption("※ カッコ内の％は商品コード総件数に対する割合。算出式：割合（%）＝ 各処理件数 ÷ 商品コード総件数 × 100")
             
             # 詳細データ（折り畳み式、デフォルト：非表示）
             with st.expander("詳細データを表示", expanded=False):
@@ -944,10 +1063,24 @@ def display_step3():
             st.divider()
             
             # ABC区分別_安全在庫比較マトリクス（異常値処理後）を表示
-            # 最終安全在庫の列を安全在庫①②③の列として扱うために、一時的に列名を変更
+            # 表示用の列を準備：現行設定、安全在庫②'、安全在庫③、採用モデル
+            # 前提0)に基づき、すべて異常値処理+上限カット後データを使用
             display_df = final_results_df.copy()
-            display_df['安全在庫①_数量'] = display_df['最終安全在庫①_数量']
-            display_df['安全在庫①_日数'] = display_df['最終安全在庫①_日数']
+            # 採用モデルの数量・日数を追加
+            display_df['採用モデル_数量'] = display_df['最終安全在庫_数量']
+            display_df['採用モデル_日数'] = display_df['最終安全在庫_日数']
+            # 安全在庫②'の列名を統一（'最終安全在庫②\'_数量' → '安全在庫②\'_数量'）
+            # 全機種で計算されているはずなので、存在しない場合は0で埋める
+            if '最終安全在庫②\'_数量' in display_df.columns:
+                display_df['安全在庫②\'_数量'] = display_df['最終安全在庫②\'_数量'].fillna(0)
+                display_df['安全在庫②\'_日数'] = display_df['最終安全在庫②\'_日数'].fillna(0)
+            else:
+                # 列が存在しない場合は0で埋める（全機種で計算されていない場合）
+                display_df['安全在庫②\'_数量'] = 0.0
+                display_df['安全在庫②\'_日数'] = 0.0
+            # 安全在庫①②③の列名を統一（すべて上限カット後データを使用）
+            display_df['安全在庫①_数量'] = display_df['最終安全在庫①_数量'].fillna(0)
+            display_df['安全在庫①_日数'] = display_df['最終安全在庫①_日数'].fillna(0)
             display_df['安全在庫②_数量'] = display_df['最終安全在庫②_数量']
             display_df['安全在庫②_日数'] = display_df['最終安全在庫②_日数']
             display_df['安全在庫③_数量'] = display_df['最終安全在庫③_数量']
@@ -955,7 +1088,7 @@ def display_step3():
             
             if 'ABC区分' in display_df.columns:
                 st.markdown('<div class="step-sub-section">ABC区分別_安全在庫比較マトリクス（異常値処理後）</div>', unsafe_allow_html=True)
-                display_abc_matrix_comparison(display_df, key_prefix="abc_matrix_after")
+                display_abc_matrix_comparison_after(display_df, key_prefix="abc_matrix_after")
                 
                 # 受注量の多い商品順 安全在庫比較グラフ（実績異常値処理・計画異常値処理・上限カット後）を追加
                 # Before/Afterを1つのグラフに統合して表示
@@ -964,21 +1097,23 @@ def display_step3():
                     <p>受注量の多い商品順 安全在庫 比較グラフ（異常値処理後）</p>
                 </div>
                 """, unsafe_allow_html=True)
-                st.caption("※ 安全在庫モデルを「現行設定」「安全在庫①」「安全在庫②」「安全在庫③」から選択してください。（初期値：安全在庫③）")
+                st.caption("※ 安全在庫モデルを「現行設定」「安全在庫①」「安全在庫②」「安全在庫②'」「安全在庫③」「採用モデル」から選択してください。（初期値：採用モデル）")
                 
-                # 安全在庫タイプ選択UI（異常値処理前と同じ選択を維持）
+                # 安全在庫タイプ選択UI（異常値処理後用）
                 col1, col2 = st.columns([1, 3])
                 with col1:
                     safety_stock_type_after = st.selectbox(
                         "安全在庫モデル",
-                        options=["current", "ss1", "ss2", "ss3"],
+                        options=["current", "ss1", "ss2", "ss2_corrected", "ss3", "adopted"],
                         format_func=lambda x: {
                             "current": "現行設定",
                             "ss1": "安全在庫①",
                             "ss2": "安全在庫②",
-                            "ss3": "安全在庫③"
+                            "ss2_corrected": "安全在庫②'",
+                            "ss3": "安全在庫③",
+                            "adopted": "採用モデル"
                         }[x],
-                        index=3,  # デフォルトは安全在庫③
+                        index=5,  # デフォルトは採用モデル
                         key="safety_stock_type_after"
                     )
                 
@@ -987,7 +1122,9 @@ def display_step3():
                         "current": "<strong>【現行設定】</strong> 現行設定している安全在庫",
                         "ss1": "<strong>【安全在庫①】</strong> 一般的な理論モデル",
                         "ss2": "<strong>【安全在庫②】</strong> 実績バラつき実測モデル",
-                        "ss3": "<strong>【安全在庫③】</strong> 計画誤差実測モデル（推奨）"
+                        "ss2_corrected": "<strong>【安全在庫②'】</strong> 安全在庫②に計画誤差を加味した補正モデル",
+                        "ss3": "<strong>【安全在庫③】</strong> 計画誤差実測モデル（推奨）",
+                        "adopted": "<strong>【採用モデル】</strong> 計画誤差率に応じて採用したモデル（安全在庫③ または ②'）"
                     }
                     st.markdown(f'<div style="color: #555555; margin-top: 28px; line-height: 38px; display: flex; align-items: center;">{type_descriptions[safety_stock_type_after]}</div>', unsafe_allow_html=True)
                 
@@ -1086,22 +1223,91 @@ def display_step3():
             
             # 詳細データ（折り畳み式、デフォルト：非表示）
             with st.expander("詳細データを表示", expanded=False):
+                # 表示用のDataFrameを作成
+                display_detail_df = final_results_df.copy()
+                
+                # 採用モデル在庫の数量・日数を追加（最終安全在庫_数量・日数を使用）
+                display_detail_df['採用モデル在庫_数量'] = display_detail_df['最終安全在庫_数量']
+                display_detail_df['採用モデル在庫_日数'] = display_detail_df['最終安全在庫_日数']
+                
+                # 安全在庫②'の列名を統一（'最終安全在庫②\'_数量' → '安全在庫②\'_数量'）
+                if '最終安全在庫②\'_数量' in display_detail_df.columns:
+                    display_detail_df['安全在庫②\'_数量'] = display_detail_df['最終安全在庫②\'_数量']
+                    display_detail_df['安全在庫②\'_日数'] = display_detail_df['最終安全在庫②\'_日数']
+                else:
+                    display_detail_df['安全在庫②\'_数量'] = None
+                    display_detail_df['安全在庫②\'_日数'] = None
+                
+                # 安全在庫①②③の列名を統一（異常値処理後）
+                display_detail_df['安全在庫①_数量'] = display_detail_df['最終安全在庫①_数量']
+                display_detail_df['安全在庫①_日数'] = display_detail_df['最終安全在庫①_日数']
+                display_detail_df['安全在庫②_数量'] = display_detail_df['最終安全在庫②_数量']
+                display_detail_df['安全在庫②_日数'] = display_detail_df['最終安全在庫②_日数']
+                display_detail_df['安全在庫③_数量'] = display_detail_df['最終安全在庫③_数量']
+                display_detail_df['安全在庫③_日数'] = display_detail_df['最終安全在庫③_日数']
+                
+                # 稼働日数を追加（データローダーから取得）
+                try:
+                    if st.session_state.uploaded_data_loader is not None:
+                        data_loader = st.session_state.uploaded_data_loader
+                    else:
+                        data_loader = DataLoader("data/日次計画データ.csv", "data/日次実績データ.csv")
+                        data_loader.load_data()
+                    working_dates = data_loader.get_working_dates()
+                    working_days_count = len(working_dates)
+                    display_detail_df['稼働日数'] = working_days_count
+                except:
+                    display_detail_df['稼働日数'] = None
+                
                 # 月当たり実績で降順ソート
-                if '月当たり実績' in final_results_df.columns:
-                    final_results_df = final_results_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
-                # 列順を指定して並び替え（ABC区分の右隣に月当たり実績を配置）
+                if '月当たり実績' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
+                
+                # 列順を指定して並び替え（要件に基づく順序）
                 column_order = [
-                    '商品コード', 'ABC区分', '月当たり実績', '現行設定_数量', '現行設定_日数',
-                    '安全在庫①_数量', '安全在庫②_数量', '安全在庫③_数量',  # 異常値処理前
-                    '最終安全在庫①_数量', '最終安全在庫②_数量', '最終安全在庫③_数量',  # 異常値処理＋上限カット後
-                    '安全在庫①_日数', '安全在庫②_日数', '安全在庫③_日数',  # 異常値処理前
-                    '最終安全在庫①_日数', '最終安全在庫②_日数', '最終安全在庫③_日数',  # 異常値処理＋上限カット後
-                    '日当たり実績', '欠品許容率'
+                    '商品コード',
+                    'ABC区分',
+                    '月当たり実績',
+                    '現行設定_数量',
+                    '現行設定_日数',
+                    '安全在庫①_数量',
+                    '安全在庫①_日数',
+                    '安全在庫②_数量',
+                    '安全在庫②_日数',
+                    '安全在庫②\'_数量',
+                    '安全在庫②\'_日数',
+                    '安全在庫③_数量',
+                    '安全在庫③_日数',
+                    '採用モデル',
+                    '採用モデル在庫_数量',
+                    '採用モデル在庫_日数',
+                    '計画誤差率',
+                    '計画合計',
+                    '実績合計',
+                    '採用補正比率r',
+                    '採用rソース',
+                    '欠品許容率',
+                    '稼働日数',
+                    '日当たり実績'
                 ]
-                available_columns = [col for col in column_order if col in final_results_df.columns]
-                final_results_df_display = final_results_df[available_columns]
+                
+                # 列名のマッピング（実際の列名に合わせる）
+                column_mapping = {
+                    '採用補正比率r': '採用補正比率r',
+                    '採用rソース': '採用rソース'
+                }
+                
+                # 存在する列のみを選択
+                available_columns = []
+                for col in column_order:
+                    if col in display_detail_df.columns:
+                        available_columns.append(col)
+                    elif col in column_mapping and column_mapping[col] in display_detail_df.columns:
+                        available_columns.append(column_mapping[col])
+                
+                display_detail_df_display = display_detail_df[available_columns]
                 # 横スクロールを有効化（use_container_width=Trueで自動的に横スクロール可能）
-                st.dataframe(final_results_df_display, use_container_width=True, hide_index=True)
+                st.dataframe(display_detail_df_display, use_container_width=True, hide_index=True)
             
             # CSVエクスポート
             # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
@@ -1173,6 +1379,496 @@ def display_step3():
 # ========================================
 # STEP3専用のUIヘルパー関数
 # ========================================
+
+def display_abc_matrix_comparison_after(results_df, key_prefix="abc_matrix"):
+    """
+    ABC区分別 安全在庫比較結果をマトリクス形式で表示（異常値処理後用）
+    
+    Args:
+        results_df: 全機種の安全在庫算出結果DataFrame（異常値処理後）
+        key_prefix: ダウンロードボタンの一意のキープレフィックス
+    """
+    # 見出しは呼び出し側で表示するため、ここでは表示しない
+    
+    # 在庫日数ビンの定義
+    bins = ["0日（設定なし）", "0〜5日", "5〜10日", "10〜15日", "15〜20日", "20〜30日", "30〜40日", "40〜50日", "50日以上"]
+    
+    from utils.common import format_abc_category_for_display
+    
+    # ABC区分列を表示用に変換（NaNの場合は「未分類」）
+    if 'ABC区分' in results_df.columns:
+        results_df = results_df.copy()
+        results_df['ABC区分'] = results_df['ABC区分'].apply(format_abc_category_for_display)
+    
+    # STEP1で生成された全区分を取得（'-'は除外し、「未分類」を含める）
+    all_categories = sorted([cat for cat in results_df['ABC区分'].unique() if cat != '-'])
+    
+    # 区分名を「◯区分」形式に変換
+    category_labels = {cat: f"{cat}区分" for cat in all_categories}
+    
+    # 安全在庫タイプの定義（表示名、日数列名、数量列名）- 異常値処理後用
+    ss_types = [
+        ('現行設定', '現行設定_日数', '現行設定_数量'),
+        ('安全在庫②\'', '安全在庫②\'_日数', '安全在庫②\'_数量'),
+        ('安全在庫③', '安全在庫③_日数', '安全在庫③_数量'),
+        ('採用モデル', '採用モデル_日数', '採用モデル_数量')
+    ]
+    
+    # マトリクスデータを構築（縦軸：在庫日数ビン、横軸：区分×安全在庫タイプ）
+    matrix_rows = []
+    
+    # 各行（在庫日数ビン）のデータを作成
+    for bin_name in bins:
+        row_data = {'在庫日数': bin_name}
+        
+        # 合計ブロック（4列：現行設定、安全在庫②'、安全在庫③、採用モデル）
+        for ss_type_name, days_col, qty_col in ss_types:
+            if ss_type_name == '現行設定':
+                mask = (results_df[days_col].apply(classify_inventory_days_bin) == bin_name)
+            else:
+                if bin_name == "0日（設定なし）":
+                    mask = (
+                        (results_df[days_col].apply(classify_inventory_days_bin) == bin_name) |
+                        (results_df['日当たり実績'].isna()) |
+                        (results_df['日当たり実績'] <= 0)
+                    )
+                else:
+                    mask = (
+                        (results_df[days_col].apply(classify_inventory_days_bin) == bin_name) &
+                        (results_df['日当たり実績'].notna()) &
+                        (results_df['日当たり実績'] > 0)
+                    )
+            
+            count = mask.sum()
+            row_data[('合計', ss_type_name)] = count
+        
+        # 各区分ブロック（各区分×4列）
+        for category in all_categories:
+            category_df = results_df[results_df['ABC区分'] == category]
+            category_label = category_labels[category]
+            
+            for ss_type_name, days_col, qty_col in ss_types:
+                if ss_type_name == '現行設定':
+                    mask = (category_df[days_col].apply(classify_inventory_days_bin) == bin_name)
+                else:
+                    if bin_name == "0日（設定なし）":
+                        mask = (
+                            (category_df[days_col].apply(classify_inventory_days_bin) == bin_name) |
+                            (category_df['日当たり実績'].isna()) |
+                            (category_df['日当たり実績'] <= 0)
+                        )
+                    else:
+                        mask = (
+                            (category_df[days_col].apply(classify_inventory_days_bin) == bin_name) &
+                            (category_df['日当たり実績'].notna()) &
+                            (category_df['日当たり実績'] > 0)
+                        )
+                
+                count = mask.sum()
+                row_data[(category_label, ss_type_name)] = count
+        
+        matrix_rows.append(row_data)
+    
+    # マトリクスDataFrameを作成
+    matrix_df = pd.DataFrame(matrix_rows)
+    matrix_df = matrix_df.set_index('在庫日数')
+    
+    # 表示用DataFrameを新規に構築（必ず2階層MultiIndexに統一）
+    # level0：合計 / A区分 / B区分 / C区分
+    # level1：現行設定 / 安全在庫②' / 安全在庫③ / 採用モデル
+    # 列順を固定：合計 → A区分 → B区分 → C区分、各区分内で 現行設定 → 安全在庫②' → 安全在庫③ → 採用モデル
+    
+    # 列順を定義（固定）
+    display_categories = ['合計'] + [category_labels[cat] for cat in all_categories]
+    display_ss_types = ['現行設定', '安全在庫②\'', '安全在庫③', '採用モデル']
+    
+    # 新しい列構造を作成（2階層MultiIndex）
+    new_columns = []
+    for category in display_categories:
+        for ss_type in display_ss_types:
+            new_columns.append((category, ss_type))
+    
+    # 既存のデータから値を取得して新しいDataFrameを構築
+    new_matrix_data = {}
+    for category, ss_type in new_columns:
+        # 既存のDataFrameから値を取得
+        if (category, ss_type) in matrix_df.columns:
+            new_matrix_data[(category, ss_type)] = matrix_df[(category, ss_type)]
+        else:
+            # 列が存在しない場合は0で埋める
+            new_matrix_data[(category, ss_type)] = 0
+    
+    # 新しいDataFrameを作成（必ず2階層MultiIndex）
+    matrix_df = pd.DataFrame(new_matrix_data, index=matrix_df.index)
+    matrix_df.columns = pd.MultiIndex.from_tuples(matrix_df.columns, names=['区分', '安全在庫タイプ'])
+    
+    # デバッグログ（本番環境ではコメントアウト）
+    # st.write(f"[DEBUG STEP3 異常値処理後 修正後] type(matrix_df.columns): {type(matrix_df.columns)}")
+    # st.write(f"[DEBUG STEP3 異常値処理後 修正後] nlevels: {getattr(matrix_df.columns, 'nlevels', 1)}")
+    # st.write(f"[DEBUG STEP3 異常値処理後 修正後] columns先頭20件: {matrix_df.columns.tolist()[:20]}")
+    # group_headers = list(matrix_df.columns.get_level_values(0))
+    # item_headers = list(matrix_df.columns.get_level_values(1))
+    # st.write(f"[DEBUG STEP3 異常値処理後] group_headers先頭20件: {group_headers[:20]}")
+    # st.write(f"[DEBUG STEP3 異常値処理後] item_headers先頭20件: {item_headers[:20]}")
+    # tuple_strings = [h for h in item_headers if isinstance(h, str) and h.startswith('(')]
+    # if tuple_strings:
+    #     st.write(f"[DEBUG STEP3 異常値処理後] ⚠️ タプル文字列が検出されました: {tuple_strings[:10]}")
+    # else:
+    #     st.write(f"[DEBUG STEP3 異常値処理後] ✅ item_headersにタプル文字列はありません")
+    
+    # サマリー行を追加（合計件数、安全在庫_数量、安全在庫_日数）
+    # サマリー行も同じ列構造（2階層MultiIndex）を使用
+    summary_rows = []
+    
+    # ss_typeから列名へのマッピング
+    ss_type_mapping = {
+        '現行設定': ('現行設定_日数', '現行設定_数量'),
+        '安全在庫②\'': ('安全在庫②\'_日数', '安全在庫②\'_数量'),
+        '安全在庫③': ('安全在庫③_日数', '安全在庫③_数量'),
+        '採用モデル': ('採用モデル_日数', '採用モデル_数量')
+    }
+    
+    # 1. 合計件数行
+    total_count_row = {'在庫日数': '合計件数'}
+    for category in display_categories:
+        for ss_type in display_ss_types:
+            if category == '合計':
+                total_count_row[(category, ss_type)] = len(results_df)
+            else:
+                # 区分名から元の区分名を取得（例：「A区分」→「A」）
+                category_char = category.replace('区分', '')
+                category_df = results_df[results_df['ABC区分'] == category_char]
+                total_count_row[(category, ss_type)] = len(category_df)
+    summary_rows.append(total_count_row)
+    
+    # 2. 安全在庫数行（四捨五入して整数表示、カンマ区切り）
+    ss_quantity_row = {'在庫日数': '安全在庫_数量'}
+    for category in display_categories:
+        for ss_type in display_ss_types:
+            days_col, qty_col = ss_type_mapping.get(ss_type, ('', ''))
+            
+            if category == '合計':
+                target_df = results_df
+            else:
+                category_char = category.replace('区分', '')
+                target_df = results_df[results_df['ABC区分'] == category_char]
+            
+            valid_mask = (
+                (target_df['日当たり実績'].notna()) &
+                (target_df['日当たり実績'] > 0) &
+                (target_df[days_col].notna()) &
+                (target_df[days_col] > 0)
+            )
+            
+            if valid_mask.sum() > 0:
+                valid_df = target_df[valid_mask]
+                ss_quantity = (valid_df[days_col] * valid_df['日当たり実績']).sum()
+                ss_quantity = round(ss_quantity)  # 四捨五入
+            else:
+                ss_quantity = 0
+            ss_quantity_row[(category, ss_type)] = f"{ss_quantity:,}"  # カンマ区切り
+    summary_rows.append(ss_quantity_row)
+    
+    # 3. 安全在庫_日数行
+    ss_days_row = {'在庫日数': '安全在庫_日数'}
+    for category in display_categories:
+        for ss_type in display_ss_types:
+            days_col, qty_col = ss_type_mapping.get(ss_type, ('', ''))
+            
+            if category == '合計':
+                target_df = results_df
+            else:
+                category_char = category.replace('区分', '')
+                target_df = results_df[results_df['ABC区分'] == category_char]
+            
+            valid_mask = (
+                (target_df['日当たり実績'].notna()) &
+                (target_df['日当たり実績'] > 0) &
+                (target_df[days_col].notna()) &
+                (target_df[days_col] > 0)
+            )
+            
+            if valid_mask.sum() > 0:
+                valid_df = target_df[valid_mask]
+                total_ss_quantity = (valid_df[days_col] * valid_df['日当たり実績']).sum()
+                total_daily_actual = valid_df['日当たり実績'].sum()
+                ss_days = total_ss_quantity / total_daily_actual if total_daily_actual > 0 else 0
+            else:
+                ss_days = 0
+            ss_days_row[(category, ss_type)] = f"{ss_days:.1f}日"
+    summary_rows.append(ss_days_row)
+    
+    # サマリー行をマトリクスに追加（空白行は追加しない）
+    if summary_rows:
+        summary_df = pd.DataFrame(summary_rows)
+        summary_df = summary_df.set_index('在庫日数')
+        
+        # サマリー行も同じ列構造（2階層MultiIndex）を使用
+        summary_df.columns = pd.MultiIndex.from_tuples(summary_df.columns, names=['区分', '安全在庫タイプ'])
+        
+        # 列順を統一（matrix_dfと同じ順序）
+        summary_df = summary_df.reindex(columns=matrix_df.columns, fill_value=0)
+        
+        # pd.concatの後でもMultiIndexを維持するため、事前に確認
+        if not isinstance(matrix_df.columns, pd.MultiIndex):
+            matrix_df.columns = pd.MultiIndex.from_tuples(
+                list(matrix_df.columns),
+                names=["区分", "項目"]
+            )
+        if not isinstance(summary_df.columns, pd.MultiIndex):
+            summary_df.columns = pd.MultiIndex.from_tuples(
+                list(summary_df.columns),
+                names=["区分", "項目"]
+            )
+        
+        matrix_df = pd.concat([matrix_df, summary_df])
+        
+        # pd.concatの後でもMultiIndexが維持されていることを確認
+        if not isinstance(matrix_df.columns, pd.MultiIndex):
+            matrix_df.columns = pd.MultiIndex.from_tuples(
+                list(matrix_df.columns),
+                names=["区分", "項目"]
+            )
+    
+    # 空白行を完全に除去（NaNや空の行、全てが空文字列の行を削除）
+    matrix_df = matrix_df.dropna(how='all')
+    # 全てのセルが空文字列や空白のみの行も削除
+    matrix_df = matrix_df[~matrix_df.apply(lambda row: row.astype(str).str.strip().eq('').all(), axis=1)]
+    
+    # 「安全在庫_日数」行の後の空白行を削除
+    # 安全在庫_日数行のインデックスを取得
+    if '安全在庫_日数' in matrix_df.index:
+        ss_days_idx = matrix_df.index.get_loc('安全在庫_日数')
+        # 安全在庫_日数行より後の行をチェックし、空白行を削除
+        rows_to_drop = []
+        for i in range(ss_days_idx + 1, len(matrix_df)):
+            row = matrix_df.iloc[i]
+            # 全てのセルがNaN、空文字列、または空白のみかチェック
+            if row.isna().all() or row.astype(str).str.strip().eq('').all():
+                rows_to_drop.append(matrix_df.index[i])
+            else:
+                # 空白でない行が見つかったら終了
+                break
+        if rows_to_drop:
+            matrix_df = matrix_df.drop(rows_to_drop)
+    
+    # 【必須修正】表示直前でdf_to_showに統一し、columnsを必ずMultiIndexに変換
+    df_to_show = matrix_df
+    
+    # 1) 必ず MultiIndex 化
+    if not isinstance(df_to_show.columns, pd.MultiIndex):
+        cols = list(df_to_show.columns)  # 期待：[(区分, 項目), ...]
+        lvl0 = [c[0] for c in cols]
+        lvl1 = [c[1] for c in cols]
+        
+        # 2) 半角アポストロフィを禁止（Streamlitがrepr表示に化ける可能性があるため）
+        lvl1 = [s.replace("安全在庫②'", "安全在庫②′") for s in lvl1]  # PRIME推奨
+        
+        df_to_show.columns = pd.MultiIndex.from_arrays(
+            [lvl0, lvl1],
+            names=["区分", "項目"]
+        )
+    else:
+        # 既にMultiIndexの場合でも、level1の'を置換して再生成
+        lvl0 = df_to_show.columns.get_level_values(0).tolist()
+        lvl1 = [s.replace("安全在庫②'", "安全在庫②′") for s in df_to_show.columns.get_level_values(1).tolist()]
+        df_to_show.columns = pd.MultiIndex.from_arrays(
+            [lvl0, lvl1],
+            names=["区分", "項目"]
+        )
+    
+    # 3) 再発防止：タプル文字列っぽい要素が level1 に残っていたら止める
+    bad_chars = set("()'\",")
+    lvl1_chk = [str(x) for x in df_to_show.columns.get_level_values(1).tolist()]
+    assert not any(any(ch in s for ch in bad_chars) for s in lvl1_chk), f"level1に禁止文字が残っています: {lvl1_chk[:10]}"
+    
+    # assertで2段ヘッダ構造を保証
+    assert isinstance(df_to_show.columns, pd.MultiIndex)
+    assert df_to_show.columns.nlevels == 2
+    
+    # 4) Stylerでスタイル適用（異常値処理前のコードを複製）
+    styled_df = df_to_show.style
+    
+    # 行・列ヘッダのデザイン統一（背景色#F5F5F5、罫線#DDDDDD）
+    table_styles = [
+        {
+            'selector': 'thead th',
+            'props': [
+                ('background-color', '#F5F5F5'),
+                ('border', '1px solid #DDDDDD'),
+                ('border-collapse', 'collapse')
+            ]
+        },
+        {
+            'selector': 'tbody th',
+            'props': [
+                ('background-color', '#F5F5F5'),
+                ('border', '1px solid #DDDDDD'),
+                ('border-collapse', 'collapse')
+            ]
+        },
+        {
+            'selector': 'td',
+            'props': [
+                ('border', '1px solid #DDDDDD'),
+                ('border-collapse', 'collapse')
+            ]
+        }
+    ]
+    
+    # ① 上位ヘッダ（区分ラベル）の視認性強調：上段MultiIndexヘッダの下側に太線を追加
+    table_styles.append({
+        'selector': 'thead th.level0',
+        'props': [
+            ('border-bottom', '3px solid #BBBBBB')
+        ]
+    })
+    
+    # ② 区分境界線をわずかに強調：各区分ブロック先頭列の左側縦線を2px #BBBBBBに
+    # 列構造：インデックス列(1) + 合計ブロック(4列) + 各区分ブロック(各4列)
+    # 合計ブロックの先頭列は2列目（インデックス列を除く）
+    # A区分ブロックの先頭列は6列目（合計4列 + インデックス列1列）
+    # B区分ブロックの先頭列は10列目（合計4列 + A区分4列 + インデックス列1列）
+    ss_types_count = len(ss_types)  # 4列（現行設定、安全在庫②'、安全在庫③、採用モデル）
+    
+    # 合計ブロックの先頭列（2列目）
+    table_styles.append({
+        'selector': 'thead th.level0:nth-child(2), thead th.level1:nth-child(2), td:nth-child(2)',
+        'props': [
+            ('border-left', '2px solid #BBBBBB')
+        ]
+    })
+    
+    # 各区分ブロックの先頭列を計算
+    # 合計ブロック: 列2-5（インデックス列を除く）
+    # A区分ブロック: 列6-9
+    # B区分ブロック: 列10-13
+    # C区分ブロック: 列14-17
+    # 先頭列は 2, 6, 10, 14, ... = 2 + 4*n (n=0,1,2,...)
+    # n=0: 合計ブロック（既に追加済み）
+    # n=1,2,3,...: 各区分ブロック
+    for i in range(len(all_categories)):
+        col_position = 2 + (i + 1) * ss_types_count  # インデックス列(1) + 合計ブロック(4) + 区分ブロック数*4
+        table_styles.append({
+            'selector': f'thead th.level0:nth-child({col_position}), thead th.level1:nth-child({col_position}), td:nth-child({col_position})',
+            'props': [
+                ('border-left', '2px solid #BBBBBB')
+            ]
+        })
+    
+    styled_df = styled_df.set_table_styles(table_styles)
+    
+    # 区分ごとの色付け（合計、B区分、D区分、F区分...に#F5F5F5、A区分、C区分、E区分...は白）
+    def highlight_cols_by_category(col):
+        """区分ごとの列色分け（合計と偶数番目の区分に色付け）"""
+        # MultiIndexの列名から区分名を取得
+        if isinstance(col.name, tuple) and len(col.name) >= 1:
+            category_name = col.name[0]  # level0の区分名
+        else:
+            category_name = str(col.name)
+        
+        # 合計列は#F5F5F5背景
+        if category_name == '合計':
+            return ['background-color: #F5F5F5'] * len(col)
+        
+        # display_categoriesの順序でインデックスを取得
+        # display_categories = ['合計'] + [category_labels[cat] for cat in all_categories]
+        # 合計=0, A=1, B=2, C=3...なので、B=2, D=4...が偶数番目
+        try:
+            category_index = display_categories.index(category_name)
+        except ValueError:
+            # 区分が見つからない場合は白背景
+            return ['background-color: #FFFFFF'] * len(col)
+        
+        # 合計は0番目なので除外（既に処理済み）
+        # 偶数番目ブロック（B区分=2, D区分=4...）に#F5F5F5、それ以外は白
+        # ただし、合計（0番目）は既に処理済みなので、1番目以降で判定
+        if category_index > 0 and (category_index - 1) % 2 == 1:  # 偶数番目の区分（B区分、D区分など）
+            return ['background-color: #F5F5F5'] * len(col)  # 薄いグレー背景
+        else:  # 奇数番目の区分（A区分、C区分など）または合計以外
+            return ['background-color: #FFFFFF'] * len(col)  # 白背景
+    
+    styled_df = styled_df.apply(highlight_cols_by_category, axis=0)
+    
+    # KPI行（合計件数、安全在庫_数量、安全在庫_日数）の強調
+    def highlight_important_rows(row):
+        """KPI行の強調"""
+        # 行名を取得（MultiIndexの場合は最初の要素）
+        if hasattr(row, 'name'):
+            row_name = row.name
+            if isinstance(row_name, tuple):
+                row_name = row_name[0] if len(row_name) > 0 else str(row_name)
+            elif not isinstance(row_name, str):
+                row_name = str(row_name)
+        else:
+            row_name = ''
+        
+        # KPI行の判定
+        if row_name == '合計件数':
+            return ['background-color: #E8F5E9; color: #2E7D32; font-weight: normal'] * len(row)
+        elif row_name == '安全在庫_数量':
+            return ['background-color: #E8F5E9; color: #2E7D32; font-weight: normal'] * len(row)
+        elif row_name == '安全在庫_日数':
+            return ['background-color: #C8E6C9; color: #2E7D32; font-weight: bold; font-size: 1.1em'] * len(row)
+        return [''] * len(row)
+    
+    styled_df = styled_df.apply(highlight_important_rows, axis=1)
+    
+    # セル値の右揃えを適用
+    styled_df = styled_df.set_properties(**{'text-align': 'right'})
+    
+    # KPI行のインデックス列も強調するためのCSS
+    st.markdown("""
+    <style>
+    /* マトリクスのインデックス列（項目名）の背景色を統一 */
+    div[data-testid="stDataFrame"] table thead th:first-child,
+    div[data-testid="stDataFrame"] table tbody tr th {
+        background-color: #F5F5F5 !important;
+        border: 1px solid #DDDDDD !important;
+    }
+    /* 「合計件数」「安全在庫_数量」行のインデックス列 */
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #E8F5E9"]) th {
+        background-color: #E8F5E9 !important;
+        color: #2E7D32 !important;
+        font-weight: normal !important;
+        border: 1px solid #DDDDDD !important;
+    }
+    /* 「安全在庫_日数」行のインデックス列 */
+    div[data-testid="stDataFrame"] table tbody tr:has(td[style*="background-color: #C8E6C9"]) th {
+        background-color: #C8E6C9 !important;
+        color: #2E7D32 !important;
+        font-weight: bold !important;
+        font-size: 1.1em !important;
+        border: 1px solid #DDDDDD !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # 表示直前で構造保証（assert）
+    try:
+        assert isinstance(df_to_show.columns, pd.MultiIndex)
+        assert df_to_show.columns.nlevels == 2
+    except AssertionError as e:
+        st.error(f"マトリクスの列構造が不正です: {e}")
+        st.stop()
+    
+    # Streamlitで表示（Stylerオブジェクトを渡すことでスタイルを維持）
+    st.dataframe(styled_df, use_container_width=True, height=500)
+    
+    # マトリクスの直下に注意文を追加
+    st.caption("※ 表内の数値は該当する商品コードの件数です。")
+    
+    # 注記を展開式で表示（初期状態は閉じた状態）
+    with st.expander("ABC区分別_安全在庫比較マトリクスの見方", expanded=False):
+        st.markdown("""
+        - 表内の数値は、該当する商品コードの件数です。
+        - 現行設定_数量が 0、または安全在庫②'/③/採用モデル_数量が算出できない商品コードは、「0日（設定なし）」に分類します。
+        - 安全在庫_数量は、各商品コードの［安全在庫_日数 × 日当たり実績］を算出し、全件集計した値です。
+        - 安全在庫_日数は、全件集計した［安全在庫_数量］を全件集計した［日当たり実績］で割って求める加重平均です。
+        - 安全在庫_日数は「稼働日ベース」です。
+        - 在庫日数の区分は、各範囲の上限値を含みます（例：5.0日は「0〜5日」、50.0日は「40〜50日」に分類）。
+        """)
+
 
 def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
     """
