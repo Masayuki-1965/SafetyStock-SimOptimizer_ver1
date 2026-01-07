@@ -435,10 +435,10 @@ def display_step2():
         selected_product = default_product
         selected_label = default_label
     
-    # 商品コードが変更された場合、LT間差分関連のセッション状態をクリア
+    # 商品コードが変更された場合、すべての表示用データとSession Stateをクリア
     previous_product_code = st.session_state.get('step2_lt_delta_product_code')
     if previous_product_code is not None and previous_product_code != selected_product:
-        # 商品コードが変更された場合、LT間差分関連のセッション状態をクリア
+        # 1) 時系列グラフの元データ（または表示用 DataFrame）
         if 'step2_lt_delta_calculated' in st.session_state:
             st.session_state.step2_lt_delta_calculated = False
         if 'step2_lt_delta_data' in st.session_state:
@@ -457,11 +457,93 @@ def display_step2():
             del st.session_state.step2_lt_delta_working_dates
         if 'step2_lt_delta_timestamp' in st.session_state:
             del st.session_state.step2_lt_delta_timestamp
-        # 商品コード変更時は、手順⑥の再計算フラグもリセット
+        
+        # 2) 統計情報の表示用 state
+        if 'step2_delta2_for_stats_step3' in st.session_state:
+            del st.session_state.step2_delta2_for_stats_step3
+        if 'step2_delta3_for_stats_step3' in st.session_state:
+            del st.session_state.step2_delta3_for_stats_step3
+        if 'step2_delta2_for_stats' in st.session_state:
+            del st.session_state.step2_delta2_for_stats
+        if 'step2_delta3_for_stats' in st.session_state:
+            del st.session_state.step2_delta3_for_stats
+        
+        # 3) 安全在庫計算関連の state
+        if 'step2_calculated' in st.session_state:
+            st.session_state.step2_calculated = False
+        if 'step2_results' in st.session_state:
+            st.session_state.step2_results = None
+        if 'step2_calculator' in st.session_state:
+            st.session_state.step2_calculator = None
+        if 'step2_product_code' in st.session_state:
+            st.session_state.step2_product_code = None
+        if 'step2_plan_data' in st.session_state:
+            del st.session_state.step2_plan_data
+        if 'step2_actual_data' in st.session_state:
+            del st.session_state.step2_actual_data
+        if 'step2_working_dates' in st.session_state:
+            del st.session_state.step2_working_dates
+        
+        # 4) 異常値処理関連の state
+        if 'step2_outlier_processed' in st.session_state:
+            st.session_state.step2_outlier_processed = False
+        if 'step2_outlier_handler' in st.session_state:
+            st.session_state.step2_outlier_handler = None
+        if 'step2_imputed_data' in st.session_state:
+            del st.session_state.step2_imputed_data
+        if 'step2_processing_info' in st.session_state:
+            del st.session_state.step2_processing_info
+        
+        # 5) 再計算関連の state
         if 'step2_recalculated' in st.session_state:
             st.session_state.step2_recalculated = False
+        if 'step2_after_results' in st.session_state:
+            st.session_state.step2_after_results = None
         if 'step2_after_calculator' in st.session_state:
             st.session_state.step2_after_calculator = None
+        
+        # 6) 採用モデル関連の state
+        if 'step2_adopted_model' in st.session_state:
+            del st.session_state.step2_adopted_model
+        if 'step2_adopted_model_name' in st.session_state:
+            del st.session_state.step2_adopted_model_name
+        if 'step2_adopted_safety_stock' in st.session_state:
+            del st.session_state.step2_adopted_safety_stock
+        if 'step2_ss2_corrected' in st.session_state:
+            del st.session_state.step2_ss2_corrected
+        if 'step2_ss2_corrected_days' in st.session_state:
+            del st.session_state.step2_ss2_corrected_days
+        if 'step2_ratio_r_by_category' in st.session_state:
+            del st.session_state.step2_ratio_r_by_category
+        if 'step2_ss2_total_by_category' in st.session_state:
+            del st.session_state.step2_ss2_total_by_category
+        if 'step2_ss3_total_by_category' in st.session_state:
+            del st.session_state.step2_ss3_total_by_category
+        if 'step2_ratio_r_all' in st.session_state:
+            del st.session_state.step2_ratio_r_all
+        if 'step2_ss2_total_all' in st.session_state:
+            del st.session_state.step2_ss2_total_all
+        if 'step2_ss3_total_all' in st.session_state:
+            del st.session_state.step2_ss3_total_all
+        if 'step2_ratio_r_params' in st.session_state:
+            del st.session_state.step2_ratio_r_params
+        if 'step2_used_r_source' in st.session_state:
+            del st.session_state.step2_used_r_source
+        
+        # 7) 計画誤差率関連の state
+        if 'step2_plan_error_rate' in st.session_state:
+            del st.session_state.step2_plan_error_rate
+        if 'step2_is_anomaly' in st.session_state:
+            del st.session_state.step2_is_anomaly
+        
+        # 8) 最終結果関連の state
+        if 'step2_final_results' in st.session_state:
+            st.session_state.step2_final_results = None
+        if 'step2_final_calculator' in st.session_state:
+            st.session_state.step2_final_calculator = None
+        
+        # UIを完全リセットするため、1回だけst.rerun()を発火
+        st.rerun()
     
     st.divider()
     
