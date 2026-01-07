@@ -6,6 +6,7 @@ STEP2 ビュー
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 from typing import Optional
 from modules.data_loader import DataLoader
 from modules.safety_stock_models import SafetyStockCalculator
@@ -434,6 +435,34 @@ def display_step2():
         selected_product = default_product
         selected_label = default_label
     
+    # 商品コードが変更された場合、LT間差分関連のセッション状態をクリア
+    previous_product_code = st.session_state.get('step2_lt_delta_product_code')
+    if previous_product_code is not None and previous_product_code != selected_product:
+        # 商品コードが変更された場合、LT間差分関連のセッション状態をクリア
+        if 'step2_lt_delta_calculated' in st.session_state:
+            st.session_state.step2_lt_delta_calculated = False
+        if 'step2_lt_delta_data' in st.session_state:
+            st.session_state.step2_lt_delta_data = None
+        if 'step2_lt_delta_calculator' in st.session_state:
+            st.session_state.step2_lt_delta_calculator = None
+        if 'step2_lt_delta_product_code' in st.session_state:
+            st.session_state.step2_lt_delta_product_code = None
+        if 'step2_lt_delta_total_count' in st.session_state:
+            st.session_state.step2_lt_delta_total_count = None
+        if 'step2_lt_delta_plan_data' in st.session_state:
+            del st.session_state.step2_lt_delta_plan_data
+        if 'step2_lt_delta_actual_data' in st.session_state:
+            del st.session_state.step2_lt_delta_actual_data
+        if 'step2_lt_delta_working_dates' in st.session_state:
+            del st.session_state.step2_lt_delta_working_dates
+        if 'step2_lt_delta_timestamp' in st.session_state:
+            del st.session_state.step2_lt_delta_timestamp
+        # 商品コード変更時は、手順⑥の再計算フラグもリセット
+        if 'step2_recalculated' in st.session_state:
+            st.session_state.step2_recalculated = False
+        if 'step2_after_calculator' in st.session_state:
+            st.session_state.step2_after_calculator = None
+    
     st.divider()
     
     # ========== 手順②：算出条件を設定する ==========
@@ -568,6 +597,13 @@ def display_step2():
             total_count = total_days - lead_time_days + 1
             
             # セッション状態に保存
+            # 手順③のボタン押下時は、手順⑥の再計算フラグを先にリセットして最新のcalculatorを使用する
+            if 'step2_recalculated' in st.session_state:
+                st.session_state.step2_recalculated = False
+            if 'step2_after_calculator' in st.session_state:
+                st.session_state.step2_after_calculator = None
+            
+            # 最新のデータをセッション状態に保存
             st.session_state.step2_lt_delta_calculated = True
             st.session_state.step2_lt_delta_data = {
                 'delta2': delta2,
@@ -583,6 +619,15 @@ def display_step2():
             st.session_state.step2_lt_delta_plan_data = plan_data
             st.session_state.step2_lt_delta_actual_data = actual_data
             st.session_state.step2_lt_delta_working_dates = working_dates
+            # グラフの再描画を確実にするため、タイムスタンプを保存
+            st.session_state.step2_lt_delta_timestamp = time.time()
+            
+            # デバッグ用：Session Stateの更新をログ出力（開発時のみ）
+            if st.session_state.get('debug_mode', False):
+                st.write(f"🔍 Debug: ボタン押下 - product_code={selected_product}, "
+                        f"calculator_saved={temp_calculator is not None}, "
+                        f"timestamp={st.session_state.step2_lt_delta_timestamp}, "
+                        f"recalculated_reset={not st.session_state.get('step2_recalculated', False)}")
             
             st.success("✅ LT間差分の計算が完了しました。")
             st.rerun()
@@ -592,27 +637,141 @@ def display_step2():
     
     # LT間差分の表示
     if st.session_state.get('step2_lt_delta_calculated', False) and st.session_state.get('step2_lt_delta_data') is not None:
-        product_code = st.session_state.get('step2_lt_delta_product_code')
-        lt_delta_data = st.session_state.get('step2_lt_delta_data')
-        calculator = st.session_state.get('step2_lt_delta_calculator')
-        total_count = st.session_state.get('step2_lt_delta_total_count')
-        lead_time_days = lt_delta_data['lead_time_days']
+        saved_product_code = st.session_state.get('step2_lt_delta_product_code')
         
-        # 手順⑥以降では処理後の実績データを使用（詳細データ表示を処理後の実績で統一）
-        # 手順⑥以降ではafter_calculatorを使用、それ以前はcalculatorを使用
-        display_calculator = calculator
-        if st.session_state.get('step2_recalculated', False) and st.session_state.get('step2_after_calculator') is not None:
-            display_calculator = st.session_state.get('step2_after_calculator')
-        
-        # 1. 日次計画と日次実績の時系列推移
-        st.markdown('<div class="step-sub-section">日次計画と日次実績の時系列推移</div>', unsafe_allow_html=True)
-        
-        # 対象期間を表示
-        data_loader = st.session_state.get('uploaded_data_loader')
-        if data_loader is not None:
-            try:
-                common_start, common_end = data_loader.get_common_date_range()
-                # 日付をYYYY/MM/DD形式にフォーマット
+        # 現在選択されている商品コードと保存されている商品コードが一致しているか確認
+        if saved_product_code != selected_product:
+            # 商品コードが一致しない場合は、グラフを表示せずに警告を表示
+            st.warning(f"⚠️ 選択されている商品コード（{selected_product}）と計算済みの商品コード（{saved_product_code}）が異なります。「実績のばらつきと計画誤差を可視化する」ボタンを押して、新しい商品コードのデータを計算してください。")
+        else:
+            # 商品コードが一致している場合のみ、グラフを表示
+            product_code = saved_product_code
+            lt_delta_data = st.session_state.get('step2_lt_delta_data')
+            calculator = st.session_state.get('step2_lt_delta_calculator')
+            total_count = st.session_state.get('step2_lt_delta_total_count')
+            lead_time_days = lt_delta_data['lead_time_days']
+            
+            # display_calculatorの設定：手順⑥以降では処理後の実績データを使用、それ以前は最新のcalculatorを使用
+            # 手順③のボタン押下時は必ず最新のstep2_lt_delta_calculatorを使用する
+            display_calculator = calculator
+            if calculator is None:
+                st.error("❌ 計算データが取得できませんでした。ボタンを再度押してください。")
+                return
+            
+            # 手順⑥で再計算された場合のみ、処理後のcalculatorを使用
+            # step2_recalculatedがFalseの場合は、必ず最新のstep2_lt_delta_calculatorを使用
+            if st.session_state.get('step2_recalculated', False):
+                after_calculator = st.session_state.get('step2_after_calculator')
+                if after_calculator is not None:
+                    display_calculator = after_calculator
+            
+            # デバッグ用：Session Stateの状態を確認（開発時のみ）
+            if st.session_state.get('debug_mode', False):
+                st.write(f"🔍 Debug: product_code={product_code}, calculator_exists={calculator is not None}, "
+                        f"recalculated={st.session_state.get('step2_recalculated', False)}, "
+                        f"after_calculator_exists={st.session_state.get('step2_after_calculator') is not None}")
+            
+            # 1. 日次計画と日次実績の時系列推移
+            st.markdown('<div class="step-sub-section">日次計画と日次実績の時系列推移</div>', unsafe_allow_html=True)
+            
+            # 対象期間を表示
+            data_loader = st.session_state.get('uploaded_data_loader')
+            if data_loader is not None:
+                try:
+                    common_start, common_end = data_loader.get_common_date_range()
+                    # 日付をYYYY/MM/DD形式にフォーマット
+                    def format_date(date):
+                        if isinstance(date, str):
+                            if len(date) == 8:
+                                return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                            else:
+                                return str(date)
+                        else:
+                            return pd.to_datetime(date).strftime("%Y/%m/%d")
+                    
+                    start_date_str = format_date(common_start)
+                    end_date_str = format_date(common_end)
+                    
+                    # 稼働日数を取得
+                    working_dates = data_loader.get_working_dates()
+                    if working_dates is not None and len(working_dates) > 0:
+                        working_dates_in_range = [d for d in working_dates if common_start <= d <= common_end]
+                        working_days_count = len(working_dates_in_range) if working_dates_in_range else len(display_calculator.plan_data)
+                    else:
+                        working_days_count = len(display_calculator.plan_data)
+                    
+                    # ABC区分を取得
+                    abc_category = get_product_category(product_code)
+                    abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                    if abc_category_display:
+                        product_display = f"{abc_category_display}区分 | {product_code}"
+                    else:
+                        product_display = product_code
+                    
+                    st.markdown(f"""
+                    <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                        対象期間：{start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
+                        対象商品：{product_display}
+                    </div>
+                    """, unsafe_allow_html=True)
+                except Exception:
+                    pass
+            
+            fig = create_time_series_chart(product_code, display_calculator)
+            # グラフの再描画を確実にするため、タイムスタンプをキーに含める
+            timestamp = st.session_state.get('step2_lt_delta_timestamp', 0)
+            st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}_{timestamp}", config={'displayModeBar': True, 'displaylogo': False})
+            
+            # 2. 日次計画と日次実績の統計情報（計画誤差率を追加）
+            st.markdown('<div class="step-sub-section">日次計画と日次実績の統計情報</div>', unsafe_allow_html=True)
+            display_plan_actual_statistics(product_code, display_calculator)
+            
+            # 3. リードタイム区間の総件数（スライド集計）
+            st.markdown('<div class="step-sub-section">リードタイム区間の総件数（スライド集計）</div>', unsafe_allow_html=True)
+            
+            # 説明文を追加
+            st.markdown(
+                """
+                <div class="step-description" style="margin-bottom: 0.5rem;">
+                    リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数<br>
+                    算出式：総件数 ＝ 全期間の日数 － リードタイム期間 ＋ 1
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # 対象期間を計算して表示
+            plan_data = calculator.plan_data
+            lead_time_days = int(np.ceil(calculator._get_lead_time_in_working_days()))
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            
+            period_display = "取得できませんでした"
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = plan_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                        first_start_date = plan_data.index[first_start_pos]
+                    else:
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = plan_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                        last_start_date = plan_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
                 def format_date(date):
                     if isinstance(date, str):
                         if len(date) == 8:
@@ -622,20 +781,81 @@ def display_step2():
                     else:
                         return pd.to_datetime(date).strftime("%Y/%m/%d")
                 
-                start_date_str = format_date(common_start)
-                end_date_str = format_date(common_end)
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
                 
-                # 稼働日数を取得
-                working_dates = data_loader.get_working_dates()
-                if working_dates is not None and len(working_dates) > 0:
-                    working_dates_in_range = [d for d in working_dates if common_start <= d <= common_end]
-                    working_days_count = len(working_dates_in_range) if working_dates_in_range else len(display_calculator.plan_data)
-                else:
-                    working_days_count = len(display_calculator.plan_data)
+                period_display = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+            
+            st.markdown(
+                f"""
+                <div class="annotation-success-box">
+                    <span class="icon">✅</span>
+                    <div class="text">
+                        <strong>リードタイム区間の総件数：{total_count}件</strong> 
+                        （{period_display}）
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # 4. リードタイム期間合計（計画・実績）の時系列推移
+            st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の時系列推移</div>', unsafe_allow_html=True)
+            
+            # 対象期間を表示
+            plan_data = calculator.plan_data
+            actual_data = calculator.actual_data
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = plan_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                        first_start_date = plan_data.index[first_start_pos]
+                    else:
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = plan_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                        last_start_date = plan_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
+                
+                target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+                total_count = len(common_idx)
                 
                 # ABC区分を取得
                 abc_category = get_product_category(product_code)
                 abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                
                 if abc_category_display:
                     product_display = f"{abc_category_display}区分 | {product_code}"
                 else:
@@ -643,255 +863,104 @@ def display_step2():
                 
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                    対象期間：{start_date_str} ～ {end_date_str}（稼働日数：{working_days_count:,} 日）<br>
+                    対象期間：{target_period}（総件数：{total_count:,} 件）<br>
                     対象商品：{product_display}
                 </div>
                 """, unsafe_allow_html=True)
-            except Exception:
-                pass
-        
-        fig = create_time_series_chart(product_code, display_calculator)
-        st.plotly_chart(fig, use_container_width=True, key=f"time_series_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
-        
-        # 2. 日次計画と日次実績の統計情報（計画誤差率を追加）
-        st.markdown('<div class="step-sub-section">日次計画と日次実績の統計情報</div>', unsafe_allow_html=True)
-        display_plan_actual_statistics(product_code, display_calculator)
-        
-        # 3. リードタイム区間の総件数（スライド集計）
-        st.markdown('<div class="step-sub-section">リードタイム区間の総件数（スライド集計）</div>', unsafe_allow_html=True)
-        
-        # 説明文を追加
-        st.markdown(
-            """
-            <div class="step-description" style="margin-bottom: 0.5rem;">
-                リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数<br>
-                算出式：総件数 ＝ 全期間の日数 － リードタイム期間 ＋ 1
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # 対象期間を計算して表示
-        plan_data = calculator.plan_data
-        lead_time_days = int(np.ceil(calculator._get_lead_time_in_working_days()))
-        plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
-        actual_sums = calculator.actual_data.rolling(window=lead_time_days).sum().dropna()
-        common_idx = plan_sums.index.intersection(actual_sums.index)
-        
-        period_display = "取得できませんでした"
-        if len(common_idx) > 0:
-            first_end_date = common_idx[0]
-            last_end_date = common_idx[-1]
             
-            try:
-                first_end_pos = plan_data.index.get_loc(first_end_date)
-                first_start_pos = first_end_pos - (lead_time_days - 1)
-                if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
-                    first_start_date = plan_data.index[first_start_pos]
-                else:
-                    first_start_date = first_end_date
-            except (KeyError, IndexError):
-                first_start_date = first_end_date
+            fig = create_lead_time_total_time_series_chart(product_code, calculator)
+            st.plotly_chart(fig, use_container_width=True, key=f"lead_time_total_time_series_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
             
-            try:
-                last_end_pos = plan_data.index.get_loc(last_end_date)
-                last_start_pos = last_end_pos - (lead_time_days - 1)
-                if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
-                    last_start_date = plan_data.index[last_start_pos]
-                else:
-                    last_start_date = last_end_date
-            except (KeyError, IndexError):
-                last_start_date = last_end_date
+            # 5. リードタイム期間合計（計画・実績）の統計情報（NEW）
+            st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の統計情報</div>', unsafe_allow_html=True)
+            display_lead_time_total_statistics(product_code, calculator)
             
-            def format_date(date):
-                if isinstance(date, str):
-                    if len(date) == 8:
-                        return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+            # 6. リードタイム間差分の時系列推移
+            st.markdown('<div class="step-sub-section">リードタイム間差分の時系列推移</div>', unsafe_allow_html=True)
+            
+            # 対象期間を表示
+            plan_data = calculator.plan_data
+            actual_data = calculator.actual_data
+            plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
+            actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+            common_idx = plan_sums.index.intersection(actual_sums.index)
+            
+            if len(common_idx) > 0:
+                first_end_date = common_idx[0]
+                last_end_date = common_idx[-1]
+                
+                try:
+                    first_end_pos = plan_data.index.get_loc(first_end_date)
+                    first_start_pos = first_end_pos - (lead_time_days - 1)
+                    if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
+                        first_start_date = plan_data.index[first_start_pos]
                     else:
-                        return str(date)
+                        first_start_date = first_end_date
+                except (KeyError, IndexError):
+                    first_start_date = first_end_date
+                
+                try:
+                    last_end_pos = plan_data.index.get_loc(last_end_date)
+                    last_start_pos = last_end_pos - (lead_time_days - 1)
+                    if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
+                        last_start_date = plan_data.index[last_start_pos]
+                    else:
+                        last_start_date = last_end_date
+                except (KeyError, IndexError):
+                    last_start_date = last_end_date
+                
+                def format_date(date):
+                    if isinstance(date, str):
+                        if len(date) == 8:
+                            return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
+                        else:
+                            return str(date)
+                    else:
+                        return pd.to_datetime(date).strftime("%Y/%m/%d")
+                
+                first_start_str = format_date(first_start_date)
+                first_end_str = format_date(first_end_date)
+                last_start_str = format_date(last_start_date)
+                last_end_str = format_date(last_end_date)
+                
+                target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
+                total_count = len(common_idx)
+                
+                # ABC区分を取得
+                abc_category = get_product_category(product_code)
+                abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
+                
+                if abc_category_display:
+                    product_display = f"{abc_category_display}区分 | {product_code}"
                 else:
-                    return pd.to_datetime(date).strftime("%Y/%m/%d")
-            
-            first_start_str = format_date(first_start_date)
-            first_end_str = format_date(first_end_date)
-            last_start_str = format_date(last_start_date)
-            last_end_str = format_date(last_end_date)
-            
-            period_display = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
-        
-        st.markdown(
-            f"""
-            <div class="annotation-success-box">
-                <span class="icon">✅</span>
-                <div class="text">
-                    <strong>リードタイム区間の総件数：{total_count}件</strong> 
-                    （{period_display}）
+                    product_display = product_code
+                
+                st.markdown(f"""
+                <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
+                    対象期間：{target_period}（総件数：{total_count:,} 件）<br>
+                    対象商品：{product_display}
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # 4. リードタイム期間合計（計画・実績）の時系列推移
-        st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の時系列推移</div>', unsafe_allow_html=True)
-        
-        # 対象期間を表示
-        plan_data = calculator.plan_data
-        actual_data = calculator.actual_data
-        plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
-        actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
-        common_idx = plan_sums.index.intersection(actual_sums.index)
-        
-        if len(common_idx) > 0:
-            first_end_date = common_idx[0]
-            last_end_date = common_idx[-1]
+                """, unsafe_allow_html=True)
             
-            try:
-                first_end_pos = plan_data.index.get_loc(first_end_date)
-                first_start_pos = first_end_pos - (lead_time_days - 1)
-                if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
-                    first_start_date = plan_data.index[first_start_pos]
-                else:
-                    first_start_date = first_end_date
-            except (KeyError, IndexError):
-                first_start_date = first_end_date
+            fig, delta2_for_stats_step3, delta3_for_stats_step3 = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
+            st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
             
-            try:
-                last_end_pos = plan_data.index.get_loc(last_end_date)
-                last_start_pos = last_end_pos - (lead_time_days - 1)
-                if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
-                    last_start_date = plan_data.index[last_start_pos]
-                else:
-                    last_start_date = last_end_date
-            except (KeyError, IndexError):
-                last_start_date = last_end_date
-            
-            def format_date(date):
-                if isinstance(date, str):
-                    if len(date) == 8:
-                        return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
-                    else:
-                        return str(date)
-                else:
-                    return pd.to_datetime(date).strftime("%Y/%m/%d")
-            
-            first_start_str = format_date(first_start_date)
-            first_end_str = format_date(first_end_date)
-            last_start_str = format_date(last_start_date)
-            last_end_str = format_date(last_end_date)
-            
-            target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
-            total_count = len(common_idx)
-            
-            # ABC区分を取得
-            abc_category = get_product_category(product_code)
-            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
-            
-            if abc_category_display:
-                product_display = f"{abc_category_display}区分 | {product_code}"
-            else:
-                product_display = product_code
-            
-            st.markdown(f"""
-            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象期間：{target_period}（総件数：{total_count:,} 件）<br>
-                対象商品：{product_display}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        fig = create_lead_time_total_time_series_chart(product_code, calculator)
-        st.plotly_chart(fig, use_container_width=True, key=f"lead_time_total_time_series_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
-        
-        # 5. リードタイム期間合計（計画・実績）の統計情報（NEW）
-        st.markdown('<div class="step-sub-section">リードタイム期間合計（計画・実績）の統計情報</div>', unsafe_allow_html=True)
-        display_lead_time_total_statistics(product_code, calculator)
-        
-        # 6. リードタイム間差分の時系列推移
-        st.markdown('<div class="step-sub-section">リードタイム間差分の時系列推移</div>', unsafe_allow_html=True)
-        
-        # 対象期間を表示
-        plan_data = calculator.plan_data
-        actual_data = calculator.actual_data
-        plan_sums = plan_data.rolling(window=lead_time_days).sum().dropna()
-        actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
-        common_idx = plan_sums.index.intersection(actual_sums.index)
-        
-        if len(common_idx) > 0:
-            first_end_date = common_idx[0]
-            last_end_date = common_idx[-1]
-            
-            try:
-                first_end_pos = plan_data.index.get_loc(first_end_date)
-                first_start_pos = first_end_pos - (lead_time_days - 1)
-                if first_start_pos >= 0 and first_start_pos < len(plan_data.index):
-                    first_start_date = plan_data.index[first_start_pos]
-                else:
-                    first_start_date = first_end_date
-            except (KeyError, IndexError):
-                first_start_date = first_end_date
-            
-            try:
-                last_end_pos = plan_data.index.get_loc(last_end_date)
-                last_start_pos = last_end_pos - (lead_time_days - 1)
-                if last_start_pos >= 0 and last_start_pos < len(plan_data.index):
-                    last_start_date = plan_data.index[last_start_pos]
-                else:
-                    last_start_date = last_end_date
-            except (KeyError, IndexError):
-                last_start_date = last_end_date
-            
-            def format_date(date):
-                if isinstance(date, str):
-                    if len(date) == 8:
-                        return f"{date[:4]}/{date[4:6]}/{date[6:8]}"
-                    else:
-                        return str(date)
-                else:
-                    return pd.to_datetime(date).strftime("%Y/%m/%d")
-            
-            first_start_str = format_date(first_start_date)
-            first_end_str = format_date(first_end_date)
-            last_start_str = format_date(last_start_date)
-            last_end_str = format_date(last_end_date)
-            
-            target_period = f"{first_start_str}–{first_end_str} ～ {last_start_str}–{last_end_str}"
-            total_count = len(common_idx)
-            
-            # ABC区分を取得
-            abc_category = get_product_category(product_code)
-            abc_category_display = format_abc_category_for_display(abc_category) if abc_category else None
-            
-            if abc_category_display:
-                product_display = f"{abc_category_display}区分 | {product_code}"
-            else:
-                product_display = product_code
-            
-            st.markdown(f"""
-            <div style="margin-bottom: 0.5rem; font-size: 1.0rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Arial', sans-serif; font-weight: 400; color: #333333;">
-                対象期間：{target_period}（総件数：{total_count:,} 件）<br>
-                対象商品：{product_display}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        fig, delta2_for_stats_step3, delta3_for_stats_step3 = create_time_series_delta_bar_chart(product_code, None, calculator, show_safety_stock_lines=False)
-        st.plotly_chart(fig, use_container_width=True, key=f"delta_bar_step2_{product_code}", config={'displayModeBar': True, 'displaylogo': False})
-        
-        # 時系列グラフで使ったdelta2とdelta3をセッション状態に保存（統計情報テーブルで使用）
-        st.session_state.step2_delta2_for_stats_step3 = delta2_for_stats_step3
-        st.session_state.step2_delta3_for_stats_step3 = delta3_for_stats_step3
+            # 時系列グラフで使ったdelta2とdelta3をセッション状態に保存（統計情報テーブルで使用）
+            st.session_state.step2_delta2_for_stats_step3 = delta2_for_stats_step3
+            st.session_state.step2_delta3_for_stats_step3 = delta3_for_stats_step3
 
-        # 7. リードタイム間差分の統計情報
-        st.markdown('<div class="step-sub-section">リードタイム間差分の統計情報</div>', unsafe_allow_html=True)
-        # 時系列グラフで使ったdelta2とdelta3を使用（完全に同一のデータ）
-        delta2_for_stats = st.session_state.get('step2_delta2_for_stats_step3')
-        delta3_for_stats = st.session_state.get('step2_delta3_for_stats_step3')
-        if delta2_for_stats is not None and delta3_for_stats is not None:
-            display_delta_statistics_from_data(product_code, delta2_for_stats, delta3_for_stats)
-        else:
-            # フォールバック：lt_delta_dataから取得
-            display_delta_statistics_from_data(product_code, lt_delta_data['delta2'], lt_delta_data['delta3'])
-        
-        st.divider()
+            # 7. リードタイム間差分の統計情報
+            st.markdown('<div class="step-sub-section">リードタイム間差分の統計情報</div>', unsafe_allow_html=True)
+            # 時系列グラフで使ったdelta2とdelta3を使用（完全に同一のデータ）
+            delta2_for_stats = st.session_state.get('step2_delta2_for_stats_step3')
+            delta3_for_stats = st.session_state.get('step2_delta3_for_stats_step3')
+            if delta2_for_stats is not None and delta3_for_stats is not None:
+                display_delta_statistics_from_data(product_code, delta2_for_stats, delta3_for_stats)
+            else:
+                # フォールバック：lt_delta_dataから取得
+                display_delta_statistics_from_data(product_code, lt_delta_data['delta2'], lt_delta_data['delta3'])
+            
+            st.divider()
     
     # ========== 手順④：安全在庫を算出する ==========
     if st.session_state.get('step2_lt_delta_calculated', False):
