@@ -1655,6 +1655,11 @@ def display_abc_matrix_comparison_after(results_df, before_results_df=None, key_
                 list(matrix_df.columns),
                 names=["区分", "項目"]
             )
+        
+        # PyArrowの警告を解消するため、すべての列を文字列型に変換
+        # カンマ区切りの数値文字列が含まれているため、明示的に文字列型に変換
+        for col in matrix_df.columns:
+            matrix_df[col] = matrix_df[col].astype(str)
     
     # 空白行を完全に除去（NaNや空の行、全てが空文字列の行を削除）
     matrix_df = matrix_df.dropna(how='all')
@@ -2115,6 +2120,11 @@ def display_abc_matrix_comparison(results_df, key_prefix="abc_matrix"):
         summary_df.columns = pd.MultiIndex.from_tuples(summary_new_columns)
         
         matrix_df = pd.concat([matrix_df, summary_df])
+        
+        # PyArrowの警告を解消するため、すべての列を文字列型に変換
+        # カンマ区切りの数値文字列が含まれているため、明示的に文字列型に変換
+        for col in matrix_df.columns:
+            matrix_df[col] = matrix_df[col].astype(str)
     
     # 空白行を完全に除去（NaNや空の行、全てが空文字列の行を削除）
     matrix_df = matrix_df.dropna(how='all')
