@@ -374,19 +374,54 @@ def display_step3():
         
         # 詳細テーブル（折り畳み式、デフォルト：非表示）
         with st.expander("詳細データを表示", expanded=False):
-            # 月当たり実績で降順ソート
-            if '月当たり実績' in results_df.columns:
-                results_df = results_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
-            # 列順を指定して並び替え（ABC区分の右隣に月当たり実績を配置）
+            # 表示用のDataFrameを作成（コピー）
+            display_df = results_df.copy()
+            
+            # 列名を変更（異常処理前を明示）
+            if '月当たり実績' in display_df.columns:
+                display_df = display_df.rename(columns={'月当たり実績': '月当たり実績（異常処理前）'})
+            if '日当たり実績' in display_df.columns:
+                display_df = display_df.rename(columns={'日当たり実績': '日当たり実績（異常処理前）'})
+            
+            # 稼働日数を追加（データローダーから取得）
+            try:
+                if st.session_state.uploaded_data_loader is not None:
+                    data_loader = st.session_state.uploaded_data_loader
+                else:
+                    data_loader = DataLoader("data/日次計画データ.csv", "data/日次実績データ.csv")
+                    data_loader.load_data()
+                working_dates = data_loader.get_working_dates()
+                working_days_count = len(working_dates)
+                display_df['稼働日数'] = working_days_count
+            except:
+                display_df['稼働日数'] = None
+            
+            # 月当たり実績（異常処理前）で降順ソート
+            if '月当たり実績（異常処理前）' in display_df.columns:
+                display_df = display_df.sort_values('月当たり実績（異常処理前）', ascending=False).reset_index(drop=True)
+            
+            # 列順を指定して並び替え（要件に基づく順序）
             column_order = [
-                '商品コード', 'ABC区分', '月当たり実績', '現行設定_数量', '現行設定_日数', '安全在庫①_数量', '安全在庫②_数量', '安全在庫③_数量',
-                '安全在庫①_日数', '安全在庫②_日数', '安全在庫③_日数', '日当たり実績', '欠品許容率'
+                '商品コード',
+                'ABC区分',
+                '月当たり実績（異常処理前）',
+                '現行設定_数量',
+                '安全在庫①_数量',
+                '安全在庫②_数量',
+                '安全在庫③_数量',
+                '現行設定_日数',
+                '安全在庫①_日数',
+                '安全在庫②_日数',
+                '安全在庫③_日数',
+                '日当たり実績（異常処理前）',
+                '稼働日数',
+                '欠品許容率'
             ]
             # 存在する列のみを選択
-            available_columns = [col for col in column_order if col in results_df.columns]
-            results_df_display = results_df[available_columns]
+            available_columns = [col for col in column_order if col in display_df.columns]
+            display_df_display = display_df[available_columns]
             # 横スクロールを有効化（width='stretch'で自動的に横スクロール可能）
-            st.dataframe(results_df_display, width='stretch', hide_index=True)
+            st.dataframe(display_df_display, width='stretch', hide_index=True)
         
         # CSVエクスポート（列順を指定）
         # Plotly標準の"Download as CSV"があるため、独自のダウンロードボタンは廃止
@@ -1253,6 +1288,12 @@ def display_step3():
                 display_detail_df['安全在庫③_数量'] = display_detail_df['最終安全在庫③_数量']
                 display_detail_df['安全在庫③_日数'] = display_detail_df['最終安全在庫③_日数']
                 
+                # 列名を変更（異常処理後を明示）
+                if '月当たり実績' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.rename(columns={'月当たり実績': '月当たり実績（異常処理後）'})
+                if '日当たり実績' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.rename(columns={'日当たり実績': '日当たり実績（異常処理後）'})
+                
                 # 稼働日数を追加（データローダーから取得）
                 try:
                     if st.session_state.uploaded_data_loader is not None:
@@ -1266,28 +1307,28 @@ def display_step3():
                 except:
                     display_detail_df['稼働日数'] = None
                 
-                # 月当たり実績で降順ソート
-                if '月当たり実績' in display_detail_df.columns:
-                    display_detail_df = display_detail_df.sort_values('月当たり実績', ascending=False).reset_index(drop=True)
+                # 月当たり実績（異常処理後）で降順ソート
+                if '月当たり実績（異常処理後）' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.sort_values('月当たり実績（異常処理後）', ascending=False).reset_index(drop=True)
                 
                 # 列順を指定して並び替え（要件に基づく順序）
                 column_order = [
                     '商品コード',
                     'ABC区分',
-                    '月当たり実績',
+                    '月当たり実績（異常処理後）',
                     '現行設定_数量',
-                    '現行設定_日数',
                     '安全在庫①_数量',
-                    '安全在庫①_日数',
                     '安全在庫②_数量',
-                    '安全在庫②_日数',
                     '安全在庫②\'_数量',
-                    '安全在庫②\'_日数',
                     '安全在庫③_数量',
-                    '安全在庫③_日数',
-                    '採用モデル',
                     '採用モデル在庫_数量',
+                    '現行設定_日数',
+                    '安全在庫①_日数',
+                    '安全在庫②_日数',
+                    '安全在庫②\'_日数',
+                    '安全在庫③_日数',
                     '採用モデル在庫_日数',
+                    '採用モデル',
                     '計画誤差率',
                     '計画合計',
                     '実績合計',
@@ -1295,7 +1336,7 @@ def display_step3():
                     '採用rソース',
                     '欠品許容率',
                     '稼働日数',
-                    '日当たり実績'
+                    '日当たり実績（異常処理後）'
                 ]
                 
                 # 列名のマッピング（実際の列名に合わせる）

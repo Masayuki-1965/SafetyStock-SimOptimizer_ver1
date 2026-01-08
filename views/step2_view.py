@@ -819,12 +819,13 @@ def display_step2():
             st.markdown(
                 """
                 <div class="step-description" style="margin-bottom: 0.5rem;">
-                    リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数<br>
-                    算出式：総件数 ＝ 全期間の日数 － リードタイム期間 ＋ 1
+                    リードタイム日数分の計画・実績データを1日ずつスライドして集計した件数
                 </div>
                 """,
                 unsafe_allow_html=True
             )
+            # 補足注釈を追加（既存の補足注釈と同じスタイル）
+            st.caption("※ 算出式：総件数 ＝ 全期間の日数 － リードタイム期間 ＋ 1")
             
             # 対象期間を計算して表示
             plan_data = calculator.plan_data
@@ -4158,8 +4159,11 @@ def display_after_processing_comparison(product_code: str,
         ]
     }
     
-    comparison_df = pd.DataFrame(comparison_data, index=['処理前_安全在庫数量（日数）', '処理後_安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
+    comparison_df = pd.DataFrame(comparison_data, index=['Before 安全在庫数量（日数）', 'After    安全在庫数量（日数）', '現行比（処理後 ÷ 現行）'])
     st.dataframe(comparison_df, width='stretch')
+    
+    # 補足注釈を追加（既存の補足注釈と同じスタイル）
+    st.caption("※ 実績異常値補正により日当たり実績が減少するため、安全在庫日数（= 安全在庫数量 ÷ 日当たり実績）は Before/After で変動していますが、計算ロジックは正常です。")
     
     # 3. テキストボックス型注釈を表示
     if current_days <= 0:
