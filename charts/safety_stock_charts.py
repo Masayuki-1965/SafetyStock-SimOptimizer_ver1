@@ -310,36 +310,79 @@ def create_time_series_delta_bar_chart(product_code: str, results: Optional[dict
         # 上段：安全在庫①（赤色破線）と安全在庫②（濃い黒系破線）を追加（マイナス側に描画）
         # p=0%の時は①を非表示
         if safety_stock_1 is not None and not is_model1_undefined and not is_p_zero:
+            ss1_y = -safety_stock_1
             fig.add_hline(
-                y=-safety_stock_1,  # マイナス側に描画
+                y=ss1_y,  # マイナス側に描画
                 line_dash="dash",
                 line_color="red",  # 赤色
                 line_width=2,
-                annotation_text="安全在庫①",
-                annotation_position="bottom right",
+                annotation_text="",  # ラベルは後で個別に追加
                 row=1, col=1
             )
+            # ラベルを右端より左側に配置し、背景を白に設定（他のラベルと被らないように）
+            fig.add_annotation(
+                x=x_max,
+                y=ss1_y,
+                xref="x",
+                yref="y",
+                text="安全在庫①",
+                showarrow=False,
+                xanchor="right",
+                xshift=-80,  # 右端から80px左側にずらす
+                bgcolor="white",
+                bordercolor="red",
+                borderwidth=1,
+                font=dict(size=12, color="red")
+            )
         if safety_stock_2 is not None:
+            ss2_y = -safety_stock_2
             fig.add_hline(
-                y=-safety_stock_2,  # マイナス側に描画
+                y=ss2_y,  # マイナス側に描画
                 line_dash="dash",
                 line_color="#333333",  # 濃い黒系
                 line_width=2,
-                annotation_text="安全在庫②",
-                annotation_position="bottom right",
+                annotation_text="",  # ラベルは後で個別に追加
                 row=1, col=1
+            )
+            # ラベルをグラフ右側に配置し、背景を白に設定
+            fig.add_annotation(
+                x=x_max,
+                y=ss2_y,
+                xref="x",
+                yref="y",
+                text="安全在庫②",
+                showarrow=False,
+                xanchor="right",
+                bgcolor="white",
+                bordercolor="#333333",
+                borderwidth=1,
+                font=dict(size=12, color="#333333")
             )
         
         # 下段：安全在庫③（濃い緑系破線）を追加（マイナス側に描画）
         if safety_stock_3 is not None:
+            ss3_y = -safety_stock_3
             fig.add_hline(
-                y=-safety_stock_3,  # マイナス側に描画
+                y=ss3_y,  # マイナス側に描画
                 line_dash="dash",
                 line_color="#228B22",  # 濃い緑系
                 line_width=2,
-                annotation_text="安全在庫③",
-                annotation_position="bottom right",
+                annotation_text="",  # ラベルは後で個別に追加
                 row=2, col=1
+            )
+            # ラベルをグラフ右側に配置し、背景を白に設定
+            fig.add_annotation(
+                x=x_max,
+                y=ss3_y,
+                xref="x2",
+                yref="y2",
+                text="安全在庫③",
+                showarrow=False,
+                xanchor="right",
+                bgcolor="white",
+                bordercolor="#228B22",
+                borderwidth=1,
+                font=dict(size=12, color="#228B22")
             )
         
         # 凡例用のダミートレースを追加（破線の凡例を表示するため）
