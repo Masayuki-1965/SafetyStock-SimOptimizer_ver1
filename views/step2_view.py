@@ -2988,43 +2988,43 @@ def display_plan_actual_statistics(product_code: str, calculator: SafetyStockCal
     # CSSのinline-blockと固定幅を使用して「：」の位置を揃える
     summary_lines = []
     
-    # 項目名の最大文字数（14文字）に合わせて固定幅を設定
-    label_width = "14em"  # 最大項目名「A区分の計画誤差率（絶対値）」に合わせた幅
+    # 項目名の最大文字数に合わせて固定幅を設定（未分類区分にも対応）
+    label_width = "16em"  # 「未分類区分の計画誤差率（絶対値）」に合わせた幅
     
     # 対象期間
-    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象期間：</span>{target_period}</div>")
+    summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>対象期間：</span> {target_period}</div>")
     
     # 対象商品
     if abc_category_display is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品：</span>{abc_category_display}区分 | {product_code}</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>対象商品：</span> {abc_category_display}区分 | {product_code}</div>")
     else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>対象商品：</span>{product_code}</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>対象商品：</span> {product_code}</div>")
     
     # 計画誤差率（絶対値）
     if plan_error_rate is not None:
         abs_plan_error_rate = abs(plan_error_rate)
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： {abs_plan_error_rate:.2f} %</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>計画誤差率（絶対値）</span>： {abs_plan_error_rate:.2f} %</div>")
     else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>計画誤差率（絶対値）</span>： 計算できませんでした</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>計画誤差率（絶対値）</span>： 計算できませんでした</div>")
     
     # 全体計画誤差率（絶対値）
     if weighted_avg_plan_error_rate is not None and target_product_count is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>全体計画誤差率（絶対値）</span>： {weighted_avg_plan_error_rate:.2f} %（商品コード数 {target_product_count:,} 件の加重平均）</div>")
     elif weighted_avg_plan_error_rate is not None:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： {weighted_avg_plan_error_rate:.2f} %（加重平均）</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>全体計画誤差率（絶対値）</span>： {weighted_avg_plan_error_rate:.2f} %（加重平均）</div>")
     else:
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>全体計画誤差率（絶対値）</span>： 計算できませんでした</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>全体計画誤差率（絶対値）</span>： 計算できませんでした</div>")
     
     # ABC区分の計画誤差率（絶対値）
     if abc_category_display is not None and abc_category_plan_error_rate is not None and abc_category_product_count > 0:
         label = f"{abc_category_display}区分の計画誤差率（絶対値）"
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_plan_error_rate:.2f} %（{abc_category_display}区分コード数 {abc_category_product_count:,} 件の加重平均）</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>{label}</span>： {abc_category_plan_error_rate:.2f} %（{abc_category_display}区分コード数 {abc_category_product_count:,} 件の加重平均）</div>")
     elif abc_category_display is not None and abc_category_plan_error_rate is not None:
         label = f"{abc_category_display}区分の計画誤差率（絶対値）"
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： {abc_category_plan_error_rate:.2f} %（加重平均）</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>{label}</span>： {abc_category_plan_error_rate:.2f} %（加重平均）</div>")
     elif abc_category_display is not None:
         label = f"{abc_category_display}区分の計画誤差率（絶対値）"
-        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width};'>{label}</span>： 計算できませんでした</div>")
+        summary_lines.append(f"<div><span style='display: inline-block; width: {label_width}; white-space: nowrap;'>{label}</span>： 計算できませんでした</div>")
     
     summary_html = "".join(summary_lines)
     st.markdown(f"""
