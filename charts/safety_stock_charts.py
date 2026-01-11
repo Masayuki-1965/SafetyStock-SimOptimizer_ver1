@@ -151,6 +151,24 @@ def create_lead_time_total_time_series_chart(product_code: str, calculator: Safe
         )
     )
     
+    # リードタイム期間の実績合計の平均値を計算（差分グラフと同じ計算ロジックを使用）
+    # actual_sumsはactual_sums_commonの元データなので、同じ平均値を得るためにactual_sums.mean()を使用
+    actual_sums = actual_data.rolling(window=lead_time_days).sum().dropna()
+    actual_mean = actual_sums.mean()
+    
+    # 平均値を黒色の破線として追加（基準線として控えめに表示）
+    fig.add_trace(
+        go.Scatter(
+            x=dates,
+            y=[actual_mean] * len(dates),
+            name='黒破線　リードタイム期間実績合計の平均',
+            mode='lines',
+            line=dict(color='black', width=1, dash='dash'),  # 破線、細めの線幅
+            hovertemplate="平均値=%{y}<extra></extra>",
+            showlegend=True
+        )
+    )
+    
     # レイアウト設定
     fig.update_layout(
         title=f"{product_code} - リードタイム期間合計（計画・実績）の時系列推移",
