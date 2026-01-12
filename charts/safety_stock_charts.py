@@ -169,6 +169,22 @@ def create_lead_time_total_time_series_chart(product_code: str, calculator: Safe
         )
     )
     
+    # 平均ラインの右端にラベルを追加（安全在庫②のラベルと同一デザイン）
+    x_max = dates.max() if len(dates) > 0 else dates[0]
+    fig.add_annotation(
+        x=x_max,
+        y=actual_mean,
+        xref="x",
+        yref="y",
+        text="リードタイム期間実績合計の平均",
+        showarrow=False,
+        xanchor="right",
+        bgcolor="white",
+        bordercolor="#333333",
+        borderwidth=1,
+        font=dict(size=12, color="#333333")
+    )
+    
     # レイアウト設定
     fig.update_layout(
         title=f"{product_code} - リードタイム期間合計（計画・実績）の時系列推移",
