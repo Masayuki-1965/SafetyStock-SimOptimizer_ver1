@@ -772,35 +772,35 @@ def display_step3():
                         actual_total=actual_total
                     )
                     
-                    # 上限カットが適用されたかチェック
-                    is_cap_applied = (
-                        (final_ss1_quantity is not None and final_ss1_quantity < ss1_value) or
-                        final_ss2_quantity < ss2_value or
-                        final_ss3_quantity < ss3_value or
-                        (final_ss2_corrected_quantity is not None and final_ss2_corrected_quantity < ss2_corrected)
-                    )
-                    
                     # 最終安全在庫の決定（採用モデルに基づく）
                     if adopted_model == "excluded":
                         # 判定対象外（実績合計 <= 0）の場合は安全在庫0扱い
                         final_safety_stock_quantity = 0.0
                         final_safety_stock_days = 0.0
                         final_model_name = "判定対象外"
+                        # 採用モデルがないため、上限カットは適用されない
+                        is_cap_applied = False
                     elif adopted_model == "ss2_corrected":
                         # 安全在庫②'を採用
                         final_safety_stock_quantity = final_ss2_corrected_quantity if final_ss2_corrected_quantity is not None else 0.0
                         final_safety_stock_days = final_ss2_corrected_days if final_ss2_corrected_days is not None else 0.0
                         final_model_name = "安全在庫②'"
+                        # 採用モデル（安全在庫②'）に上限カットが適用されたかチェック
+                        is_cap_applied = (final_ss2_corrected_quantity is not None and ss2_corrected is not None and final_ss2_corrected_quantity < ss2_corrected)
                     elif adopted_model == "ss3":
                         # 安全在庫③を採用
                         final_safety_stock_quantity = final_ss3_quantity
                         final_safety_stock_days = final_ss3_days
                         final_model_name = "安全在庫③"
+                        # 採用モデル（安全在庫③）に上限カットが適用されたかチェック
+                        is_cap_applied = (ss3_value is not None and final_ss3_quantity is not None and final_ss3_quantity < ss3_value)
                     else:
                         # その他の場合は安全在庫③を採用（フォールバック）
                         final_safety_stock_quantity = final_ss3_quantity
                         final_safety_stock_days = final_ss3_days
                         final_model_name = "安全在庫③"
+                        # 採用モデル（安全在庫③）に上限カットが適用されたかチェック
+                        is_cap_applied = (ss3_value is not None and final_ss3_quantity is not None and final_ss3_quantity < ss3_value)
                     
                     # 手順②の結果から現行設定と安全在庫①②③（実績異常値処理前）を取得
                     before_row = before_results_df[before_results_df['商品コード'] == product_code]
@@ -934,7 +934,7 @@ def display_step3():
             # 異常値処理（実績異常値／計画異常値／上限カット）の実行結果
             st.markdown('<div class="step-sub-section">異常値処理（実績異常値／計画異常値／上限カット）の実行結果</div>', unsafe_allow_html=True)
             
-            # 商品コードの総件数（割合計算の分母）
+            # 商品コードの総件数
             total_product_count = len(final_results_df)
             
             # ABC区分別のサマリーを作成
@@ -948,17 +948,17 @@ def display_step3():
                 cap_count = int(category_df['上限カット'].sum())
                 plan_anomaly_count = int(category_df['計画異常値処理'].sum())
                 
-                # 割合%を計算（小数点第1位）
-                outlier_pct = (outlier_count / total_product_count * 100) if total_product_count > 0 else 0.0
-                plan_anomaly_pct = (plan_anomaly_count / total_product_count * 100) if total_product_count > 0 else 0.0
-                cap_pct = (cap_count / total_product_count * 100) if total_product_count > 0 else 0.0
+                # 割合%を計算（ABC区分内の商品コード総件数を分母、小数なしの整数表記）
+                outlier_pct = round((outlier_count / product_count * 100) if product_count > 0 else 0.0)
+                plan_anomaly_pct = round((plan_anomaly_count / product_count * 100) if product_count > 0 else 0.0)
+                cap_pct = round((cap_count / product_count * 100) if product_count > 0 else 0.0)
                 
                 summary_rows.append({
                     'ABC区分': f"{category}区分",
-                    '商品コード件数': f"{product_count}件",
-                    '実績異常値処理件数（%）': f"{outlier_count}件（{outlier_pct:.1f}%）",
-                    '計画異常値処理件数（%）': f"{plan_anomaly_count}件（{plan_anomaly_pct:.1f}%）",
-                    '上限カット件数（%）': f"{cap_count}件（{cap_pct:.1f}%）"
+                    '商品コード件数': f"{product_count}件（{100}%）",
+                    '実績異常値処理件数（%）': f"{outlier_count}件（{outlier_pct}%）",
+                    '計画異常値処理件数（%）': f"{plan_anomaly_count}件（{plan_anomaly_pct}%）",
+                    '上限カット件数（%）': f"{cap_count}件（{cap_pct}%）"
                 })
             
             # 合計行を追加
@@ -966,17 +966,17 @@ def display_step3():
             total_cap = int(final_results_df['上限カット'].sum())
             total_plan_anomaly = int(final_results_df['計画異常値処理'].sum())
             
-            # 合計行の割合%を計算
-            total_outlier_pct = (total_outlier / total_product_count * 100) if total_product_count > 0 else 0.0
-            total_plan_anomaly_pct = (total_plan_anomaly / total_product_count * 100) if total_product_count > 0 else 0.0
-            total_cap_pct = (total_cap / total_product_count * 100) if total_product_count > 0 else 0.0
+            # 合計行の割合%を計算（合計行は必ず100%）
+            total_outlier_pct = round((total_outlier / total_product_count * 100) if total_product_count > 0 else 0.0)
+            total_plan_anomaly_pct = round((total_plan_anomaly / total_product_count * 100) if total_product_count > 0 else 0.0)
+            total_cap_pct = round((total_cap / total_product_count * 100) if total_product_count > 0 else 0.0)
             
             summary_rows.append({
                 'ABC区分': '合計',
-                '商品コード件数': f"{total_product_count}件",
-                '実績異常値処理件数（%）': f"{total_outlier}件（{total_outlier_pct:.1f}%）",
-                '計画異常値処理件数（%）': f"{total_plan_anomaly}件（{total_plan_anomaly_pct:.1f}%）",
-                '上限カット件数（%）': f"{total_cap}件（{total_cap_pct:.1f}%）"
+                '商品コード件数': f"{total_product_count}件（{100}%）",
+                '実績異常値処理件数（%）': f"{total_outlier}件（{total_outlier_pct}%）",
+                '計画異常値処理件数（%）': f"{total_plan_anomaly}件（{total_plan_anomaly_pct}%）",
+                '上限カット件数（%）': f"{total_cap}件（{total_cap_pct}%）"
             })
             
             summary_df = pd.DataFrame(summary_rows)
@@ -994,7 +994,7 @@ def display_step3():
             st.dataframe(styled_summary_df, width='stretch', hide_index=True)
             
             # テーブル直下の補足説明を追加
-            st.caption("※ カッコ内の％は商品コード総件数に対する割合。算出式：割合（%）＝ 各処理件数 ÷ 商品コード総件数 × 100")
+            st.caption("※ カッコ内の％は、各 ABC区分内の商品コード総件数に対する割合です。算出式：割合（%）＝ 各処理件数 ÷ 当該 ABC区分の商品コード総件数 × 100")
             
             # 詳細データ（折り畳み式、デフォルト：非表示）
             with st.expander("詳細データを表示", expanded=False):
