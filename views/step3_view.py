@@ -837,6 +837,12 @@ def display_step3():
                     corrected_total = corrected_data.sum()
                     monthly_avg_actual = corrected_total / target_months if target_months > 0 else 0.0
                     
+                    # 異常値処理後の統計値を計算（標準偏差、最小値、最大値）
+                    # 注意：std_calculation_methodに基づいて標準偏差を計算（母分散推奨のためddof=0を使用）
+                    std_dev_after = corrected_data.std(ddof=0) if std_method == 'population' else corrected_data.std(ddof=1)
+                    min_value_after = corrected_data.min()
+                    max_value_after = corrected_data.max()
+                    
                     # 採用補正比率rを取得（安全在庫②'が計算された場合）
                     ratio_r_used = None
                     if final_ss2_corrected_quantity is not None and used_r_source:
@@ -850,6 +856,10 @@ def display_step3():
                         '商品コード': product_code,
                         'ABC区分': abc_category_display,
                         '月当たり実績': monthly_avg_actual,
+                        '日当たり実績': daily_actual_mean,
+                        '標準偏差（異常処理後）': std_dev_after,
+                        '最小値（異常処理後）': min_value_after,
+                        '最大値（異常処理後）': max_value_after,
                         '現行設定_数量': current_qty,
                         '現行設定_日数': current_days,
                         '安全在庫①_数量': ss1_qty,  # 実績異常値処理前
@@ -866,7 +876,6 @@ def display_step3():
                         '最終安全在庫②_日数': final_ss2_days,  # 実績異常値処理＋上限カット後
                         '最終安全在庫②\'_日数': final_ss2_corrected_days if final_ss2_corrected_days is not None else 0.0,  # 実績異常値処理＋条件カット後（全機種で計算）
                         '最終安全在庫③_日数': final_ss3_days,  # 実績異常値処理＋上限カット後
-                        '日当たり実績': daily_actual_mean,
                         '欠品許容率': stockout_tolerance,
                         # 実績異常値処理・計画異常値処理・上限カットのフラグ
                         '実績異常値処理': is_outlier_processed,
@@ -1293,6 +1302,19 @@ def display_step3():
                     display_detail_df = display_detail_df.rename(columns={'月当たり実績': '月当たり実績（異常処理後）'})
                 if '日当たり実績' in display_detail_df.columns:
                     display_detail_df = display_detail_df.rename(columns={'日当たり実績': '日当たり実績（異常処理後）'})
+                # 異常値処理後の統計値の列名を統一
+                if '標準偏差（異常処理後）' in display_detail_df.columns:
+                    pass  # 既に正しい列名
+                elif '標準偏差' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.rename(columns={'標準偏差': '標準偏差（異常処理後）'})
+                if '最小値（異常処理後）' in display_detail_df.columns:
+                    pass  # 既に正しい列名
+                elif '最小値' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.rename(columns={'最小値': '最小値（異常処理後）'})
+                if '最大値（異常処理後）' in display_detail_df.columns:
+                    pass  # 既に正しい列名
+                elif '最大値' in display_detail_df.columns:
+                    display_detail_df = display_detail_df.rename(columns={'最大値': '最大値（異常処理後）'})
                 
                 # 稼働日数を追加（データローダーから取得）
                 try:
@@ -1312,22 +1334,36 @@ def display_step3():
                     display_detail_df = display_detail_df.sort_values('月当たり実績（異常処理後）', ascending=False).reset_index(drop=True)
                 
                 # 列順を指定して並び替え（要件に基づく順序）
+                # ■ 基本属性
+                # ■ 実績・需要関連（異常値処理後）
+                # ■ 数量ベース
+                # ■ 日数ベース
+                # ■ 採用・判定関連
                 column_order = [
+                    # 基本属性
                     '商品コード',
                     'ABC区分',
+                    # 実績・需要関連（異常値処理後）
                     '月当たり実績（異常処理後）',
+                    '日当たり実績（異常処理後）',
+                    '標準偏差（異常処理後）',
+                    '最小値（異常処理後）',
+                    '最大値（異常処理後）',
+                    # 数量ベース
                     '現行設定_数量',
                     '安全在庫①_数量',
                     '安全在庫②_数量',
                     '安全在庫②\'_数量',
                     '安全在庫③_数量',
                     '採用モデル在庫_数量',
+                    # 日数ベース
                     '現行設定_日数',
                     '安全在庫①_日数',
                     '安全在庫②_日数',
                     '安全在庫②\'_日数',
                     '安全在庫③_日数',
                     '採用モデル在庫_日数',
+                    # 採用・判定関連
                     '採用モデル',
                     '計画誤差率',
                     '計画合計',
@@ -1335,8 +1371,7 @@ def display_step3():
                     '採用補正比率r',
                     '採用rソース',
                     '欠品許容率',
-                    '稼働日数',
-                    '日当たり実績（異常処理後）'
+                    '稼働日数'
                 ]
                 
                 # 列名のマッピング（実際の列名に合わせる）
@@ -1368,12 +1403,13 @@ def display_step3():
             </div>
             """, unsafe_allow_html=True)
             st.markdown("""
-            <div class="step-description">手順③で確定した最終安全在庫を、SCP 登録用データ（CSV 形式）として出力します。</div>
+            <div class="step-description">手順③で採用されたモデルの最終安全在庫日数（異常値処理後）を、SCP 登録用データ（CSV形式）として出力します。</div>
             """, unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("安全在庫登録データを作成する", type="primary", width='stretch'):
-                # 登録用データを作成（最終安全在庫を使用）
+                # 登録用データを作成（手順③で採用されたモデルの最終安全在庫日数（異常値処理後）を使用）
+                # 注意：final_results_dfの'最終安全在庫_日数'は、手順③で採用されたモデルに基づいて決定された値（異常値処理後）です
                 registration_df = final_results_df[[
                     '商品コード', 'ABC区分', 
                     '最終安全在庫_数量', '最終安全在庫_日数',
@@ -1397,6 +1433,7 @@ def display_step3():
                 registration_df = st.session_state.registration_data.copy()
                 
                 # SCP登録用データを作成（商品コードと最終安全在庫月数）
+                # 注意：registration_df['最終安全在庫_日数']は、手順③で採用されたモデルの最終安全在庫日数（異常値処理後）です
                 scp_registration_df = pd.DataFrame({
                     '商品コード': registration_df['商品コード'],
                     '安全在庫月数': registration_df['最終安全在庫_日数'] / 20
@@ -1414,7 +1451,7 @@ def display_step3():
                 )
                 
                 # 補足説明を追加
-                st.caption("※「商品コード」と「安全在庫月数」のみをダウンロードします。安全在庫月数は「最終安全在庫_日数」÷20 で算出しています。")
+                st.caption("※「商品コード」と「安全在庫月数」のみをダウンロードします。安全在庫月数は、手順③で採用されたモデルの最終安全在庫日数（異常値処理後）÷20 で算出しています。")
                 
                 # 登録データのプレビュー（ダウンロード対象と同じ内容を表示）
                 st.markdown('<div class="step-sub-section">登録データプレビュー</div>', unsafe_allow_html=True)
