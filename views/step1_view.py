@@ -144,25 +144,25 @@ def display_safety_stock_definitions():
         <thead>
             <tr>
                 <th style="width: 19%;">モデル</th>
-                <th style="width: 43%;">計算式</th>
-                <th style="width: 38%;">説明</th>
+                <th style="width: 42%;">計算式</th>
+                <th style="width: 39%;">説明</th>
             </tr>
         </thead>
         <tbody>
             <tr>
                 <td class="model-cell">【安全在庫①】<br><span class="model-subtitle">一般的な理論モデル</span></td>
-                <td class="formula-cell"><strong>安全在庫 ＝ 安全係数 Z × 標準偏差 σ × √リードタイム</strong><br>※ LT期間の実績のバラつきを理論式で計算し、安全在庫を決定</td>
-                <td class="description-cell">日々の実績データから標準偏差 σ を算出し、安全係数 Z とリードタイムの平方根を掛ける基本式。<strong>教科書的な安全在庫の理論モデル。計画誤差は考慮しない。</strong></td>
+                <td class="formula-cell"><strong>安全在庫 ＝ 安全係数 Z × 標準偏差 σ × √リードタイム（LT）</strong><br>※ LT期間の実績のバラつきを理論式で計算し、安全在庫量を決定する</td>
+                <td class="description-cell">日々の実績データから標準偏差 σ を算出し、安全係数 Z とリードタイムの平方根を掛ける基本式。<strong>教科書的な安全在庫の統計モデル。計画誤差は考慮しない。</strong></td>
             </tr>
             <tr>
                 <td class="model-cell">【安全在庫②】<br><span class="model-subtitle">実績バラつき実測モデル</span></td>
-                <td class="formula-cell"><strong>リードタイム間差分（平均－実績）<br>＝ リードタイム期間実績合計の平均 － リードタイム期間の実績合計</strong><br>※ LT期間の実績のバラつきを実測し、安全在庫を決定</td>
-                <td class="description-cell">LT期間の実績合計を 1 日ずつスライドし、平均を下回るマイナス差分（＝実績のバラつきによる欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきを反映するが、計画誤差は考慮しない。</strong></td>
+                <td class="formula-cell"><strong>リードタイム間差分（平均－実績）<br>＝ リードタイム期間実績合計の平均 － リードタイム期間の実績合計</strong><br>※ LT期間の実績のバラつきを実測し、安全在庫量を決定する</td>
+                <td class="description-cell">LT期間の実績合計を 1 日ずつスライドして集計し、「平均 − 実績 ＜ 0」となるマイナス差分（＝欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきを反映するが、計画が外れるリスク（計画誤差）は考慮しない。</strong></td>
             </tr>
             <tr>
                 <td class="model-cell">【安全在庫③】<br><span class="model-subtitle">計画誤差実測モデル (推奨)</span></td>
-                <td class="formula-cell"><strong>リードタイム間差分（計画－実績）<br>＝ リードタイム期間の計画合計 － リードタイム期間の実績合計</strong><br>※ LT期間の計画誤差を実測し、安全在庫を決定</td>
-                <td class="description-cell">LT期間の実績と計画を 1 日ずつスライドし、計画が実績を下回るマイナス差分（＝計画誤差による欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきに加え、計画誤差も反映できる、最も実用的なモデル。</strong></td>
+                <td class="formula-cell"><strong>リードタイム間差分（計画－実績）<br>＝ リードタイム期間の計画合計 － リードタイム期間の実績合計</strong><br>※ LT期間の計画値とバラつきを含む実績値との差（計画誤差）を実測し、安全在庫量を決定する</td>
+                <td class="description-cell">LT期間の実績合計と計画合計を 1 日ずつスライドして集計し、「計画 − 実績 ＜ 0」となるマイナス差分（＝欠品リスク）を実測。欠品許容率 p を満たす安全在庫水準を設定。<strong>実績のバラつきに加え、計画誤差も反映できる、最も実用的なモデル。</strong></td>
             </tr>
         </tbody>
     </table>
@@ -197,8 +197,13 @@ def display_file_upload_section():
     # 中項目
     st.markdown("""
     <div class="step1-middle-section">
-        <p>CSVファイルアップロード</p>
+        <p>手順①：CSVファイルをアップロードする</p>
     </div>
+    """, unsafe_allow_html=True)
+    
+    # 手順の説明文
+    st.markdown("""
+    <div class="step-description">安全在庫算出に必要なデータ（CSVファイル）を画面からアップロードしてください。</div>
     """, unsafe_allow_html=True)
 
     # 必須データの案内
@@ -320,9 +325,9 @@ def display_file_upload_section():
     # データ説明（①②③のDrag and Dropエリアの直下）
     st.markdown("""
     <div style="margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 14px; line-height: 1.6; color: #555555;">
-        <p style="margin: 0 0 0.3rem 0; padding: 0;">※ 月次計画データ：月次計画を稼働日マスタで日割りし、日次計画を作成</p>
-        <p style="margin: 0 0 0.3rem 0; padding: 0;">※ 日次実績データ：非稼働日の実績は翌稼働日に合算して集計</p>
-        <p style="margin: 0; padding: 0;">※ 安全在庫データ：未登録でも安全在庫算出は可能（現行との比較は不可）</p>
+        <p style="margin: 0; padding: 0; line-height: 1.6;">※ 月次計画データ：月次計画を稼働日マスタで日割りし、日次計画を作成</p>
+        <p style="margin: 0; padding: 0; line-height: 1.6;">※ 日次実績データ：非稼働日の実績は翌稼働日に合算して集計</p>
+        <p style="margin: 0; padding: 0; line-height: 1.6;">※ 安全在庫データ：未登録でも安全在庫算出は可能（現行との比較は不可）</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -380,13 +385,14 @@ def display_abc_classification_section():
     # 中項目
     st.markdown("""
     <div class="step1-middle-section">
-        <p>ABC区分自動生成</p>
+        <p>手順③：ABC区分を自動生成する</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # 注釈
+    # 手順の説明文
     st.markdown("""
-    <div class="step-description">ABC区分を自動生成するか、現行のABC区分を使用するかを選択してください。</div>
+    <div class="step-description">データ量に基づき、ABC区分を自動で生成します。<br>
+    この区分は、以降の安全在庫算出ロジック（STEP2・STEP3）で活用されます。</div>
     """, unsafe_allow_html=True)
     
     # データローダーの取得
@@ -486,6 +492,12 @@ def display_abc_classification_section():
                 st.session_state.abc_analysis_result = None
                 st.session_state.abc_analysis_source = None
                 st.session_state.abc_existing_processing = False
+
+    # 小項目：ABC区分の採用方法
+    st.markdown('<div class="step1-sub-section with-bullet">ABC区分の採用方法</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="step-description">ABC区分を自動生成するか、現行のABC区分を使用するかを選択してください。</div>
+    """, unsafe_allow_html=True)
 
     col_auto, col_existing = st.columns(2)
     with col_auto:
@@ -1053,8 +1065,14 @@ def display_data_consistency_check_results():
     # 中項目タイトル
     st.markdown("""
     <div class="step1-middle-section">
-        <p>データ整合性チェック結果サマリー</p>
+        <p>手順②：データの整合性をチェックする</p>
     </div>
+    """, unsafe_allow_html=True)
+    
+    # 手順の説明文
+    st.markdown("""
+    <div class="step-description">アップロードしたデータの整合性をチェックし、問題があればアンマッチリストを出力します。<br>
+    問題がある場合は、修正して再アップロードしてください。</div>
     """, unsafe_allow_html=True)
     
     # 小項目タイトルとCSVダウンロードボタンを横並びに配置

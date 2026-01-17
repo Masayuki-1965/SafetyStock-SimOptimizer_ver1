@@ -364,7 +364,7 @@ def main():
     st.markdown("""
     <div class="title-banner">
         <div class="title-main">安全在庫最適化シミュレーションツール</div>
-        <div class="title-sub">理論と実データを融合したデータドリブンなアプローチにより、PSI運用の実態に即して安全在庫を最適化し、計画精度に応じて適切な在庫水準を設定できるようにする</div>
+        <div class="title-sub">理論と実データを融合したデータドリブンなアプローチにより、PSI運用の実態に即して安全在庫を最適化し、計画精度に応じた適切な在庫水準を柔軟に設定できるようにします。</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -436,7 +436,7 @@ def display_step_content():
         st.markdown("""
         <div class="step-header-box">
             <div class="step-header-title">STEP 2：安全在庫算出ロジック体感（選定機種）</div>
-            <div class="step-header-description">任意の商品コードを選び、3種類の安全在庫モデルで【需要変動・計画誤差の把握】→【安全在庫の算出】→【異常値処理】→【上限カット】の一連のプロセスを、実際に手を動かしながら操作することで、「安全在庫算定」「異常値処理」「上限カット」の機能と動作を直感的に理解できます。</div>
+            <div class="step-header-description">任意の商品コードを選び、3種類の安全在庫モデルで【需要変動・計画誤差の把握】→【安全在庫の算出】→【異常値処理】→【上限カット】までの一連の算出プロセスを、実際に手を動かしながら操作することで、各機能の意味と役割を直感的に理解できるようにします。</div>
         </div>
         """, unsafe_allow_html=True)
         st.divider()
@@ -457,7 +457,7 @@ def display_step_content():
         st.markdown("""
         <div class="step-header-box">
             <div class="step-header-title">STEP 3：安全在庫算出と登録値作成（全機種）</div>
-            <div class="step-header-description">すべての商品コードに STEP2 で理解したロジックを適用し、安全在庫を算出します。現行設定と比較し、サマリーで全体傾向を把握します。続いて、異常値処理と上限日数カットを実施し、最終安全在庫を確定します。最後に、確定した安全在庫を SCP 登録用データとして出力します。</div>
+            <div class="step-header-description">すべての商品コードに STEP2 で理解したロジックを適用し、安全在庫を算出します。現行設定と比較しながらサマリーで全体傾向を確認した後、異常値処理を実施し、最終安全在庫を確定します。最後に、確定した安全在庫を SCP 登録用データとして出力します。</div>
         </div>
         """, unsafe_allow_html=True)
         st.divider()
