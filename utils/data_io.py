@@ -73,6 +73,9 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
         # DataLoaderを初期化（ダミーファイルを渡す）
         data_loader = DataLoader("data/日次計画データ.csv", "data/日次実績データ.csv")
         
+        # 重複チェック結果を集約するリスト
+        all_duplicate_mismatches = []
+        
         # 月次計画データの処理
         if monthly_plan_file is not None:
             try:
@@ -88,9 +91,26 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                 # 最初のカラム名をチェック
                 first_col = str(monthly_plan_df.columns[0])
                 if len(first_col) == 6 and first_col.isdigit():
+                    # 重複チェック
+                    duplicate_check = check_duplicate_product_codes(monthly_plan_df, '計画')
+                    if not duplicate_check.empty:
+                        all_duplicate_mismatches.append(duplicate_check)
+                        # 暫定処理：重複を削除（最初の行を残す）
+                        monthly_plan_df = remove_duplicates_keep_first(monthly_plan_df)
+                    
                     # 月次計画データとして処理し、日次計画に変換
                     data_loader.load_monthly_plan_from_dataframe(monthly_plan_df)
                     daily_plan_df = data_loader.convert_monthly_to_daily_plan(monthly_plan_df)
+                    
+                    # 日次計画データでも重複チェック
+                    if daily_plan_df is not None and not daily_plan_df.empty:
+                        duplicate_check_daily = check_duplicate_product_codes(daily_plan_df, '計画')
+                        if not duplicate_check_daily.empty:
+                            all_duplicate_mismatches.append(duplicate_check_daily)
+                            # 暫定処理：重複を削除（最初の行を残す）
+                            daily_plan_df = remove_duplicates_keep_first(daily_plan_df)
+                            data_loader.plan_df = daily_plan_df
+                    
                     st.success(f"✅ 月次計画データを日次計画データに変換しました: {monthly_plan_file.name}")
                 else:
                     st.error(f"❌ 月次計画データの形式が不正です。列名はYYYYMM形式（例: 202406）である必要があります。")
@@ -113,6 +133,13 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                     actual_file.seek(0)  # ファイルポインタをリセット
                     actual_df = pd.read_csv(actual_file, index_col=0, encoding='shift_jis')
                 
+                # 重複チェック
+                duplicate_check = check_duplicate_product_codes(actual_df, '実績')
+                if not duplicate_check.empty:
+                    all_duplicate_mismatches.append(duplicate_check)
+                    # 暫定処理：重複を削除（最初の行を残す）
+                    actual_df = remove_duplicates_keep_first(actual_df)
+                
                 data_loader.load_actual_from_dataframe(actual_df)
                 st.success(f"✅ 日次実績データを読み込みました: {actual_file.name}")
             except Exception as e:
@@ -129,6 +156,13 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                 except UnicodeDecodeError:
                     safety_stock_file.seek(0)  # ファイルポインタをリセット
                     safety_stock_df = pd.read_csv(safety_stock_file, encoding='shift_jis')
+                
+                # 重複チェック（商品コード列を使用）
+                duplicate_check = check_duplicate_product_codes(safety_stock_df, '安全在庫', index_col_name='商品コード')
+                if not duplicate_check.empty:
+                    all_duplicate_mismatches.append(duplicate_check)
+                    # 暫定処理：重複を削除（最初の行を残す）
+                    safety_stock_df = remove_duplicates_keep_first(safety_stock_df, index_col_name='商品コード')
                 
                 data_loader.load_safety_stock_from_dataframe(safety_stock_df)
                 st.success(f"✅ 安全在庫月数データを読み込みました: {safety_stock_file.name}")
@@ -155,6 +189,14 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                             plan_df = pd.read_csv(plan_path, index_col=0, encoding='utf-8-sig')
                         except UnicodeDecodeError:
                             plan_df = pd.read_csv(plan_path, index_col=0, encoding='shift_jis')
+                        
+                        # 重複チェック
+                        duplicate_check = check_duplicate_product_codes(plan_df, '計画')
+                        if not duplicate_check.empty:
+                            all_duplicate_mismatches.append(duplicate_check)
+                            # 暫定処理：重複を削除（最初の行を残す）
+                            plan_df = remove_duplicates_keep_first(plan_df)
+                        
                         # カラム名を日付型に変換
                         plan_df.columns = pd.to_datetime(plan_df.columns, format='%Y%m%d')
                         data_loader.plan_df = plan_df
@@ -169,8 +211,25 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                             monthly_plan_df = pd.read_csv(monthly_plan_path, index_col=0, encoding='utf-8-sig')
                         except UnicodeDecodeError:
                             monthly_plan_df = pd.read_csv(monthly_plan_path, index_col=0, encoding='shift_jis')
+                        
+                        # 重複チェック
+                        duplicate_check = check_duplicate_product_codes(monthly_plan_df, '計画')
+                        if not duplicate_check.empty:
+                            all_duplicate_mismatches.append(duplicate_check)
+                            # 暫定処理：重複を削除（最初の行を残す）
+                            monthly_plan_df = remove_duplicates_keep_first(monthly_plan_df)
+                        
                         data_loader.load_monthly_plan_from_dataframe(monthly_plan_df)
-                        data_loader.convert_monthly_to_daily_plan(monthly_plan_df)
+                        daily_plan_df = data_loader.convert_monthly_to_daily_plan(monthly_plan_df)
+                        
+                        # 日次計画データでも重複チェック
+                        if daily_plan_df is not None and not daily_plan_df.empty:
+                            duplicate_check_daily = check_duplicate_product_codes(daily_plan_df, '計画')
+                            if not duplicate_check_daily.empty:
+                                all_duplicate_mismatches.append(duplicate_check_daily)
+                                # 暫定処理：重複を削除（最初の行を残す）
+                                daily_plan_df = remove_duplicates_keep_first(daily_plan_df)
+                                data_loader.plan_df = daily_plan_df
                     except Exception as e:
                         st.error(f"❌ 月次計画データの読み込みエラー: {str(e)}")
                         return
@@ -196,6 +255,14 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
                         actual_df = pd.read_csv(actual_path, index_col=0, encoding='utf-8-sig')
                     except UnicodeDecodeError:
                         actual_df = pd.read_csv(actual_path, index_col=0, encoding='shift_jis')
+                    
+                    # 重複チェック
+                    duplicate_check = check_duplicate_product_codes(actual_df, '実績')
+                    if not duplicate_check.empty:
+                        all_duplicate_mismatches.append(duplicate_check)
+                        # 暫定処理：重複を削除（最初の行を残す）
+                        actual_df = remove_duplicates_keep_first(actual_df)
+                    
                     data_loader.load_actual_from_dataframe(actual_df)
             except Exception as e:
                 st.warning(f"⚠️ 既存の日次実績データの読み込みに失敗しました: {str(e)}")
@@ -206,7 +273,17 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
             safety_stock_path = os.path.join(base_path, "data/安全在庫データ.csv")
             if os.path.exists(safety_stock_path):
                 try:
+                    # 既存の安全在庫データを読み込む
                     data_loader.load_safety_stock_monthly()
+                    
+                    # 重複チェック
+                    if data_loader.safety_stock_monthly_df is not None and not data_loader.safety_stock_monthly_df.empty:
+                        duplicate_check = check_duplicate_product_codes(data_loader.safety_stock_monthly_df, '安全在庫', index_col_name='商品コード')
+                        if not duplicate_check.empty:
+                            all_duplicate_mismatches.append(duplicate_check)
+                            # 暫定処理：重複を削除（最初の行を残す）
+                            data_loader.safety_stock_monthly_df = remove_duplicates_keep_first(data_loader.safety_stock_monthly_df, index_col_name='商品コード')
+                    
                     # 既存データの読み込みが成功した場合、エラーをクリア
                     if 'missing_safety_stock_error' in st.session_state:
                         del st.session_state.missing_safety_stock_error
@@ -273,64 +350,77 @@ def process_uploaded_files(monthly_plan_file, actual_file, safety_stock_file, ab
         st.session_state.weighted_average_plan_error_rate = weighted_avg_plan_error_rate
         
         # アンマッチチェックを実行（①〜③が正常に読み込めた場合のみ）
-        if (data_loader.plan_df is not None and 
-            data_loader.actual_df is not None and 
-            data_loader.safety_stock_monthly_df is not None and 
-            not data_loader.safety_stock_monthly_df.empty):
-            try:
-                mismatch_detail_df = check_product_code_mismatch(data_loader)
-                # 詳細データとサマリーデータの両方を保存
-                st.session_state.product_code_mismatch_detail_df = mismatch_detail_df
-                # サマリーデータを作成
-                if not mismatch_detail_df.empty:
-                    mismatch_summary_df = (
-                        mismatch_detail_df
-                        .groupby("区分")
-                        .agg(
-                            商品コード件数=("商品コード", "nunique"),
-                            例=("商品コード", "first"),
-                            説明=("説明", "first"),
-                        )
-                        .reset_index()
-                    )
-                    st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
-                else:
-                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
-            except Exception as e:
-                # アンマッチチェックでエラーが発生した場合は警告のみ表示し、処理は続行
-                st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
-                st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
-                st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
-        else:
-            # 安全在庫データがない場合もアンマッチチェックを実行（安全在庫なしのパターンは検出できないが、計画・実績のアンマッチは検出可能）
-            if data_loader.plan_df is not None and data_loader.actual_df is not None:
-                try:
-                    mismatch_detail_df = check_product_code_mismatch(data_loader)
-                    # 詳細データとサマリーデータの両方を保存
-                    st.session_state.product_code_mismatch_detail_df = mismatch_detail_df
-                    # サマリーデータを作成
+        try:
+            # 既存のアンマッチチェック（商品コードの存在不一致）
+            mismatch_detail_df = check_product_code_mismatch(data_loader)
+            
+            # 重複チェック結果を結合
+            if all_duplicate_mismatches:
+                duplicate_df = pd.concat(all_duplicate_mismatches, ignore_index=True)
+                # 列名を統一（既存のアンマッチチェックと合わせる）
+                if 'データ種別' in duplicate_df.columns:
+                    # 重複チェック結果を既存の形式に変換
+                    duplicate_mismatch_list = []
+                    for _, row in duplicate_df.iterrows():
+                        duplicate_mismatch_list.append({
+                            'データ種別': row['データ種別'],
+                            '区分': row['区分'],
+                            '商品コード': row['商品コード'],
+                            '説明': row['説明'],
+                            '重複行数': row.get('重複行数', None)
+                        })
+                    duplicate_mismatch_df = pd.DataFrame(duplicate_mismatch_list)
+                    
+                    # 既存のアンマッチチェック結果と結合
                     if not mismatch_detail_df.empty:
-                        mismatch_summary_df = (
-                            mismatch_detail_df
-                            .groupby("区分")
-                            .agg(
-                                商品コード件数=("商品コード", "nunique"),
-                                例=("商品コード", "first"),
-                                説明=("説明", "first"),
-                            )
-                            .reset_index()
-                        )
-                        st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
+                        # 既存のアンマッチにデータ種別列を追加（既存データは空文字列）
+                        if 'データ種別' not in mismatch_detail_df.columns:
+                            mismatch_detail_df['データ種別'] = ''
+                        if '重複行数' not in mismatch_detail_df.columns:
+                            mismatch_detail_df['重複行数'] = None
+                        
+                        # 重複チェック結果を追加
+                        mismatch_detail_df = pd.concat([mismatch_detail_df, duplicate_mismatch_df], ignore_index=True)
                     else:
-                        st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
-                except Exception as e:
-                    st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
-                    st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
-                    st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
+                        mismatch_detail_df = duplicate_mismatch_df
+                else:
+                    # 列名が一致しない場合はそのまま結合
+                    if not mismatch_detail_df.empty:
+                        mismatch_detail_df = pd.concat([mismatch_detail_df, duplicate_df], ignore_index=True)
+                    else:
+                        mismatch_detail_df = duplicate_df
+            
+            # データ種別列がない場合は追加
+            if 'データ種別' not in mismatch_detail_df.columns:
+                mismatch_detail_df['データ種別'] = ''
+            if '重複行数' not in mismatch_detail_df.columns:
+                mismatch_detail_df['重複行数'] = None
+            
+            # 詳細データとサマリーデータの両方を保存
+            st.session_state.product_code_mismatch_detail_df = mismatch_detail_df
+            
+            # サマリーデータを作成
+            if not mismatch_detail_df.empty:
+                # 区分のみでグループ化（データ種別列は表示に使用しない）
+                mismatch_summary_df = (
+                    mismatch_detail_df
+                    .groupby("区分")
+                    .agg(
+                        商品コード件数=("商品コード", "nunique"),
+                        例=("商品コード", "first"),
+                        説明=("説明", "first"),
+                    )
+                    .reset_index()
+                )
+                
+                st.session_state.product_code_mismatch_summary_df = mismatch_summary_df
             else:
-                # 計画または実績データがない場合はアンマッチチェックをスキップ
-                st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['区分', '商品コード', '説明'])
                 st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['区分', '商品コード件数', '例', '説明'])
+        except Exception as e:
+            # アンマッチチェックでエラーが発生した場合は警告のみ表示し、処理は続行
+            st.warning(f"⚠️ アンマッチチェック中にエラーが発生しました: {str(e)}")
+            st.session_state.product_code_mismatch_detail_df = pd.DataFrame(columns=['データ種別', '区分', '商品コード', '説明', '重複行数'])
+            st.session_state.product_code_mismatch_summary_df = pd.DataFrame(columns=['データ種別', '区分', '商品コード件数', '例', '説明'])
         
         st.success("✅ 全てのデータを適用しました。画面が更新されます。")
         st.rerun()
@@ -370,6 +460,86 @@ def create_csv_download_filename(prefix: str, suffix: str = "") -> str:
         return f"{prefix}_{suffix}_{timestamp}.csv"
     else:
         return f"{prefix}_{timestamp}.csv"
+
+
+def check_duplicate_product_codes(df: pd.DataFrame, data_type: str, index_col_name: str = None) -> pd.DataFrame:
+    """
+    データフレーム内の重複商品コードをチェックする
+    
+    Args:
+        df: チェック対象のDataFrame
+        data_type: データ種別（'実績'、'計画'、'安全在庫'など）
+        index_col_name: インデックス列名（Noneの場合はインデックスを使用）
+    
+    Returns:
+        pd.DataFrame: 重複商品コードのリスト（データ種別、区分、商品コード、説明、重複行数）
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=['データ種別', '区分', '商品コード', '説明', '重複行数'])
+    
+    duplicate_list = []
+    
+    # インデックスから重複を検出
+    if index_col_name is None:
+        # インデックスを使用
+        index_values = df.index
+    else:
+        # 指定された列を使用
+        # 列名が存在しない場合、最初の列を商品コードとして扱う
+        if index_col_name not in df.columns:
+            if len(df.columns) > 0:
+                index_col_name = df.columns[0]
+            else:
+                return pd.DataFrame(columns=['データ種別', '区分', '商品コード', '説明', '重複行数'])
+        index_values = df[index_col_name]
+    
+    # 重複を検出
+    duplicates = index_values[index_values.duplicated(keep=False)]
+    
+    if len(duplicates) > 0:
+        # 重複している商品コードごとに処理
+        for product_code in duplicates.unique():
+            duplicate_count = (index_values == product_code).sum()
+            duplicate_list.append({
+                'データ種別': data_type,
+                '区分': f'{data_type}データ重複',
+                '商品コード': str(product_code),
+                '説明': '同一商品コードが複数行存在します（暫定的に1行目を採用）。データを修正して再アップロードしてください。',
+                '重複行数': duplicate_count
+            })
+    
+    if duplicate_list:
+        return pd.DataFrame(duplicate_list)
+    else:
+        return pd.DataFrame(columns=['データ種別', '区分', '商品コード', '説明', '重複行数'])
+
+
+def remove_duplicates_keep_first(df: pd.DataFrame, index_col_name: str = None) -> pd.DataFrame:
+    """
+    重複商品コードを削除し、最初の行を残す（暫定処理）
+    
+    Args:
+        df: 処理対象のDataFrame
+        index_col_name: インデックス列名（Noneの場合はインデックスを使用）
+    
+    Returns:
+        pd.DataFrame: 重複を削除したDataFrame
+    """
+    if df is None or df.empty:
+        return df
+    
+    if index_col_name is None:
+        # インデックスで重複を削除（最初の行を残す）
+        return df[~df.index.duplicated(keep='first')]
+    else:
+        # 指定された列で重複を削除（最初の行を残す）
+        # 列名が存在しない場合、最初の列を商品コードとして扱う
+        if index_col_name not in df.columns:
+            if len(df.columns) > 0:
+                index_col_name = df.columns[0]
+            else:
+                return df
+        return df.drop_duplicates(subset=[index_col_name], keep='first')
 
 
 def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
@@ -419,18 +589,22 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
     plan_only = plan_codes - actual_codes
     for code in plan_only:
         mismatch_list.append({
+            'データ種別': '計画・実績',
             '区分': '計画のみ',
             '商品コード': code,
-            '説明': '実績がないため安全在庫は算出できません（算出対象外になります）。原因を確認してください。'
+            '説明': '実績がないため安全在庫は算出できません（算出対象外になります）。原因を確認してください。',
+            '重複行数': None
         })
     
     # B: 実績のみ（実績はあるのに計画がない）
     actual_only = actual_codes - plan_codes
     for code in actual_only:
         mismatch_list.append({
+            'データ種別': '計画・実績',
             '区分': '実績のみ',
             '商品コード': code,
-            '説明': '実績はあるのに計画がありません。計画漏れの可能性があります。確認してください。'
+            '説明': '実績はあるのに計画がありません。計画漏れの可能性があります。確認してください。',
+            '重複行数': None
         })
     
     # C: 安全在庫なし（計画と実績の両方があるが安全在庫が未設定）
@@ -438,9 +612,11 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
     plan_actual_no_safety = plan_and_actual - safety_codes
     for code in plan_actual_no_safety:
         mismatch_list.append({
+            'データ種別': '安全在庫',
             '区分': '安全在庫なし',
             '商品コード': code,
-            '説明': '計画・実績はありますが安全在庫が未設定です。新規設定の候補です。'
+            '説明': '計画・実績はありますが安全在庫が未設定です。新規設定の候補です。',
+            '重複行数': None
         })
     
     # D: 安全在庫あり（安全在庫は設定されているが計画・実績がない）
@@ -449,9 +625,11 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
     safety_only = safety_codes - plan_or_actual
     for code in safety_only:
         mismatch_list.append({
+            'データ種別': '安全在庫',
             '区分': '安全在庫あり',
             '商品コード': code,
-            '説明': '安全在庫はありますが計画・実績がありません。設定を解除してください。'
+            '説明': '安全在庫はありますが計画・実績がありません。設定を解除してください。',
+            '重複行数': None
         })
     
     # DataFrameに変換
@@ -462,12 +640,15 @@ def check_product_code_mismatch(data_loader: DataLoader) -> pd.DataFrame:
             '計画のみ': 1,
             '実績のみ': 2,
             '安全在庫なし': 3,
-            '安全在庫あり': 4
+            '安全在庫あり': 4,
+            '実績データ重複': 5,
+            '計画データ重複': 6,
+            '安全在庫データ重複': 7
         }
         mismatch_df['sort_key'] = mismatch_df['区分'].map(sort_order)
         mismatch_df = mismatch_df.sort_values('sort_key').drop('sort_key', axis=1).reset_index(drop=True)
         return mismatch_df
     else:
         # アンマッチがない場合は空のDataFrameを返す
-        return pd.DataFrame(columns=['区分', '商品コード', '説明'])
+        return pd.DataFrame(columns=['データ種別', '区分', '商品コード', '説明', '重複行数'])
 

@@ -1125,10 +1125,10 @@ def display_data_consistency_check_results():
     /* 区分列（1列目）- 18% */
     .mismatch-list-table th:nth-child(1),
     .mismatch-list-table td:nth-child(1) {
-        width: 15%;
+        width: 18%;
         text-align: left;
     }
-    /* 商品コード件数列（2列目）- 15%（最小限の幅） */
+    /* 商品コード件数列（2列目）- 12%（最小限の幅） */
     .mismatch-list-table th:nth-child(2),
     .mismatch-list-table td:nth-child(2) {
         width: 12%;
@@ -1142,25 +1142,28 @@ def display_data_consistency_check_results():
         width: 15%;
         text-align: left;
     }
-    /* 説明列（4列目）- 52%（広く） */
+    /* 説明列（4列目）- 55%（広く） */
     .mismatch-list-table th:nth-child(4),
     .mismatch-list-table td:nth-child(4) {
-        width: 58%;
+        width: 55%;
         text-align: left;
     }
     </style>
     """, unsafe_allow_html=True)
     
+    # データ種別列を表示から除外
+    display_columns = [col for col in mismatch_summary_df.columns if col != 'データ種別']
+    
     # DataFrameをHTMLテーブルに変換
     html_table = '<table class="mismatch-list-table"><thead><tr>'
-    for col in mismatch_summary_df.columns:
+    for col in display_columns:
         html_table += f'<th>{col}</th>'
     html_table += '</tr></thead><tbody>'
     
     for _, row in mismatch_summary_df.iterrows():
         html_table += '<tr>'
-        for col in mismatch_summary_df.columns:
-            value = str(row[col])
+        for col in display_columns:
+            value = str(row[col]) if pd.notna(row[col]) else ''
             # HTMLエスケープ処理
             value = value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             html_table += f'<td>{value}</td>'
@@ -1239,6 +1242,18 @@ def display_data_consistency_check_results():
                 <tr>
                     <td>安全在庫あり</td>
                     <td>安全在庫は設定されていますが、計画データ・実績データともに存在しません。安全在庫設定を解除してください。</td>
+                </tr>
+                <tr>
+                    <td>実績データ重複</td>
+                    <td>実績データに同一商品コードが複数行存在します。暫定的に1行目を採用しますが、データを修正して再アップロードしてください。</td>
+                </tr>
+                <tr>
+                    <td>計画データ重複</td>
+                    <td>計画データに同一商品コードが複数行存在します。暫定的に1行目を採用しますが、データを修正して再アップロードしてください。</td>
+                </tr>
+                <tr>
+                    <td>安全在庫データ重複</td>
+                    <td>安全在庫データに同一商品コードが複数行存在します。暫定的に1行目を採用しますが、データを修正して再アップロードしてください。</td>
                 </tr>
             </tbody>
         </table>

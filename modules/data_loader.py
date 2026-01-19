@@ -130,12 +130,32 @@ class DataLoader:
             # 商品コードごとの実績データを取得
             actual_series = self.actual_df.loc[product_code]
             
+            # actual_seriesがDataFrameの場合（重複商品コードなど）、最初の行を取得
+            if isinstance(actual_series, pd.DataFrame):
+                if len(actual_series) > 0:
+                    actual_series = actual_series.iloc[0]
+                else:
+                    continue
+            
             # 稼働日ベースの実績データを作成（初期値は0）
             resampled_series = pd.Series(0.0, index=working_dates_index)
             
             # 実績データの各日付について処理
             for date, value in actual_series.items():
-                if pd.isna(value) or value == 0:
+                # valueがSeriesの場合（DataFrameから取得した場合）、スカラー値に変換
+                if isinstance(value, pd.Series):
+                    if len(value) > 0:
+                        value = value.iloc[0]
+                    else:
+                        continue
+                
+                # スカラー値のチェック
+                try:
+                    value_scalar = float(value) if not pd.isna(value) else 0.0
+                except (ValueError, TypeError):
+                    value_scalar = 0.0
+                
+                if pd.isna(value_scalar) or value_scalar == 0:
                     continue
                 
                 date_normalized = date.normalize() if hasattr(date, 'normalize') else pd.Timestamp(date).normalize()
@@ -144,7 +164,7 @@ class DataLoader:
                 if date_normalized in working_days_set:
                     # 稼働日の場合はそのまま加算
                     if date_normalized in resampled_series.index:
-                        resampled_series.loc[date_normalized] += value
+                        resampled_series.loc[date_normalized] += value_scalar
                 else:
                     # 非稼働日の場合は、翌稼働日に合算
                     # 翌稼働日を探す（計画データのインデックスから）
@@ -155,7 +175,7 @@ class DataLoader:
                             break
                     
                     if next_working_date is not None and next_working_date in resampled_series.index:
-                        resampled_series.loc[next_working_date] += value
+                        resampled_series.loc[next_working_date] += value_scalar
             
             resampled_dict[product_code] = resampled_series
         
@@ -323,6 +343,12 @@ class DataLoader:
             # カラム名を設定
             self.safety_stock_monthly_df.columns = ['商品コード', '安全在庫月数']
             
+            # 重複チェックと暫定処理（既にdata_io.pyで実行済みだが、念のため）
+            if '商品コード' in self.safety_stock_monthly_df.columns:
+                if self.safety_stock_monthly_df['商品コード'].duplicated().any():
+                    # 重複がある場合は最初の行を残す
+                    self.safety_stock_monthly_df = self.safety_stock_monthly_df.drop_duplicates(subset=['商品コード'], keep='first')
+            
             return self.safety_stock_monthly_df
         except FileNotFoundError:
             # ファイルが存在しない場合は空のDataFrameを返す
@@ -489,6 +515,12 @@ class DataLoader:
             pd.DataFrame: 月次計画データ
         """
         self.monthly_plan_df = monthly_plan_df.copy()
+        
+        # 重複チェックと暫定処理（既にdata_io.pyで実行済みだが、念のため）
+        if self.monthly_plan_df.index.duplicated().any():
+            # 重複がある場合は最初の行を残す
+            self.monthly_plan_df = self.monthly_plan_df[~self.monthly_plan_df.index.duplicated(keep='first')]
+        
         # カラム名をYYYYMMからパース
         # カラム名が既に文字列の場合はそのまま使用、数値の場合は文字列に変換
         if self.monthly_plan_df.columns.dtype == 'object':
@@ -609,13 +641,27 @@ class DataLoader:
         """
         self.actual_df = actual_df.copy()
         
+        # 重複チェックと暫定処理（既にdata_io.pyで実行済みだが、念のため）
+        if self.actual_df.index.duplicated().any():
+            # 重複がある場合は最初の行を残す
+            self.actual_df = self.actual_df[~self.actual_df.index.duplicated(keep='first')]
+        
         # カラム名を日付型に変換
-        if isinstance(self.actual_df.columns[0], str):
-            # YYYYMMDD形式の文字列の場合
-            self.actual_df.columns = pd.to_datetime(self.actual_df.columns, format='%Y%m%d')
-        else:
-            # 既に日付型の場合
-            self.actual_df.columns = pd.to_datetime(self.actual_df.columns)
+        if len(self.actual_df.columns) > 0:
+            first_col = self.actual_df.columns[0]
+            # first_colがSeriesの場合、最初の要素を取得
+            if isinstance(first_col, pd.Series):
+                if len(first_col) > 0:
+                    first_col = first_col.iloc[0]
+                else:
+                    first_col = str(first_col)
+            
+            if isinstance(first_col, str):
+                # YYYYMMDD形式の文字列の場合
+                self.actual_df.columns = pd.to_datetime(self.actual_df.columns, format='%Y%m%d')
+            else:
+                # 既に日付型の場合
+                self.actual_df.columns = pd.to_datetime(self.actual_df.columns)
         
         # 計画データが読み込まれている場合は、実績データを稼働日ベースに再サンプリング
         if self.plan_df is not None:
@@ -638,6 +684,12 @@ class DataLoader:
         # カラム名を設定（既に設定されている場合はそのまま）
         if len(self.safety_stock_monthly_df.columns) >= 2:
             self.safety_stock_monthly_df.columns = ['商品コード', '安全在庫月数']
+        
+        # 重複チェックと暫定処理（既にdata_io.pyで実行済みだが、念のため）
+        if '商品コード' in self.safety_stock_monthly_df.columns:
+            if self.safety_stock_monthly_df['商品コード'].duplicated().any():
+                # 重複がある場合は最初の行を残す
+                self.safety_stock_monthly_df = self.safety_stock_monthly_df.drop_duplicates(subset=['商品コード'], keep='first')
         
         return self.safety_stock_monthly_df
 
